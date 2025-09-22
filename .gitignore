@@ -48,3 +48,4 @@ blockchain/artifacts/
 blockchain/cache/
 blockchain/typechain-types/
 blockchain/coverage/
+blockchain/node_modules
