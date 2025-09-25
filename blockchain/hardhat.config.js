@@ -1,10 +1,18 @@
+require("dotenv").config();
 require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config({ path: __dirname + "/../.env" }); 
 
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "";
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
-const GANACHE_RPC_URL = process.env.GANACHE_RPC_URL || "";
-const GANACHE_PRIVATE_KEY = process.env.GANACHE_PRIVATE_KEY || "";
+const {
+  CHAIN_RPC_URL,
+  CHAIN_PRIVATE_KEY,
+  GANACHE_RPC_URL,
+  GANACHE_PRIVATE_KEY,
+  SEPOLIA_RPC_URL,
+  SEPOLIA_PRIVATE_KEY,
+} = process.env;
+
+function buildAccounts(key) {
+  return key && key !== "" ? [key] : undefined;
+}
 
 module.exports = {
   solidity: "0.8.24",
@@ -12,15 +20,17 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
+    localhost: {
+      url: CHAIN_RPC_URL || "http://127.0.0.1:8545",
+      accounts: buildAccounts(CHAIN_PRIVATE_KEY),
+    },
     ganache: {
-      url: GANACHE_RPC_URL,
-      accounts: [
-        GANACHE_PRIVATE_KEY,
-      ],
+      url: GANACHE_RPC_URL || "http://127.0.0.1:7545",
+      accounts: buildAccounts(GANACHE_PRIVATE_KEY),
     },
     sepolia: {
-      url: SEPOLIA_RPC_URL,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      url: SEPOLIA_RPC_URL || "",
+      accounts: buildAccounts(SEPOLIA_PRIVATE_KEY),
     },
   },
 };

@@ -1,0 +1,18 @@
+# Hardhat build artifacts
+artifacts/
+cache/
+typechain-types/
+coverage/
+
+# Environment & credentials
+.env
+.env.*
+!.env.example
+
+# Node modules for this workspace
+node_modules/
+
+# Misc local files
+*.log
+coverage.json
+.pnp.*

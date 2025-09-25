@@ -1,0 +1,105 @@
+# Registration Registry Backend
+
+Wallet-based authentication service for managing manufacturer, supplier, and warehouse registrations. The backend persists the full request payload, sends canonical JSON to an on-chain registry, and exposes role-restricted moderation endpoints.
+
+## Prerequisites
+- Node.js 20+
+- PostgreSQL 14+
+- Access to an Ethereum JSON-RPC endpoint with the deployed `RegistrationRegistry` contract
+
+## Setup
+1. Copy `.env.example` to `.env` and fill in the real values (private keys must remain single-line with `\n` escapes).
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Apply the migration:
+   ```bash
+   psql "$DATABASE_URL" -f migrations/001_init.sql
+   ```
+4. Start the server:
+   ```bash
+   npm run dev
+   ```
+
+## Wallet Login Flow
+1. `GET /auth/nonce?address=0xYourWallet` → receive nonce + message.
+2. Sign the message off-chain with `personal_sign`.
+3. `POST /auth/login` with `{ address, signature }` → receive JWT (RS256) with `role` claim.
+4. Use `Authorization: Bearer <token>` for protected endpoints.
+
+## curl Examples
+Request a nonce:
+```bash
+curl "http://localhost:8080/auth/nonce?address=0xabc123..."
+```
+
+Submit a MANUFACTURER registration (replace `<token>` and payload fields as needed):
+```bash
+curl -X POST "http://localhost:8080/api/registrations" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "MANUFACTURER",
+    "identification": {
+      "uuid": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+      "legalName": "Acme Manufacturing",
+      "businessRegNo": "REG-12345",
+      "countryOfIncorporation": "US"
+    },
+    "contact": {
+      "personName": "Jane Doe",
+      "designation": "Director",
+      "email": "jane@acme.example",
+      "phone": "+1-555-123-0000",
+      "address": "123 Industry Way, Springfield"
+    },
+    "metadata": {
+      "publicKey": "0x04deadbeef",
+      "smartContractRole": "MANUFACTURER",
+      "dateOfRegistration": "2024-01-01"
+    },
+    "details": {
+      "productCategoriesManufactured": ["Widgets", "Gadgets"],
+      "certifications": ["ISO9001"]
+    }
+  }'
+```
+
+List pending registrations:
+```bash
+curl "http://localhost:8080/api/registrations/pending"
+```
+
+Approve a registration (admin token required):
+```bash
+curl -X PATCH "http://localhost:8080/api/registrations/<id>/approve" \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+## Smart Contract Development
+The reference Solidity contract lives in `blockchain/contracts/RegistrationRegistry.sol` and mirrors the on-chain interface used by the backend.
+
+1. Install the Hardhat workspace dependencies:
+   ```bash
+   cd blockchain
+   npm install
+   ```
+2. Compile the contract:
+   ```bash
+   npm run compile
+   ```
+3. Run tests (add your own under `blockchain/test`):
+   ```bash
+   npm test
+   ```
+4. Deploy to the configured network (defaults to `.env` values):
+   ```bash
+   npm run deploy
+   ```
+   The script logs the deployed address; copy it into the backend `.env` as `REGISTRY_ADDRESS` and update the ABI file if the contract changes.
+
+## Notes
+- Addresses are lowercased for storage and comparison.
+- Nonces expire after 10 minutes and are single-use.
+- Replace `abi/RegistrationRegistry.json` with the contract ABI used on-chain if it differs from the placeholder.
