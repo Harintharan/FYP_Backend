@@ -12,6 +12,6 @@ router.post("/shipments", registerShipment);
 router.put("/shipments/:shipment_id", updateShipment);
 router.get("/shipments/:shipment_id", getShipment);
 router.get("/shipments", getAllShipments);
-router.get("/shipments/product/:uuid", getShipmentsByProduct);
+//router.get("/shipments/product/:uuid", getShipmentsByProduct);
 
 module.exports = router;

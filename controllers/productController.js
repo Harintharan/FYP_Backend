@@ -166,117 +166,122 @@
 
 
 // module.exports = { createProduct, getProduct, registerUser, storeBatch };
-
-
-const { ethers } = require("ethers");
-const Product = require("../models/productModel");
-const IoTBatch = require("../models/iotBatchModel");
-require("dotenv").config();
-
-// blockchain setup (shared)
-const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-const contractABI = require("../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
-const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, contractABI, wallet);
-
-// ---- Create Product ----
-const createProduct = async (req, res) => {
-  try {
-    const { name, manufacturer, details } = req.body;
-
-    const tempProduct = await Product.createProduct({
-      name,
-      manufacturer,
-      details,
-      db_hash: null,
-      block_id: null,
-    });
-
-    const tx = await contract.storeProduct(tempProduct.id, name, manufacturer, details);
-    const receipt = await tx.wait();
-
-    const event = receipt.logs
-      .map(log => { try { return contract.interface.parseLog(log); } catch { return null; } })
-      .find(parsed => parsed && parsed.name === "ProductStored");
-
-    const blockchainHash = event?.args?.hash;
-
-    const finalProduct = await Product.updateAfterBlockchain(
-      tempProduct.id,
-      blockchainHash,
-      tx.hash
-    );
-
-    res.status(201).json({ ...finalProduct, blockchainTx: tx.hash });
-  } catch (err) {
-    console.error("❌ Error creating product:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+//----------------------------------------------------------------------------------------------------------------------------
 
 // ---- Get Product + Verify Batch ----
-  // const getProduct = async (req, res) => {
-  //   try {
-  //     const { id } = req.params;
-  //     const product = await Product.getProductById(id);
-  //     const batch = await IoTBatch.findLatestByProductId(id);
+// const getProduct = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const product = await Product.getProductById(id);
+//     const batch = await IoTBatch.findLatestByProductId(id);
 
-  //     if (!product || !batch) return res.status(404).json({ message: "Not found" });
+//     if (!product || !batch) return res.status(404).json({ message: "Not found" });
 
-  //     const recomputedBatchHash = ethers.keccak256(
-  //       ethers.solidityPacked(["string"], [batch.readings])
-  //     );
+//     const recomputedBatchHash = ethers.keccak256(
+//       ethers.solidityPacked(["string"], [batch.readings])
+//     );
 
-  //     if (recomputedBatchHash.toLowerCase() !== batch.batch_hash.toLowerCase()) {
-  //       return res.status(400).json({ message: "Tampered IoT data in DB" });
-  //     }
+//     if (recomputedBatchHash.toLowerCase() !== batch.batch_hash.toLowerCase()) {
+//       return res.status(400).json({ message: "Tampered IoT data in DB" });
+//     }
 
-  //     const [onchainBatchHash] = await contract.getBatch(id);
-  //     if (recomputedBatchHash.toLowerCase() !== onchainBatchHash.toLowerCase()) {
-  //       return res.status(400).json({ message: "Tampered IoT data on-chain" });
-  //     }
+//     const [onchainBatchHash] = await contract.getBatch(id);
+//     if (recomputedBatchHash.toLowerCase() !== onchainBatchHash.toLowerCase()) {
+//       return res.status(400).json({ message: "Tampered IoT data on-chain" });
+//     }
 
-  //     res.json({ ...product, readings: batch.readings, verified: true });
-  //   } catch (err) {
-  //     console.error("❌ Error verifying product:", err);
-  //     res.status(500).json({ message: "Server error" });
-  //   }
-  // };
+//     res.json({ ...product, readings: batch.readings, verified: true });
+//   } catch (err) {
+//     console.error("❌ Error verifying product:", err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
 
 
-  // ---- Get Product ----
-const getProduct = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const product = await Product.getProductById(id);
-
-    if (!product) return res.status(404).json({ message: "Not found" });
-
-    // Recompute hash for product fields
-    const recomputedHash = ethers.keccak256(
-      ethers.solidityPacked(
-        ["string", "string", "string"],
-        [product.name, product.manufacturer, product.details]
-      )
-    );
-
-    if (recomputedHash.toLowerCase() !== product.db_hash.toLowerCase()) {
-      return res.status(400).json({ message: "Tampered product data in DB" });
-    }
-
-    const [onchainHash] = await contract.getProduct(product.id);
-    if (recomputedHash.toLowerCase() !== onchainHash.toLowerCase()) {
-      return res.status(400).json({ message: "Tampered product data on-chain" });
-    }
-
-    res.json({ ...product, verified: true });
-  } catch (err) {
-    console.error("❌ Error fetching product:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+// ---- Get Product ----
 
 
 
 
-module.exports = { createProduct, getProduct };
+
+// const { ethers } = require("ethers");
+// const Product = require("../models/productModel");
+// const IoTBatch = require("../models/iotBatchModel");
+// require("dotenv").config();
+
+// // blockchain setup (shared)
+// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+// const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+// const contractABI = require("../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
+// const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, contractABI, wallet);
+
+// // ---- Create Product ----
+// const createProduct = async (req, res) => {
+//   try {
+//     const { name, manufacturer, details } = req.body;
+
+//     const tempProduct = await Product.createProduct({
+//       name,
+//       manufacturer,
+//       details,
+//       db_hash: null,
+//       block_id: null,
+//     });
+
+//     const tx = await contract.storeProduct(tempProduct.id, name, manufacturer, details);
+//     const receipt = await tx.wait();
+
+//     const event = receipt.logs
+//       .map(log => { try { return contract.interface.parseLog(log); } catch { return null; } })
+//       .find(parsed => parsed && parsed.name === "ProductStored");
+
+//     const blockchainHash = event?.args?.hash;
+
+//     const finalProduct = await Product.updateAfterBlockchain(
+//       tempProduct.id,
+//       blockchainHash,
+//       tx.hash
+//     );
+
+//     res.status(201).json({ ...finalProduct, blockchainTx: tx.hash });
+//   } catch (err) {
+//     console.error("❌ Error creating product:", err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+// const getProduct = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const product = await Product.getProductById(id);
+
+//     if (!product) return res.status(404).json({ message: "Not found" });
+
+//     // Recompute hash for product fields
+//     const recomputedHash = ethers.keccak256(
+//       ethers.solidityPacked(
+//         ["string", "string", "string"],
+//         [product.name, product.manufacturer, product.details]
+//       )
+//     );
+
+//     if (recomputedHash.toLowerCase() !== product.db_hash.toLowerCase()) {
+//       return res.status(400).json({ message: "Tampered product data in DB" });
+//     }
+
+//     const [onchainHash] = await contract.getProduct(product.id);
+//     if (recomputedHash.toLowerCase() !== onchainHash.toLowerCase()) {
+//       return res.status(400).json({ message: "Tampered product data on-chain" });
+//     }
+
+//     res.json({ ...product, verified: true });
+//   } catch (err) {
+//     console.error("❌ Error fetching product:", err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+
+
+
+// module.exports = { createProduct, getProduct };

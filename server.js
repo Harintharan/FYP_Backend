@@ -1,7 +1,7 @@
 const express = require("express");
-const productRoutes = require("./routes/productRoutes");
-const userRoutes = require("./routes/userRoutes");
-const iotBatchRoutes = require("./routes/iotBatchRoutes");
+// const productRoutes = require("./routes/productRoutes");
+// const userRoutes = require("./routes/userRoutes");
+// const iotBatchRoutes = require("./routes/iotBatchRoutes");
 const batchRoutes = require("./routes/batchRoutes");
 const productRegistryRoutes = require("./routes/ProductRegistryRoutes");
 const checkpointRoutes = require("./routes/checkpointRoutes");
@@ -12,15 +12,15 @@ const pool = require("./config/db"); // DB connection
 require("dotenv").config();
 
 const app = express();
-console.log("DEBUG productRoutes =", productRoutes);
+//console.log("DEBUG productRoutes =", productRoutes);
 
 
 app.use(express.json());
 
 // Routes
-app.use("/api/products", productRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/iot-batches", iotBatchRoutes);
+//app.use("/api/products", productRoutes);
+//app.use("/api/users", userRoutes);
+//app.use("/api/iot-batches", iotBatchRoutes);
 app.use("/api/batches", batchRoutes);
 app.use("/api/product-registry", productRegistryRoutes);
 app.use("/api", checkpointRoutes);
@@ -32,42 +32,42 @@ app.use("/api", ShipmentSegmentHandoverRoutes);
 // Create table at startup
 const initDB = async () => {
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        manufacturer TEXT NOT NULL,
-        details TEXT NOT NULL,
-        db_hash TEXT,
-        block_id TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
+    // await pool.query(`
+    //   CREATE TABLE IF NOT EXISTS products (
+    //     id SERIAL PRIMARY KEY,
+    //     name TEXT NOT NULL,
+    //     manufacturer TEXT NOT NULL,
+    //     details TEXT NOT NULL,
+    //     db_hash TEXT,
+    //     block_id TEXT,
+    //     created_at TIMESTAMP DEFAULT NOW()
+    //   );
+    // `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        eth_address TEXT UNIQUE NOT NULL,
-        name TEXT NOT NULL,
-        id_number TEXT NOT NULL,
-        company TEXT NOT NULL,
-        role TEXT NOT NULL,
-        details_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
+    // await pool.query(`
+    //   CREATE TABLE IF NOT EXISTS users (
+    //     id SERIAL PRIMARY KEY,
+    //     eth_address TEXT UNIQUE NOT NULL,
+    //     name TEXT NOT NULL,
+    //     id_number TEXT NOT NULL,
+    //     company TEXT NOT NULL,
+    //     role TEXT NOT NULL,
+    //     details_hash TEXT NOT NULL,
+    //     tx_hash TEXT NOT NULL,
+    //     created_at TIMESTAMP DEFAULT NOW()
+    //   );
+    // `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS iot_batches (
-        id SERIAL PRIMARY KEY,
-        product_id INT REFERENCES products(id) ON DELETE CASCADE,
-        readings JSONB NOT NULL,
-        batch_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
+    // await pool.query(`
+    //   CREATE TABLE IF NOT EXISTS iot_batches (
+    //     id SERIAL PRIMARY KEY,
+    //     product_id INT REFERENCES products(id) ON DELETE CASCADE,
+    //     readings JSONB NOT NULL,
+    //     batch_hash TEXT NOT NULL,
+    //     tx_hash TEXT NOT NULL,
+    //     created_at TIMESTAMP DEFAULT NOW()
+    //   );
+    // `);
     await pool.query(`
 
 
@@ -92,13 +92,13 @@ CREATE TABLE IF NOT EXISTS batches (
 
 
     await pool.query(`
-CREATE TABLE IF NOT EXISTS productRegistry (
+CREATE TABLE IF NOT EXISTS product_registry  (
   id SERIAL PRIMARY KEY,
   product_id INT UNIQUE NOT NULL,       -- blockchain productId
   product_uuid TEXT NOT NULL,
   product_name TEXT NOT NULL,
   product_category TEXT NOT NULL,
-  batch_lot_id TEXT,
+  batch_lot_id INT REFERENCES batches(batch_id) ON DELETE SET NULL,
   required_storage_temp TEXT,
   transport_route_plan_id TEXT,
   handling_instructions TEXT,
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS productRegistry (
 
 
     await pool.query(`
-CREATE TABLE IF NOT EXISTS checkpointRegistry (
+CREATE TABLE IF NOT EXISTS checkpoint_registry  (
     id SERIAL PRIMARY KEY,
     checkpoint_id INT UNIQUE NOT NULL,        -- Blockchain checkpointId
     checkpoint_uuid TEXT NOT NULL,
@@ -140,39 +140,70 @@ CREATE TABLE IF NOT EXISTS checkpointRegistry (
     created_by TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_by TEXT,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP  
 );
 
 `);
 
 
 
-    await pool.query(`
-CREATE TABLE IF NOT EXISTS shipmentRegistry (
+//     await pool.query(`
+// CREATE TABLE IF NOT EXISTS shipment_registry  (
+//   id SERIAL PRIMARY KEY,
+//   shipment_id INT UNIQUE NOT NULL, -- blockchain id
+//   manufacturer_uuid TEXT NOT NULL,
+//   destination_party_uuid TEXT NOT NULL,
+//   handover_checkpoints JSONB, -- array
+//   shipment_items JSONB,       -- array
+//   shipment_hash TEXT,
+//   tx_hash TEXT,
+//   created_by TEXT,
+//   created_at TIMESTAMP DEFAULT NOW(),
+//   updated_by TEXT,
+//   updated_at TIMESTAMP
+  
+// );
+// `);
+
+await pool.query(`
+CREATE TABLE IF NOT EXISTS shipment_registry (
   id SERIAL PRIMARY KEY,
-  shipment_id INT UNIQUE, -- blockchain id
+  shipment_id INT UNIQUE NOT NULL, -- blockchain id
   manufacturer_uuid TEXT NOT NULL,
   destination_party_uuid TEXT NOT NULL,
-  handover_checkpoints JSONB, -- array
-  shipment_items JSONB,       -- array
+  shipment_items JSONB,       -- array of { product_uuid, quantity }
   shipment_hash TEXT,
   tx_hash TEXT,
   created_by TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_by TEXT,
   updated_at TIMESTAMP
-  
 );
 `);
+
+await pool.query(`
+CREATE TABLE IF NOT EXISTS shipment_handover_checkpoints (
+  id SERIAL PRIMARY KEY,
+  shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
+  start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
+  end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
+  estimated_arrival_date TEXT NOT NULL,
+  time_tolerance TEXT NOT NULL,
+  expected_ship_date TEXT NOT NULL,
+  required_action TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+`);
+
 
 
     await pool.query(`
 CREATE TABLE IF NOT EXISTS shipment_segment_acceptance (
     id SERIAL PRIMARY KEY,
     acceptance_id INT NOT NULL UNIQUE,
-    shipment_id INT NOT NULL,
-    segment_start_checkpoint_id INT NOT NULL,
-    segment_end_checkpoint_id INT NOT NULL,
+    shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
+    segment_start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
+    segment_end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
     assigned_role VARCHAR(100) NOT NULL,
     assigned_party_uuid VARCHAR(100) NOT NULL,
     estimated_pickup_time TEXT NOT NULL,   -- store raw ISO string
@@ -190,14 +221,14 @@ CREATE TABLE IF NOT EXISTS shipment_segment_acceptance (
 `);
 
 
-await pool.query(`
+    await pool.query(`
 CREATE TABLE IF NOT EXISTS shipment_segment_handover (
     id SERIAL PRIMARY KEY,
     handover_id INT NOT NULL UNIQUE,         -- blockchain ID
-    shipment_id INT NOT NULL,
-    acceptance_id INT NOT NULL,
-    segment_start_checkpoint_id INT NOT NULL,
-    segment_end_checkpoint_id INT NOT NULL,
+    shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
+    acceptance_id INT NOT NULL REFERENCES shipment_segment_acceptance(acceptance_id) ON DELETE CASCADE,
+    segment_start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
+    segment_end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
     from_party_uuid VARCHAR(100) NOT NULL,
     to_party_uuid VARCHAR(100) NOT NULL,
     handover_timestamp TEXT NOT NULL,        -- stored as string

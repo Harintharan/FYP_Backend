@@ -573,7 +573,7 @@ const registerSegmentAcceptance = async (req, res) => {
     const tx = await contract.registerSegmentAcceptance(
       data.shipment_id,
       dbHash,
-      data.digital_signature || ""
+      // data.digital_signature || ""
     );
     const receipt = await tx.wait();
 

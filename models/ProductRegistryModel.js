@@ -114,7 +114,7 @@ module.exports = {
   // 🔹 Create product
   async createProduct(data) {
     const result = await pool.query(
-      `INSERT INTO productRegistry
+      `INSERT INTO product_registry
        (product_id, product_uuid, product_name, product_category, batch_lot_id,
         required_storage_temp, transport_route_plan_id, handling_instructions, expiry_date,
         sensor_device_uuid, microprocessor_mac, sensor_types, qr_id,
@@ -156,7 +156,7 @@ module.exports = {
   // 🔹 Update product by blockchain product_id
   async updateProduct(product_id, data) {
     const result = await pool.query(
-      `UPDATE productRegistry SET
+      `UPDATE product_registry SET
          product_uuid=$1, product_name=$2, product_category=$3, batch_lot_id=$4,
          required_storage_temp=$5, transport_route_plan_id=$6, handling_instructions=$7, expiry_date=$8,
          sensor_device_uuid=$9, microprocessor_mac=$10, sensor_types=$11, qr_id=$12,
@@ -193,7 +193,7 @@ module.exports = {
   // 🔹 Get product by blockchain product_id
   async getProductById(product_id) {
     const result = await pool.query(
-      `SELECT * FROM productRegistry WHERE product_id=$1`,
+      `SELECT * FROM product_registry WHERE product_id=$1`,
       [product_id]
     );
     return result.rows[0];
@@ -202,7 +202,7 @@ module.exports = {
   // 🔹 Get all products
   async getAllProducts() {
     const result = await pool.query(
-      `SELECT * FROM productRegistry ORDER BY created_at DESC`
+      `SELECT * FROM product_registry ORDER BY created_at DESC`
     );
     return result.rows;
   }
