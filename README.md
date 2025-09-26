@@ -66,6 +66,38 @@ curl -X POST "http://localhost:8080/api/registrations" \
   }'
 ```
 
+Update an existing registration (UUID must match the existing record and it will revert to `PENDING` status):
+```bash
+curl -X PUT "http://localhost:8080/api/registrations/<id>" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "SUPPLIER",
+    "identification": {
+      "uuid": "4c5b8f62-7db9-4c42-b995-9c6f1b5f2acd",
+      "legalName": "Global Supplies Ltd.",
+      "businessRegNo": "SUP-445599",
+      "countryOfIncorporation": "SG"
+    },
+    "contact": {
+      "personName": "Michael Lee",
+      "designation": "Supply Director",
+      "email": "michael.lee@globalsupplies.example",
+      "phone": "+65-5550-1234",
+      "address": "88 Harbour Drive, Singapore"
+    },
+    "metadata": {
+      "publicKey": "0x0456789abcdeffedcba9876543210fedcba9876543210fedcba9876543210fedcb",
+      "smartContractRole": "SUPPLIER",
+      "dateOfRegistration": "2024-03-15"
+    },
+    "details": {
+      "productCategoriesSupplied": ["Steel", "Aluminum"],
+      "sourceRegions": ["CN", "MY"]
+    }
+  }'
+```
+
 List pending registrations:
 ```bash
 curl "http://localhost:8080/api/registrations/pending"
@@ -78,7 +110,7 @@ curl -X PATCH "http://localhost:8080/api/registrations/<id>/approve" \
 ```
 
 ## Smart Contract Development
-The reference Solidity contract lives in `blockchain/contracts/RegistrationRegistry.sol` and mirrors the on-chain interface used by the backend.
+The reference Solidity contract lives in `blockchain/contracts/RegistrationRegistry.sol` and mirrors the on-chain interface used by the backend. It now supports updates (when the backend calls with `isUpdate=true`).
 
 1. Install the Hardhat workspace dependencies:
    ```bash
@@ -103,3 +135,4 @@ The reference Solidity contract lives in `blockchain/contracts/RegistrationRegis
 - Addresses are lowercased for storage and comparison.
 - Nonces expire after 10 minutes and are single-use.
 - Replace `abi/RegistrationRegistry.json` with the contract ABI used on-chain if it differs from the placeholder.
+- Updating a registration triggers a new on-chain transaction and the record re-enters the `PENDING` state until re-approved.

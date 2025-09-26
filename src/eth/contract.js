@@ -14,13 +14,34 @@ const REG_TYPE_MAP = {
   WAREHOUSE: 2,
 };
 
-export async function submitOnChain(uuidBytes16, regTypeString, canonicalString) {
+export async function submitOnChain(
+  uuidBytes16,
+  regTypeString,
+  canonicalString,
+  isUpdate = false
+) {
   const regType = REG_TYPE_MAP[regTypeString];
   if (regType === undefined) {
     throw new Error(`Unsupported registration type: ${regTypeString}`);
   }
 
-  const tx = await registry.submit(uuidBytes16, regType, canonicalString);
+  const estimatedGas = await registry.submit.estimateGas(
+    uuidBytes16,
+    regType,
+    canonicalString,
+    isUpdate
+  );
+  const gasLimit = (estimatedGas * 120n) / 100n + 20_000n;
+
+  const tx = await registry.submit(
+    uuidBytes16,
+    regType,
+    canonicalString,
+    isUpdate,
+    {
+      gasLimit,
+    }
+  );
   const receipt = await tx.wait();
 
   const iface = new ethers.Interface(abi);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 contract RegistrationRegistry {
     enum RegistrationType {
@@ -12,7 +12,7 @@ contract RegistrationRegistry {
         bytes32 payloadHash;
         uint8 regType;
         address submitter;
-        uint256 createdAt;
+        uint256 updatedAt;
         string payloadCanonicalJson;
     }
 
@@ -24,22 +24,30 @@ contract RegistrationRegistry {
         bytes32 payloadHash,
         uint8 regType,
         address indexed submitter,
-        uint256 createdAt
+        uint256 timestamp,
+        bool isUpdate
     );
 
     error InvalidRegistrationType(uint8 regType);
     error RegistrationAlreadyExists(bytes16 uuid);
+    error RegistrationDoesNotExist(bytes16 uuid);
 
     function submit(
         bytes16 uuid,
         uint8 regType,
-        string calldata payloadCanonicalJson
+        string calldata payloadCanonicalJson,
+        bool isUpdate
     ) external {
         if (regType > uint8(RegistrationType.WAREHOUSE)) {
             revert InvalidRegistrationType(regType);
         }
-        if (registrationExists[uuid]) {
+
+        bool hasExisting = registrationExists[uuid];
+        if (hasExisting && !isUpdate) {
             revert RegistrationAlreadyExists(uuid);
+        }
+        if (!hasExisting && isUpdate) {
+            revert RegistrationDoesNotExist(uuid);
         }
 
         bytes32 payloadHash = keccak256(bytes(payloadCanonicalJson));
@@ -49,12 +57,15 @@ contract RegistrationRegistry {
             payloadHash: payloadHash,
             regType: regType,
             submitter: msg.sender,
-            createdAt: timestamp,
+            updatedAt: timestamp,
             payloadCanonicalJson: payloadCanonicalJson
         });
-        registrationExists[uuid] = true;
 
-        emit RegistrationSubmitted(uuid, payloadHash, regType, msg.sender, timestamp);
+        if (!hasExisting) {
+            registrationExists[uuid] = true;
+        }
+
+        emit RegistrationSubmitted(uuid, payloadHash, regType, msg.sender, timestamp, isUpdate);
     }
 
     function getRegistration(bytes16 uuid)
@@ -64,17 +75,19 @@ contract RegistrationRegistry {
             bytes32 payloadHash,
             uint8 regType,
             address submitter,
-            uint256 createdAt,
+            uint256 updatedAt,
             string memory payloadCanonicalJson
         )
     {
-        require(registrationExists[uuid], "Registration not found");
+        if (!registrationExists[uuid]) {
+            revert RegistrationDoesNotExist(uuid);
+        }
         Registration storage info = registrations[uuid];
         return (
             info.payloadHash,
             info.regType,
             info.submitter,
-            info.createdAt,
+            info.updatedAt,
             info.payloadCanonicalJson
         );
     }
