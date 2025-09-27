@@ -132,7 +132,16 @@ export async function registerSegmentAcceptance(req, res) {
 
     const dbHash = computeAcceptanceHash(data);
 
-    const tx = await contract.registerSegmentAcceptance(dbHash);
+    let shipmentId;
+    try {
+      shipmentId = BigInt(data.shipment_id);
+    } catch (error) {
+      return res
+        .status(400)
+        .json({ message: "shipment_id must be a valid integer" });
+    }
+
+    const tx = await contract.registerSegmentAcceptance(shipmentId, dbHash);
     const receipt = await tx.wait();
 
     const event = receipt.logs
@@ -143,10 +152,10 @@ export async function registerSegmentAcceptance(req, res) {
           return null;
         }
       })
-      .find((parsed) => parsed && parsed.name === "SegmentAcceptanceRegistered");
+      .find((parsed) => parsed && parsed.name === "SegmentAccepted");
 
     if (!event) {
-      throw new Error("No SegmentAcceptanceRegistered event found");
+      throw new Error("No SegmentAccepted event found");
     }
 
     const blockchainAcceptanceId = event.args.acceptanceId.toString();
