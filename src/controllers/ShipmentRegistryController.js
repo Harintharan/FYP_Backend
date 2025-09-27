@@ -2,7 +2,7 @@
 // const Shipment = require("../models/ShipmentRegistryModel");
 // require("dotenv").config();
 
-// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+// const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
 // const contractABI = require("../../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT, contractABI, wallet);
@@ -13,9 +13,6 @@
 //     .map((obj) => keys.map((k) => obj[k] ?? "").join(","))
 //     .join("|");
 // }
-
-
-
 
 // function computeShipmentHash(shipment) {
 //   // Always normalize property names
@@ -47,7 +44,6 @@
 
 //   return ethers.keccak256(ethers.toUtf8Bytes(joined));
 // }
-
 
 // // Register
 // const registerShipment = async (req, res) => {
@@ -170,9 +166,6 @@
 //   }
 // };
 
-
-
-
 // // Get One
 // const getShipment = async (req, res) => {
 //   try {
@@ -197,7 +190,6 @@
 //     res.status(500).json({ message: "Server error" });
 //   }
 // };
-
 
 // // Get All
 // const getAllShipments = async (req, res) => {
@@ -243,8 +235,6 @@
 //   }
 // };
 
-
-
 // // GET /shipments/product/:uuid
 // // GET /shipments/product/:uuid
 // const getShipmentsByProduct = async (req, res) => {
@@ -276,11 +266,7 @@
 //   }
 // };
 
-
-
-
 // module.exports = { registerShipment, updateShipment, getShipment, getAllShipments,getShipmentsByProduct };
-
 
 const { ethers } = require("ethers");
 const pool = require("../config/db");
@@ -288,10 +274,15 @@ const Shipment = require("../models/ShipmentRegistryModel");
 const HandoverCheckpoint = require("../models/ShipmentHandoverCheckpointModel");
 require("dotenv").config();
 
-const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI = require("../../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json").abi;
-const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT, contractABI, wallet);
+const contractABI =
+  require("../../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json").abi;
+const contract = new ethers.Contract(
+  process.env.CONTRACT_ADDRESS_SHIPMENT,
+  contractABI,
+  wallet
+);
 
 // function computeShipmentHash(shipment, checkpoints) {
 //   const joined = [
@@ -310,23 +301,23 @@ const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT, cont
 //   return ethers.keccak256(ethers.toUtf8Bytes(joined));
 // }
 
-
 function computeShipmentHash(shipment, checkpoints) {
   // Normalize manufacturer and destination IDs
   const manufacturer = shipment.manufacturer_uuid || shipment.manufacturerUUID;
-  const destination = shipment.destination_party_uuid || shipment.destinationPartyUUID;
-  
+  const destination =
+    shipment.destination_party_uuid || shipment.destinationPartyUUID;
+
   // Normalize checkpoints: assume checkpoints is already an array; if not use an empty array
   const normalizedCheckpoints = Array.isArray(checkpoints) ? checkpoints : [];
   const checkpointsStr = normalizedCheckpoints
-    .map(cp =>
+    .map((cp) =>
       [
         cp.start_checkpoint_id,
         cp.end_checkpoint_id,
         cp.estimated_arrival_date,
         cp.time_tolerance,
         cp.expected_ship_date,
-        cp.required_action
+        cp.required_action,
       ].join(",")
     )
     .join("|");
@@ -337,13 +328,18 @@ function computeShipmentHash(shipment, checkpoints) {
   if (shipment.shipmentItems) {
     items = shipment.shipmentItems;
   } else if (shipment.shipment_items) {
-    items = typeof shipment.shipment_items === "string"
-      ? JSON.parse(shipment.shipment_items)
-      : shipment.shipment_items;
+    items =
+      typeof shipment.shipment_items === "string"
+        ? JSON.parse(shipment.shipment_items)
+        : shipment.shipment_items;
   }
-  const itemsStr = items.map(i => `${i.product_uuid},${i.quantity}`).join("|");
+  const itemsStr = items
+    .map((i) => `${i.product_uuid},${i.quantity}`)
+    .join("|");
 
-  const joined = [manufacturer, destination, checkpointsStr, itemsStr].join("|");
+  const joined = [manufacturer, destination, checkpointsStr, itemsStr].join(
+    "|"
+  );
 
   return ethers.keccak256(ethers.toUtf8Bytes(joined));
 }
@@ -399,23 +395,35 @@ function computeShipmentHash(shipment, checkpoints) {
 //   }
 // };
 
-
 // Register shipment + checkpoints with validation
 const registerShipment = async (req, res) => {
   try {
-    const { manufacturerUUID, destinationPartyUUID, shipmentItems, checkpoints } = req.body;
+    const {
+      manufacturerUUID,
+      destinationPartyUUID,
+      shipmentItems,
+      checkpoints,
+    } = req.body;
 
     // 1️⃣ Basic validations
     if (!manufacturerUUID || !destinationPartyUUID) {
-      return res.status(400).json({ message: "manufacturerUUID and destinationPartyUUID are required" });
+      return res
+        .status(400)
+        .json({
+          message: "manufacturerUUID and destinationPartyUUID are required",
+        });
     }
 
     if (!Array.isArray(shipmentItems) || shipmentItems.length === 0) {
-      return res.status(400).json({ message: "At least one shipment item is required" });
+      return res
+        .status(400)
+        .json({ message: "At least one shipment item is required" });
     }
 
     if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
-      return res.status(400).json({ message: "At least one checkpoint is required" });
+      return res
+        .status(400)
+        .json({ message: "At least one checkpoint is required" });
     }
 
     // 2️⃣ Validate checkpoint structure
@@ -425,13 +433,17 @@ const registerShipment = async (req, res) => {
       "estimated_arrival_date",
       "time_tolerance",
       "expected_ship_date",
-      "required_action"
+      "required_action",
     ];
 
     for (const [i, cp] of checkpoints.entries()) {
       for (const f of requiredFields) {
         if (!cp[f]) {
-          return res.status(400).json({ message: `checkpoints[${i}] missing required field: ${f}` });
+          return res
+            .status(400)
+            .json({
+              message: `checkpoints[${i}] missing required field: ${f}`,
+            });
         }
       }
     }
@@ -448,10 +460,18 @@ const registerShipment = async (req, res) => {
       );
 
       if (startExists.rows.length === 0) {
-        return res.status(400).json({ message: `checkpoints[${i}].start_checkpoint_id does not exist` });
+        return res
+          .status(400)
+          .json({
+            message: `checkpoints[${i}].start_checkpoint_id does not exist`,
+          });
       }
       if (endExists.rows.length === 0) {
-        return res.status(400).json({ message: `checkpoints[${i}].end_checkpoint_id does not exist` });
+        return res
+          .status(400)
+          .json({
+            message: `checkpoints[${i}].end_checkpoint_id does not exist`,
+          });
       }
     }
 
@@ -466,8 +486,14 @@ const registerShipment = async (req, res) => {
     const receipt = await tx.wait();
 
     const event = receipt.logs
-      .map(log => { try { return contract.interface.parseLog(log); } catch { return null; } })
-      .find(parsed => parsed && parsed.name === "ShipmentRegistered");
+      .map((log) => {
+        try {
+          return contract.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
+      .find((parsed) => parsed && parsed.name === "ShipmentRegistered");
 
     if (!event) throw new Error("No ShipmentRegistered event found");
 
@@ -488,25 +514,25 @@ const registerShipment = async (req, res) => {
     for (const cp of checkpoints) {
       await HandoverCheckpoint.addCheckpoint({
         shipment_id: blockchainShipmentId,
-        ...cp
+        ...cp,
       });
     }
 
     // 8️⃣ Return enriched response
-    const savedCheckpoints = await HandoverCheckpoint.getByShipment(blockchainShipmentId);
+    const savedCheckpoints = await HandoverCheckpoint.getByShipment(
+      blockchainShipmentId
+    );
 
     res.status(201).json({
       ...savedShipment,
       handover_checkpoints: savedCheckpoints,
-      blockchainTx: receipt.hash
+      blockchainTx: receipt.hash,
     });
-
   } catch (err) {
     console.error("❌ Error registering shipment:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 };
-
 
 // Get shipment with checkpoints
 const getShipment = async (req, res) => {
@@ -514,7 +540,8 @@ const getShipment = async (req, res) => {
     const { shipment_id } = req.params;
     const shipment = await Shipment.getShipmentById(shipment_id);
     console.log("DEBUG fetched shipment:", shipment);
-    if (!shipment) return res.status(404).json({ message: "Shipment not found" });
+    if (!shipment)
+      return res.status(404).json({ message: "Shipment not found" });
 
     const checkpoints = await HandoverCheckpoint.getByShipment(shipment_id);
     const dbHash = computeShipmentHash(shipment, checkpoints);
@@ -527,7 +554,7 @@ const getShipment = async (req, res) => {
       checkpoints,
       dbHash,
       blockchainHash,
-      integrity: dbHash === blockchainHash ? "valid" : "tampered"
+      integrity: dbHash === blockchainHash ? "valid" : "tampered",
     });
   } catch (err) {
     console.error("❌ Error fetching shipment:", err.message);
@@ -535,30 +562,44 @@ const getShipment = async (req, res) => {
   }
 };
 
-
 // Update shipment + checkpoints with validation
 const updateShipment = async (req, res) => {
   try {
     const { shipment_id } = req.params;
-    const { manufacturerUUID, destinationPartyUUID, shipmentItems, checkpoints } = req.body;
+    const {
+      manufacturerUUID,
+      destinationPartyUUID,
+      shipmentItems,
+      checkpoints,
+    } = req.body;
 
     // 1️⃣ Fetch existing shipment
     const existing = await Shipment.getShipmentById(shipment_id);
     if (!existing) {
-      return res.status(404).json({ message: `Shipment ${shipment_id} not found` });
+      return res
+        .status(404)
+        .json({ message: `Shipment ${shipment_id} not found` });
     }
 
     // 2️⃣ Basic validations
     if (!manufacturerUUID || !destinationPartyUUID) {
-      return res.status(400).json({ message: "manufacturerUUID and destinationPartyUUID are required" });
+      return res
+        .status(400)
+        .json({
+          message: "manufacturerUUID and destinationPartyUUID are required",
+        });
     }
 
     if (!Array.isArray(shipmentItems) || shipmentItems.length === 0) {
-      return res.status(400).json({ message: "At least one shipment item is required" });
+      return res
+        .status(400)
+        .json({ message: "At least one shipment item is required" });
     }
 
     if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
-      return res.status(400).json({ message: "At least one checkpoint is required" });
+      return res
+        .status(400)
+        .json({ message: "At least one checkpoint is required" });
     }
 
     // 3️⃣ Validate checkpoint structure
@@ -568,13 +609,17 @@ const updateShipment = async (req, res) => {
       "estimated_arrival_date",
       "time_tolerance",
       "expected_ship_date",
-      "required_action"
+      "required_action",
     ];
 
     for (const [i, cp] of checkpoints.entries()) {
       for (const f of requiredFields) {
         if (!cp[f]) {
-          return res.status(400).json({ message: `checkpoints[${i}] missing required field: ${f}` });
+          return res
+            .status(400)
+            .json({
+              message: `checkpoints[${i}] missing required field: ${f}`,
+            });
         }
       }
     }
@@ -591,10 +636,18 @@ const updateShipment = async (req, res) => {
       );
 
       if (startExists.rows.length === 0) {
-        return res.status(400).json({ message: `checkpoints[${i}].start_checkpoint_id does not exist` });
+        return res
+          .status(400)
+          .json({
+            message: `checkpoints[${i}].start_checkpoint_id does not exist`,
+          });
       }
       if (endExists.rows.length === 0) {
-        return res.status(400).json({ message: `checkpoints[${i}].end_checkpoint_id does not exist` });
+        return res
+          .status(400)
+          .json({
+            message: `checkpoints[${i}].end_checkpoint_id does not exist`,
+          });
       }
     }
 
@@ -615,7 +668,7 @@ const updateShipment = async (req, res) => {
       shipmentItems,
       shipment_hash: newDbHash,
       tx_hash: receipt.hash,
-      updated_by: wallet.address
+      updated_by: wallet.address,
     });
 
     // 8️⃣ Refresh checkpoints in DB (delete + insert new)
@@ -623,26 +676,24 @@ const updateShipment = async (req, res) => {
     for (const cp of checkpoints) {
       await HandoverCheckpoint.addCheckpoint({
         shipment_id,
-        ...cp
+        ...cp,
       });
     }
 
-    const savedCheckpoints = await HandoverCheckpoint.getByShipment(shipment_id);
+    const savedCheckpoints = await HandoverCheckpoint.getByShipment(
+      shipment_id
+    );
 
     // 9️⃣ Response
     res.status(200).json({
       ...updatedShipment,
       handover_checkpoints: savedCheckpoints,
-      blockchainTx: receipt.hash
+      blockchainTx: receipt.hash,
     });
-
   } catch (err) {
     console.error("❌ Error updating shipment:", err.message);
     res.status(500).json({ message: "Server error" });
   }
-
-
-  
 };
 
 // Get all shipments with checkpoints + integrity check
@@ -653,7 +704,9 @@ const getAllShipments = async (req, res) => {
     const result = await Promise.all(
       shipments.map(async (shp) => {
         // 1️⃣ Get checkpoints for this shipment
-        const checkpoints = await HandoverCheckpoint.getByShipment(shp.shipment_id);
+        const checkpoints = await HandoverCheckpoint.getByShipment(
+          shp.shipment_id
+        );
 
         // 2️⃣ Normalize shipment for hashing
         const normalized = {
@@ -696,4 +749,9 @@ const getAllShipments = async (req, res) => {
   }
 };
 
-module.exports = { registerShipment, getShipment, updateShipment, getAllShipments };
+module.exports = {
+  registerShipment,
+  getShipment,
+  updateShipment,
+  getAllShipments,
+};

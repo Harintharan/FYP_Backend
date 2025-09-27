@@ -2,8 +2,8 @@
 // const IoTBatch = require("../models/iotBatchModel");
 // require("dotenv").config();
 
-// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
-// const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+// const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
+// const wallet = new ethers.Wallet(process.env.CHAIN_PRIVATE_KEY, provider);
 // const contractABI = require("../../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, contractABI, wallet);
 
@@ -32,7 +32,6 @@
 //     res.status(500).json({ message: "Server error" });
 //   }
 // };
-
 
 // // ---- Get Latest Batch for a Product ----
 // const getLatestBatch = async (req, res) => {

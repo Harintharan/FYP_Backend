@@ -2,8 +2,8 @@
 // const User = require("../models/userModel");
 // require("dotenv").config();
 
-// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
-// const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+// const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
+// const wallet = new ethers.Wallet(process.env.CHAIN_PRIVATE_KEY, provider);
 // const contractABI = require("../../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, contractABI, wallet);
 
@@ -83,8 +83,6 @@
 //     if (recomputedHash.toLowerCase() !== onchainUser.detailsHash.toLowerCase()) {
 //       return res.status(400).json({ message: "Tampered user data on-chain" });
 //     }
-
-  
 
 //     // 5️⃣ Return verified result
 //     res.json({ ...user, verified: true });

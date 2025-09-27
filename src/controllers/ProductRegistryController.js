@@ -2,7 +2,7 @@
 // const Product = require("../models/ProductRegistryModel");
 // require("dotenv").config();
 
-// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+// const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
 // const contractABI = require("../../blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_PRODUCT, contractABI, wallet);
@@ -123,18 +123,22 @@ const Product = require("../models/ProductRegistryModel");
 const { decrypt, encrypt } = require("../utils/encryptionHelper");
 require("dotenv").config();
 
-
-const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI = require("../../blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json").abi;
-const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_PRODUCT, contractABI, wallet);
+const contractABI =
+  require("../../blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json").abi;
+const contract = new ethers.Contract(
+  process.env.CONTRACT_ADDRESS_PRODUCT,
+  contractABI,
+  wallet
+);
 
 //
 // 🔹 Helpers
 //
 function normalizeDate(dateVal) {
   if (!dateVal) return "";
-  return String(dateVal);  // ✅ don't convert with new Date(), just keep as-is
+  return String(dateVal); // ✅ don't convert with new Date(), just keep as-is
 }
 
 function normalizeProductInput(p) {
@@ -145,9 +149,15 @@ function normalizeProductInput(p) {
     product_name: safe(p.product_name || p.productName),
     product_category: safe(p.product_category || p.productCategory),
     batch_lot_id: safe(p.batch_lot_id || p.batchLotId),
-    required_storage_temp: safe(p.required_storage_temp || p.requiredStorageTemp),
-    transport_route_plan_id: safe(p.transport_route_plan_id || p.transportRoutePlanId),
-    handling_instructions: safe(p.handling_instructions || p.handlingInstructions),
+    required_storage_temp: safe(
+      p.required_storage_temp || p.requiredStorageTemp
+    ),
+    transport_route_plan_id: safe(
+      p.transport_route_plan_id || p.transportRoutePlanId
+    ),
+    handling_instructions: safe(
+      p.handling_instructions || p.handlingInstructions
+    ),
     expiry_date: safe(p.expiry_date || p.expiryDate),
     sensor_device_uuid: safe(p.sensor_device_uuid || p.sensorDeviceUUID),
     microprocessor_mac: safe(p.microprocessor_mac || p.microprocessorMac),
@@ -160,7 +170,6 @@ function normalizeProductInput(p) {
     status: safe(p.status),
   };
 }
-
 
 function safeDecryptMaybe(value) {
   if (!value) return "";
@@ -231,19 +240,21 @@ const registerProduct = async (req, res) => {
     const blockchainProductId = event.args.productId.toString();
     const blockchainHash = event.args.hash;
 
-     console.log("🔐 Saving encrypted wifi_password:", encrypt(data.wifi_password || data.wifiPassword));
+    console.log(
+      "🔐 Saving encrypted wifi_password:",
+      encrypt(data.wifi_password || data.wifiPassword)
+    );
 
     const savedProduct = await Product.createProduct({
       ...data,
       product_id: blockchainProductId,
-      
+
       product_hash: blockchainHash,
       tx_hash: receipt.hash,
       created_by: wallet.address,
 
-      wifi_password: encrypt(data.wifi_password || data.wifiPassword),  // ✅ handle both
+      wifi_password: encrypt(data.wifi_password || data.wifiPassword), // ✅ handle both
     });
-
 
     res.status(201).json({ ...savedProduct, blockchainTx: receipt.hash });
   } catch (err) {
@@ -265,18 +276,19 @@ const updateProduct = async (req, res) => {
     const tx = await contract.updateProduct(product_id, newDbHash);
     const receipt = await tx.wait();
 
-    console.log("🔐 Saving encrypted wifi_password:", encrypt(data.wifi_password || data.wifiPassword));
-
+    console.log(
+      "🔐 Saving encrypted wifi_password:",
+      encrypt(data.wifi_password || data.wifiPassword)
+    );
 
     const updatedProduct = await Product.updateProduct(product_id, {
       ...data,
-      
+
       product_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
-      wifi_password: encrypt(data.wifi_password || data.wifiPassword),  // ✅ same fix
+      wifi_password: encrypt(data.wifi_password || data.wifiPassword), // ✅ same fix
     });
-
 
     res.status(200).json({ ...updatedProduct, blockchainTx: receipt.hash });
   } catch (err) {
@@ -343,5 +355,3 @@ const getAllProducts = async (req, res) => {
 };
 
 module.exports = { registerProduct, updateProduct, getProduct, getAllProducts };
-
-

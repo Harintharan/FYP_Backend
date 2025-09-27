@@ -6,16 +6,16 @@
 //   solidity: "0.8.20",
 //   networks: {
 //     sepolia: {
-//       url: process.env.SEPOLIA_RPC_URL,
-//       accounts: [process.env.PRIVATE_KEY],
+//       url: process.env.CHAIN_RPC_URL,
+//       accounts: [process.env.CHAIN_PRIVATE_KEY],
 //     },
 //   },
 // };
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config({ path: __dirname + "/../.env" }); // go up one level
 
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "";
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
+const CHAIN_RPC_URL = process.env.CHAIN_RPC_URL || "";
+const CHAIN_PRIVATE_KEY = process.env.CHAIN_PRIVATE_KEY || "";
 
 module.exports = {
   solidity: {
@@ -30,8 +30,8 @@ module.exports = {
   },
   networks: {
     sepolia: {
-      url: SEPOLIA_RPC_URL,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      url: CHAIN_RPC_URL,
+      accounts: CHAIN_PRIVATE_KEY ? [CHAIN_PRIVATE_KEY] : [],
     },
   },
   etherscan: {

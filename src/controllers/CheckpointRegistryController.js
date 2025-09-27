@@ -2,10 +2,15 @@ const { ethers } = require("ethers");
 const Checkpoint = require("../models/CheckpointRegistryModel");
 require("dotenv").config();
 
-const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI = require("../../blockchain/artifacts/contracts/CheckpointRegistry.sol/CheckpointRegistry.json").abi;
-const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_CHECKPOINT, contractABI, wallet);
+const contractABI =
+  require("../../blockchain/artifacts/contracts/CheckpointRegistry.sol/CheckpointRegistry.json").abi;
+const contract = new ethers.Contract(
+  process.env.CONTRACT_ADDRESS_CHECKPOINT,
+  contractABI,
+  wallet
+);
 
 //
 // Helper: Compute hash
@@ -19,7 +24,7 @@ function computeCheckpointHash(checkpoint) {
     checkpoint.longitude,
     checkpoint.ownerUUID || checkpoint.owner_uuid,
     checkpoint.ownerType || checkpoint.owner_type,
-    checkpoint.checkpointType || checkpoint.checkpoint_type
+    checkpoint.checkpointType || checkpoint.checkpoint_type,
   ].join("|");
 
   console.log("🟦 Hashing string:", joined);
@@ -38,7 +43,13 @@ const registerCheckpoint = async (req, res) => {
     const receipt = await tx.wait();
 
     const event = receipt.logs
-      .map((log) => { try { return contract.interface.parseLog(log); } catch { return null; } })
+      .map((log) => {
+        try {
+          return contract.interface.parseLog(log);
+        } catch {
+          return null;
+        }
+      })
       .find((parsed) => parsed && parsed.name === "CheckpointRegistered");
 
     if (!event) throw new Error("No CheckpointRegistered event found");
@@ -94,7 +105,8 @@ const getCheckpoint = async (req, res) => {
   try {
     const { checkpoint_id } = req.params;
     const checkpoint = await Checkpoint.getCheckpointById(checkpoint_id);
-    if (!checkpoint) return res.status(404).json({ message: "Checkpoint not found" });
+    if (!checkpoint)
+      return res.status(404).json({ message: "Checkpoint not found" });
 
     const dbHash = computeCheckpointHash(checkpoint);
     const blockchainCheckpoint = await contract.getCheckpoint(checkpoint_id);
@@ -123,7 +135,9 @@ const getAllCheckpoints = async (req, res) => {
         let integrity = "unknown";
 
         try {
-          const blockchainCheckpoint = await contract.getCheckpoint(cp.checkpoint_id);
+          const blockchainCheckpoint = await contract.getCheckpoint(
+            cp.checkpoint_id
+          );
           blockchainHash = blockchainCheckpoint.hash;
           integrity = dbHash === blockchainHash ? "valid" : "tampered";
         } catch {
@@ -141,4 +155,9 @@ const getAllCheckpoints = async (req, res) => {
   }
 };
 
-module.exports = { registerCheckpoint, updateCheckpoint, getCheckpoint, getAllCheckpoints };
+module.exports = {
+  registerCheckpoint,
+  updateCheckpoint,
+  getCheckpoint,
+  getAllCheckpoints,
+};

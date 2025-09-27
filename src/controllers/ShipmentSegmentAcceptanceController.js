@@ -2,11 +2,10 @@
 // const SegmentAcceptance = require("../models/ShipmentSegmentAcceptanceModel");
 // require("dotenv").config();
 
-// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+// const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
 // const contractABI = require("../../blockchain/artifacts/contracts/ShipmentSegmentAcceptance.sol/ShipmentSegmentAcceptance.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE, contractABI, wallet);
-
 
 // function stableStringify(obj) {
 //     return JSON.stringify(obj, Object.keys(obj).sort());
@@ -75,8 +74,6 @@
 //     try {
 //         const data = req.body;
 
-
-
 //         const errMsg = validateAcceptancePayload(data);
 //         if (errMsg) return res.status(400).json({ message: errMsg });
 
@@ -133,7 +130,6 @@
 //         const acceptanceTimestamp = new Date().toISOString();
 //         data.acceptance_timestamp = acceptanceTimestamp;
 
-
 //         const existing = await SegmentAcceptance.getSegmentAcceptanceById(acceptance_id);
 //         if (!existing) {
 //             return res.status(404).json({ message: `Acceptance ${acceptance_id} not found` });
@@ -188,7 +184,6 @@
 //     }
 // };
 
-
 // module.exports = {
 //     registerSegmentAcceptance,
 //     updateSegmentAcceptance,
@@ -198,7 +193,7 @@
 // const SegmentAcceptance = require("../models/ShipmentSegmentAcceptanceModel");
 // require("dotenv").config();
 
-// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+// const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
 // const contractABI = require("../../blockchain/artifacts/contracts/ShipmentSegmentAcceptance.sol/ShipmentSegmentAcceptance.json").abi;
 // const contract = new ethers.Contract(
@@ -449,93 +444,92 @@ const { ethers } = require("ethers");
 const SegmentAcceptance = require("../models/ShipmentSegmentAcceptanceModel");
 require("dotenv").config();
 
-const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI = require("../../blockchain/artifacts/contracts/ShipmentSegmentAcceptance.sol/ShipmentSegmentAcceptance.json").abi;
+const contractABI =
+  require("../../blockchain/artifacts/contracts/ShipmentSegmentAcceptance.sol/ShipmentSegmentAcceptance.json").abi;
 const contract = new ethers.Contract(
-    process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE,
-    contractABI,
-    wallet
+  process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE,
+  contractABI,
+  wallet
 );
 
 //
 // 🔹 Helpers
 //
 
-
 function stableStringify(obj) {
-    if (Array.isArray(obj)) {
-        return JSON.stringify(
-            obj.map((item) => {
-                const sorted = {};
-                Object.keys(item)
-                    .sort()
-                    .forEach((k) => (sorted[k] = item[k]));
-                return sorted;
-            })
-        );
-    } else if (typeof obj === "object" && obj !== null) {
+  if (Array.isArray(obj)) {
+    return JSON.stringify(
+      obj.map((item) => {
         const sorted = {};
-        Object.keys(obj)
-            .sort()
-            .forEach((k) => (sorted[k] = obj[k]));
-        return JSON.stringify(sorted);
-    }
-    return JSON.stringify(obj);
+        Object.keys(item)
+          .sort()
+          .forEach((k) => (sorted[k] = item[k]));
+        return sorted;
+      })
+    );
+  } else if (typeof obj === "object" && obj !== null) {
+    const sorted = {};
+    Object.keys(obj)
+      .sort()
+      .forEach((k) => (sorted[k] = obj[k]));
+    return JSON.stringify(sorted);
+  }
+  return JSON.stringify(obj);
 }
 
 function computeAcceptanceHash(data) {
-    const joined = [
-        data.shipment_id,
-        data.segment_start_checkpoint_id,
-        data.segment_end_checkpoint_id,
-        data.assigned_role,
-        data.assigned_party_uuid,
-        data.estimated_pickup_time,
-        data.estimated_delivery_time,
-        stableStringify(data.shipment_items),
-        data.acceptance_timestamp || ""
-    ].join("|");
+  const joined = [
+    data.shipment_id,
+    data.segment_start_checkpoint_id,
+    data.segment_end_checkpoint_id,
+    data.assigned_role,
+    data.assigned_party_uuid,
+    data.estimated_pickup_time,
+    data.estimated_delivery_time,
+    stableStringify(data.shipment_items),
+    data.acceptance_timestamp || "",
+  ].join("|");
 
-    console.log("🟦 Hash input:", joined);
-    const hash = ethers.keccak256(ethers.toUtf8Bytes(joined));
-    console.log("🟢 Computed Hash:", hash);
-    return hash;
+  console.log("🟦 Hash input:", joined);
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(joined));
+  console.log("🟢 Computed Hash:", hash);
+  return hash;
 }
 
-
 function validateAcceptancePayload(data) {
-    const requiredTop = [
-        "shipment_id",
-        "segment_start_checkpoint_id",
-        "segment_end_checkpoint_id",
-        "assigned_role",
-        "assigned_party_uuid"
+  const requiredTop = [
+    "shipment_id",
+    "segment_start_checkpoint_id",
+    "segment_end_checkpoint_id",
+    "assigned_role",
+    "assigned_party_uuid",
+  ];
+  for (const f of requiredTop) {
+    if (!data[f]) return `Missing required field: ${f}`;
+  }
+
+  if (!Array.isArray(data.shipment_items) || data.shipment_items.length === 0) {
+    return "shipment_items must be a non-empty array";
+  }
+
+  for (const [i, item] of data.shipment_items.entries()) {
+    const requiredItemFields = [
+      "product_uuid",
+      "quantity",
+      "container_id",
+      "container_wifi_ssid",
+      "container_wifi_password",
     ];
-    for (const f of requiredTop) {
-        if (!data[f]) return `Missing required field: ${f}`;
+    for (const f of requiredItemFields) {
+      if (!item[f]) {
+        return `shipment_items[${i}] is missing required field: ${f}`;
+      }
     }
+  }
 
-    if (!Array.isArray(data.shipment_items) || data.shipment_items.length === 0) {
-        return "shipment_items must be a non-empty array";
-    }
-
-    for (const [i, item] of data.shipment_items.entries()) {
-        const requiredItemFields = [
-            "product_uuid",
-            "quantity",
-            "container_id",
-            "container_wifi_ssid",
-            "container_wifi_password"
-        ];
-        for (const f of requiredItemFields) {
-            if (!item[f]) {
-                return `shipment_items[${i}] is missing required field: ${f}`;
-            }
-        }
-    }
-
-    return null;
+  return null;
 }
 
 //
@@ -557,12 +551,18 @@ const registerSegmentAcceptance = async (req, res) => {
     // Normalize pickup/delivery if provided
     if (data.estimated_pickup_time) {
       const d = new Date(data.estimated_pickup_time);
-      if (isNaN(d)) return res.status(400).json({ message: "Invalid estimated_pickup_time" });
+      if (isNaN(d))
+        return res
+          .status(400)
+          .json({ message: "Invalid estimated_pickup_time" });
       data.estimated_pickup_time = d.toISOString();
     }
     if (data.estimated_delivery_time) {
       const d = new Date(data.estimated_delivery_time);
-      if (isNaN(d)) return res.status(400).json({ message: "Invalid estimated_delivery_time" });
+      if (isNaN(d))
+        return res
+          .status(400)
+          .json({ message: "Invalid estimated_delivery_time" });
       data.estimated_delivery_time = d.toISOString();
     }
 
@@ -572,7 +572,7 @@ const registerSegmentAcceptance = async (req, res) => {
 
     const tx = await contract.registerSegmentAcceptance(
       data.shipment_id,
-      dbHash,
+      dbHash
       // data.digital_signature || ""
     );
     const receipt = await tx.wait();
@@ -597,7 +597,7 @@ const registerSegmentAcceptance = async (req, res) => {
       shipment_items: data.shipment_items,
       acceptance_hash: dbHash,
       tx_hash: receipt.hash,
-      created_by: wallet.address
+      created_by: wallet.address,
     });
 
     res.status(201).json({ ...saved, blockchainTx: receipt.hash });
@@ -621,18 +621,28 @@ const updateSegmentAcceptance = async (req, res) => {
     // Normalize pickup/delivery if provided
     if (data.estimated_pickup_time) {
       const d = new Date(data.estimated_pickup_time);
-      if (isNaN(d)) return res.status(400).json({ message: "Invalid estimated_pickup_time" });
+      if (isNaN(d))
+        return res
+          .status(400)
+          .json({ message: "Invalid estimated_pickup_time" });
       data.estimated_pickup_time = d.toISOString();
     }
     if (data.estimated_delivery_time) {
       const d = new Date(data.estimated_delivery_time);
-      if (isNaN(d)) return res.status(400).json({ message: "Invalid estimated_delivery_time" });
+      if (isNaN(d))
+        return res
+          .status(400)
+          .json({ message: "Invalid estimated_delivery_time" });
       data.estimated_delivery_time = d.toISOString();
     }
 
-    const existing = await SegmentAcceptance.getSegmentAcceptanceById(acceptance_id);
+    const existing = await SegmentAcceptance.getSegmentAcceptanceById(
+      acceptance_id
+    );
     if (!existing) {
-      return res.status(404).json({ message: `Acceptance ${acceptance_id} not found` });
+      return res
+        .status(404)
+        .json({ message: `Acceptance ${acceptance_id} not found` });
     }
 
     data.acceptance_timestamp = existing.acceptance_timestamp;
@@ -640,9 +650,8 @@ const updateSegmentAcceptance = async (req, res) => {
     console.log("📥 Incoming update payload:", data);
 
     const newDbHash = computeAcceptanceHash({
-     
       ...data,
-    acceptance_timestamp: existing.acceptance_timestamp
+      acceptance_timestamp: existing.acceptance_timestamp,
     });
 
     const tx = await contract.updateSegmentAcceptance(acceptance_id, newDbHash);
@@ -650,14 +659,17 @@ const updateSegmentAcceptance = async (req, res) => {
 
     console.log("📤 Blockchain update tx hash:", receipt.hash);
 
-    const updated = await SegmentAcceptance.updateSegmentAcceptance(acceptance_id, {
-      ...data,
-      acceptance_timestamp: existing.acceptance_timestamp, // keep old timestamp
-      shipment_items: data.shipment_items,
-      acceptance_hash: newDbHash,
-      tx_hash: receipt.hash,
-      updated_by: wallet.address
-    });
+    const updated = await SegmentAcceptance.updateSegmentAcceptance(
+      acceptance_id,
+      {
+        ...data,
+        acceptance_timestamp: existing.acceptance_timestamp, // keep old timestamp
+        shipment_items: data.shipment_items,
+        acceptance_hash: newDbHash,
+        tx_hash: receipt.hash,
+        updated_by: wallet.address,
+      }
+    );
 
     res.json({ ...updated, blockchainTx: receipt.hash });
   } catch (err) {
@@ -672,8 +684,11 @@ const updateSegmentAcceptance = async (req, res) => {
 const getSegmentAcceptance = async (req, res) => {
   try {
     const { acceptance_id } = req.params;
-    const acceptance = await SegmentAcceptance.getSegmentAcceptanceById(acceptance_id);
-    if (!acceptance) return res.status(404).json({ message: "Acceptance not found" });
+    const acceptance = await SegmentAcceptance.getSegmentAcceptanceById(
+      acceptance_id
+    );
+    if (!acceptance)
+      return res.status(404).json({ message: "Acceptance not found" });
 
     if (typeof acceptance.shipment_items === "string") {
       try {
@@ -746,11 +761,9 @@ const getAllSegmentAcceptances = async (req, res) => {
   }
 };
 
-
 module.exports = {
-    registerSegmentAcceptance,
-    updateSegmentAcceptance,
-    getSegmentAcceptance,
-    getAllSegmentAcceptances
+  registerSegmentAcceptance,
+  updateSegmentAcceptance,
+  getSegmentAcceptance,
+  getAllSegmentAcceptances,
 };
-
