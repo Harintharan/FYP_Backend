@@ -1,42 +1,36 @@
-// import "@nomicfoundation/hardhat-toolbox";
-// import * as dotenv from "dotenv";
-// dotenv.config();
-
-// export default {
-//   solidity: "0.8.20",
-//   networks: {
-//     sepolia: {
-//       url: process.env.CHAIN_RPC_URL,
-//       accounts: [process.env.CHAIN_PRIVATE_KEY],
-//     },
-//   },
-// };
+require("dotenv").config();
 require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config({ path: __dirname + "/../.env" }); // go up one level
 
-const CHAIN_RPC_URL = process.env.CHAIN_RPC_URL || "";
-const CHAIN_PRIVATE_KEY = process.env.CHAIN_PRIVATE_KEY || "";
+const {
+  CHAIN_RPC_URL,
+  CHAIN_PRIVATE_KEY,
+  GANACHE_RPC_URL,
+  GANACHE_PRIVATE_KEY,
+  SEPOLIA_RPC_URL,
+  SEPOLIA_PRIVATE_KEY,
+} = process.env;
+
+function buildAccounts(key) {
+  return key && key !== "" ? [key] : undefined;
+}
 
 module.exports = {
-  solidity: {
-    version: "0.8.20",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
-      },
-      viaIR: true, // 👈 Add this line
-    },
-  },
+  solidity: "0.8.24",
   networks: {
-    sepolia: {
-      url: CHAIN_RPC_URL,
-      accounts: CHAIN_PRIVATE_KEY ? [CHAIN_PRIVATE_KEY] : [],
+    hardhat: {
+      chainId: 31337,
     },
-  },
-  etherscan: {
-    apiKey: {
-      sepolia: process.env.ETHERSCAN_API_KEY,
+    localhost: {
+      url: CHAIN_RPC_URL || "http://127.0.0.1:8545",
+      accounts: buildAccounts(CHAIN_PRIVATE_KEY),
+    },
+    ganache: {
+      url: GANACHE_RPC_URL || "http://127.0.0.1:7545",
+      accounts: buildAccounts(GANACHE_PRIVATE_KEY),
+    },
+    sepolia: {
+      url: SEPOLIA_RPC_URL || "",
+      accounts: buildAccounts(SEPOLIA_PRIVATE_KEY),
     },
   },
 };
