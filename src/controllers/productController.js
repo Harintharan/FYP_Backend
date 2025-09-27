@@ -6,7 +6,7 @@
 // // blockchain setup
 // const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-// const contractABI = require("../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
+// const contractABI = require("../../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
 // const contractAddress = process.env.CONTRACT_ADDRESS;
 // const contract = new ethers.Contract(contractAddress, contractABI, wallet);
 
@@ -212,7 +212,7 @@
 // // blockchain setup (shared)
 // const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-// const contractABI = require("../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
+// const contractABI = require("../../blockchain/artifacts/contracts/SupplyChain.sol/SupplyChain.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, contractABI, wallet);
 
 // // ---- Create Product ----

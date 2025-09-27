@@ -4,7 +4,7 @@
 
 // const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-// const contractABI = require("../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json").abi;
+// const contractABI = require("../../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT, contractABI, wallet);
 
 // function normalizeArray(arr, keys) {
@@ -290,7 +290,7 @@ require("dotenv").config();
 
 const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI = require("../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json").abi;
+const contractABI = require("../../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json").abi;
 const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT, contractABI, wallet);
 
 // function computeShipmentHash(shipment, checkpoints) {

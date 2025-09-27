@@ -4,7 +4,7 @@
 
 // const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 // const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-// const contractABI = require("../blockchain/artifacts/contracts/ShipmentSegmentHandover.sol/ShipmentSegmentHandover.json").abi;
+// const contractABI = require("../../blockchain/artifacts/contracts/ShipmentSegmentHandover.sol/ShipmentSegmentHandover.json").abi;
 // const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER, contractABI, wallet);
 
 // // Helper: Stable stringify
@@ -166,7 +166,7 @@ require("dotenv").config();
 
 const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI = require("../blockchain/artifacts/contracts/ShipmentSegmentHandover.sol/ShipmentSegmentHandover.json").abi;
+const contractABI = require("../../blockchain/artifacts/contracts/ShipmentSegmentHandover.sol/ShipmentSegmentHandover.json").abi;
 const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER, contractABI, wallet);
 
 //

@@ -4,7 +4,7 @@ require("dotenv").config();
 
 const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI = require("../blockchain/artifacts/contracts/BatchRegistry.sol/BatchRegistry.json").abi;
+const contractABI = require("../../blockchain/artifacts/contracts/BatchRegistry.sol/BatchRegistry.json").abi;
 const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_BATCH, contractABI, wallet);
 // ---- Register Batch ----
 const registerBatch = async (req, res) => {
