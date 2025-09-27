@@ -1,18 +1,24 @@
-const { ethers } = require("ethers");
-const Batch = require("../models/batchModel");
-require("dotenv").config();
+import dotenv from "dotenv";
+import { ethers } from "ethers";
+import BatchRegistryArtifact from "../../blockchain/artifacts/contracts/BatchRegistry.sol/BatchRegistry.json" with { type: "json" };
+import {
+  createBatch,
+  updateBatch as updateBatchRecord,
+  getBatchById,
+} from "../models/batchModel.js";
+
+dotenv.config();
 
 const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI =
-  require("../../blockchain/artifacts/contracts/BatchRegistry.sol/BatchRegistry.json").abi;
+const contractABI = BatchRegistryArtifact.abi;
 const contract = new ethers.Contract(
   process.env.CONTRACT_ADDRESS_BATCH,
   contractABI,
   wallet
 );
-// ---- Register Batch ----
-const registerBatch = async (req, res) => {
+
+export async function registerBatch(req, res) {
   try {
     const {
       productCategory,
@@ -23,10 +29,8 @@ const registerBatch = async (req, res) => {
       releaseStatus,
     } = req.body;
 
-    // Convert quantityProduced to a string to match the smart contract
     const quantityProducedStr = quantityProduced.toString();
 
-    // 1️⃣ Call blockchain (contract auto-assigns batchId)
     const tx = await contract.registerBatch(
       productCategory,
       manufacturerUUID,
@@ -37,7 +41,6 @@ const registerBatch = async (req, res) => {
     );
     const receipt = await tx.wait();
 
-    // 2️⃣ Extract event (batchId + hash)
     const event = receipt.logs
       .map((log) => {
         try {
@@ -55,9 +58,8 @@ const registerBatch = async (req, res) => {
     const blockchainBatchId = event.args.batchId.toString();
     const blockchainHash = event.args.hash;
 
-    // 3️⃣ Save in DB (link DB row with blockchainBatchId)
-    const savedBatch = await Batch.createBatch({
-      batch_id: blockchainBatchId, // ✅ store blockchain id
+    const savedBatch = await createBatch({
+      batch_id: blockchainBatchId,
       product_category: productCategory,
       manufacturer_uuid: manufacturerUUID,
       facility,
@@ -74,14 +76,15 @@ const registerBatch = async (req, res) => {
     console.error("❌ Error registering batch:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-// ---- Update Batch ----
-const updateBatch = async (req, res) => {
+export async function updateBatch(req, res) {
   try {
-    const { id } = req.params; // DB primary key
-    const batch = await Batch.getBatchById(id); // fetch DB row
-    if (!batch) return res.status(404).json({ message: "Batch not found" });
+    const { id } = req.params;
+    const batch = await getBatchById(id);
+    if (!batch) {
+      return res.status(404).json({ message: "Batch not found" });
+    }
 
     const {
       productCategory,
@@ -92,9 +95,8 @@ const updateBatch = async (req, res) => {
       releaseStatus,
     } = req.body;
 
-    // 1️⃣ Call blockchain update with batch.batch_id (on-chain id)
     const tx = await contract.updateBatch(
-      batch.batch_id, // use blockchain id!
+      batch.batch_id,
       productCategory,
       manufacturerUUID,
       facility,
@@ -104,7 +106,6 @@ const updateBatch = async (req, res) => {
     );
     const receipt = await tx.wait();
 
-    // 2️⃣ Parse event
     const event = receipt.logs
       .map((log) => {
         try {
@@ -117,8 +118,7 @@ const updateBatch = async (req, res) => {
 
     const blockchainHash = event?.args?.newHash;
 
-    // 3️⃣ Update DB row
-    const updatedBatch = await Batch.updateBatch(id, {
+    const updatedBatch = await updateBatchRecord(id, {
       product_category: productCategory,
       manufacturer_uuid: manufacturerUUID,
       facility,
@@ -135,19 +135,17 @@ const updateBatch = async (req, res) => {
     console.error("❌ Error updating batch:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-// ---- Get Batch ----
-const getBatch = async (req, res) => {
+export async function getBatch(req, res) {
   try {
-    const { id } = req.params; // DB id
-    const batch = await Batch.getBatchById(id);
+    const { id } = req.params;
+    const batch = await getBatchById(id);
 
     if (!batch) {
       return res.status(404).json({ message: "Batch not found" });
     }
 
-    // 1️⃣ Recompute hash locally
     const recomputed = ethers.keccak256(
       ethers.solidityPacked(
         ["string", "string", "string", "string", "string", "string"],
@@ -162,12 +160,10 @@ const getBatch = async (req, res) => {
       )
     );
 
-    // 2️⃣ DB integrity check
     if (recomputed.toLowerCase() !== batch.batch_hash.toLowerCase()) {
       return res.status(400).json({ message: "Tampered data in DB" });
     }
 
-    // 3️⃣ Blockchain integrity check
     const [onchainHash] = await contract.getBatch(batch.batch_id);
     console.log("On-chain hash:", onchainHash);
     console.log("Recomputed hash:", recomputed);
@@ -175,13 +171,10 @@ const getBatch = async (req, res) => {
       return res.status(400).json({ message: "Tampered data on-chain" });
     }
 
-    // 4️⃣ Send response (hide DB internal id)
     const { id: dbId, ...cleanBatch } = batch;
     res.json({ ...cleanBatch, verified: true });
   } catch (err) {
     console.error("❌ Error fetching batch:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
-
-module.exports = { registerBatch, updateBatch, getBatch };
+}

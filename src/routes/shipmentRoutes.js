@@ -1,17 +1,16 @@
-const express = require("express");
-const router = express.Router();
-const {
+import { Router } from "express";
+import {
   registerShipment,
   updateShipment,
   getShipment,
   getAllShipments,
-  getShipmentsByProduct
-} = require("../controllers/ShipmentRegistryController");
+} from "../controllers/ShipmentRegistryController.js";
+
+const router = Router();
 
 router.post("/shipments", registerShipment);
 router.put("/shipments/:shipment_id", updateShipment);
 router.get("/shipments/:shipment_id", getShipment);
 router.get("/shipments", getAllShipments);
-//router.get("/shipments/product/:uuid", getShipmentsByProduct);
 
-module.exports = router;
+export default router;

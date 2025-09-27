@@ -1,15 +1,16 @@
-const express = require("express");
-const router = express.Router();
-const {
+import { Router } from "express";
+import {
   registerCheckpoint,
   updateCheckpoint,
   getCheckpoint,
-  getAllCheckpoints
-} = require("../controllers/CheckpointRegistryController");
+  getAllCheckpoints,
+} from "../controllers/CheckpointRegistryController.js";
+
+const router = Router();
 
 router.post("/checkpoints", registerCheckpoint);
 router.put("/checkpoints/:checkpoint_id", updateCheckpoint);
 router.get("/checkpoints/:checkpoint_id", getCheckpoint);
 router.get("/checkpoints", getAllCheckpoints);
 
-module.exports = router;
+export default router;

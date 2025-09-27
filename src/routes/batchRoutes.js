@@ -1,9 +1,14 @@
-const express = require("express");
-const router = express.Router();
-const batchController = require("../controllers/batchController");
+import { Router } from "express";
+import {
+  registerBatch,
+  updateBatch,
+  getBatch,
+} from "../controllers/batchController.js";
 
-router.post("/", batchController.registerBatch);
-router.put("/:id", batchController.updateBatch);
-router.get("/:id", batchController.getBatch);
+const router = Router();
 
-module.exports = router;
+router.post("/", registerBatch);
+router.put("/:id", updateBatch);
+router.get("/:id", getBatch);
+
+export default router;

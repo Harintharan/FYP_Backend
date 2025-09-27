@@ -1,163 +1,43 @@
-// const { ethers } = require("ethers");
-// const Product = require("../models/ProductRegistryModel");
-// require("dotenv").config();
+import dotenv from "dotenv";
+import { ethers } from "ethers";
+import ProductRegistryArtifact from "../../blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json" with { type: "json" };
+import {
+  createProduct,
+  updateProduct as updateProductRecord,
+  getProductById,
+  getAllProducts as getAllProductRecords,
+} from "../models/ProductRegistryModel.js";
+import { encrypt, decrypt } from "../utils/encryptionHelper.js";
 
-// const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
-// const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-// const contractABI = require("../../blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json").abi;
-// const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_PRODUCT, contractABI, wallet);
-
-// // Create product
-// const registerProduct = async (req, res) => {
-//   try {
-//     const data = req.body;
-//     const expiryTimestamp = Math.floor(new Date(data.expiryDate).getTime() / 1000);
-
-//     const tx = await contract.registerProduct({
-//       productUUID: data.productUUID,
-//       productName: data.productName,
-//       productCategory: data.productCategory,
-//       batchLotId: data.batchLotId,
-//       requiredStorageTemp: data.requiredStorageTemp,
-//       transportRoutePlanId: data.transportRoutePlanId,
-//       handlingInstructions: data.handlingInstructions,
-//       expiryDate: expiryTimestamp,
-//       sensorDeviceUUID: data.sensorDeviceUUID,
-//       microprocessorMac: data.microprocessorMac,
-//       sensorTypes: data.sensorTypes,
-//       qrId: data.qrId,
-//       wifiSSID: data.wifiSSID,
-//       wifiPassword: data.wifiPassword,
-//       manufacturerUUID: data.manufacturerUUID,
-//       originFacilityAddr: data.originFacilityAddr,
-//       status: data.status
-//     });
-
-//     const receipt = await tx.wait();
-
-//     const event = receipt.logs.map(log => {
-//       try { return contract.interface.parseLog(log); } catch { return null; }
-//     }).find(parsed => parsed && parsed.name === "ProductRegistered");
-
-//     if (!event) throw new Error("No ProductRegistered event found");
-
-//     const blockchainProductId = event.args.productId.toString();
-//     const blockchainHash = event.args.hash;
-
-//     const savedProduct = await Product.createProduct({
-//       product_id: blockchainProductId,
-//       ...data,
-//       expiryDate: data.expiryDate,
-//       product_hash: blockchainHash,
-//       tx_hash: receipt.hash,
-//       created_by: wallet.address,
-//     });
-
-//     res.status(201).json({ ...savedProduct, blockchainTx: receipt.hash });
-//   } catch (err) {
-//     console.error("❌ Error registering product:", err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
-// // Update product
-// const updateProduct = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const data = req.body;
-//     const expiryTimestamp = Math.floor(new Date(data.expiryDate).getTime() / 1000);
-
-//     const tx = await contract.updateProduct(id, {
-//       ...data,
-//       expiryDate: expiryTimestamp
-//     });
-//     const receipt = await tx.wait();
-
-//     const event = receipt.logs.map(log => {
-//       try { return contract.interface.parseLog(log); } catch { return null; }
-//     }).find(parsed => parsed && parsed.name === "ProductUpdated");
-
-//     if (!event) throw new Error("No ProductUpdated event found");
-
-//     const newHash = event.args.newHash;
-
-//     const updatedProduct = await Product.updateProduct(id, {
-//       ...data,
-//       product_hash: newHash,
-//       tx_hash: receipt.hash,
-//       updated_by: wallet.address,
-//     });
-
-//     res.json({ ...updatedProduct, blockchainTx: receipt.hash });
-//   } catch (err) {
-//     console.error("❌ Error updating product:", err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
-// // Get one
-// const getProduct = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const product = await Product.getProductById(id);
-//     if (!product) return res.status(404).json({ message: "Not found" });
-//     res.json(product);
-//   } catch (err) {
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
-// // Get all
-// const getAllProducts = async (req, res) => {
-//   try {
-//     const products = await Product.getAllProducts();
-//     res.json(products);
-//   } catch (err) {
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
-// module.exports = { registerProduct, updateProduct, getProduct, getAllProducts };
-const { ethers } = require("ethers");
-const Product = require("../models/ProductRegistryModel");
-const { decrypt, encrypt } = require("../utils/encryptionHelper");
-require("dotenv").config();
+dotenv.config();
 
 const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI =
-  require("../../blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json").abi;
+const contractABI = ProductRegistryArtifact.abi;
 const contract = new ethers.Contract(
   process.env.CONTRACT_ADDRESS_PRODUCT,
   contractABI,
   wallet
 );
 
-//
-// 🔹 Helpers
-//
 function normalizeDate(dateVal) {
   if (!dateVal) return "";
-  return String(dateVal); // ✅ don't convert with new Date(), just keep as-is
+  return String(dateVal);
 }
 
 function normalizeProductInput(p) {
-  const safe = (v) => (v === null || v === undefined ? "" : v);
+  const safe = (value) => (value === null || value === undefined ? "" : value);
 
   return {
     product_uuid: safe(p.product_uuid || p.productUUID),
     product_name: safe(p.product_name || p.productName),
     product_category: safe(p.product_category || p.productCategory),
     batch_lot_id: safe(p.batch_lot_id || p.batchLotId),
-    required_storage_temp: safe(
-      p.required_storage_temp || p.requiredStorageTemp
-    ),
+    required_storage_temp: safe(p.required_storage_temp || p.requiredStorageTemp),
     transport_route_plan_id: safe(
       p.transport_route_plan_id || p.transportRoutePlanId
     ),
-    handling_instructions: safe(
-      p.handling_instructions || p.handlingInstructions
-    ),
+    handling_instructions: safe(p.handling_instructions || p.handlingInstructions),
     expiry_date: safe(p.expiry_date || p.expiryDate),
     sensor_device_uuid: safe(p.sensor_device_uuid || p.sensorDeviceUUID),
     microprocessor_mac: safe(p.microprocessor_mac || p.microprocessorMac),
@@ -174,11 +54,9 @@ function normalizeProductInput(p) {
 function safeDecryptMaybe(value) {
   if (!value) return "";
   try {
-    // If it's valid hex, attempt decrypt
     if (/^[0-9a-fA-F]+$/.test(value) && value.length % 2 === 0) {
       return decrypt(value);
     }
-    // Otherwise assume it’s already plain text
     return value;
   } catch (err) {
     console.warn("⚠️ safeDecryptMaybe failed, using raw value:", value);
@@ -203,10 +81,10 @@ function computeProductHash(product) {
     norm.sensor_types,
     norm.qr_id,
     norm.wifi_ssid,
-    safeDecryptMaybe(norm.wifi_password), // ✅ decrypt before hashing
+    safeDecryptMaybe(norm.wifi_password),
     norm.manufacturer_uuid,
     norm.origin_facility_addr,
-    String(norm.status), // force to string
+    String(norm.status),
   ].join("|");
 
   console.log("🟦 Hashing string:", joined);
@@ -214,10 +92,7 @@ function computeProductHash(product) {
   return ethers.keccak256(ethers.toUtf8Bytes(joined));
 }
 
-//
-// 🔹 Register Product
-//
-const registerProduct = async (req, res) => {
+export async function registerProduct(req, res) {
   try {
     const data = req.body;
     const dbHash = computeProductHash(data);
@@ -235,7 +110,9 @@ const registerProduct = async (req, res) => {
       })
       .find((parsed) => parsed && parsed.name === "ProductRegistered");
 
-    if (!event) throw new Error("No ProductRegistered event found");
+    if (!event) {
+      throw new Error("No ProductRegistered event found");
+    }
 
     const blockchainProductId = event.args.productId.toString();
     const blockchainHash = event.args.hash;
@@ -245,15 +122,13 @@ const registerProduct = async (req, res) => {
       encrypt(data.wifi_password || data.wifiPassword)
     );
 
-    const savedProduct = await Product.createProduct({
+    const savedProduct = await createProduct({
       ...data,
       product_id: blockchainProductId,
-
       product_hash: blockchainHash,
       tx_hash: receipt.hash,
       created_by: wallet.address,
-
-      wifi_password: encrypt(data.wifi_password || data.wifiPassword), // ✅ handle both
+      wifi_password: encrypt(data.wifi_password || data.wifiPassword),
     });
 
     res.status(201).json({ ...savedProduct, blockchainTx: receipt.hash });
@@ -261,12 +136,9 @@ const registerProduct = async (req, res) => {
     console.error("❌ Error registering product:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-//
-// 🔹 Update Product
-//
-const updateProduct = async (req, res) => {
+export async function updateProduct(req, res) {
   try {
     const { product_id } = req.params;
     const data = req.body;
@@ -281,13 +153,12 @@ const updateProduct = async (req, res) => {
       encrypt(data.wifi_password || data.wifiPassword)
     );
 
-    const updatedProduct = await Product.updateProduct(product_id, {
+    const updatedProduct = await updateProductRecord(product_id, {
       ...data,
-
       product_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
-      wifi_password: encrypt(data.wifi_password || data.wifiPassword), // ✅ same fix
+      wifi_password: encrypt(data.wifi_password || data.wifiPassword),
     });
 
     res.status(200).json({ ...updatedProduct, blockchainTx: receipt.hash });
@@ -295,16 +166,15 @@ const updateProduct = async (req, res) => {
     console.error("❌ Error updating product:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-//
-// 🔹 Get Single Product
-//
-const getProduct = async (req, res) => {
+export async function getProduct(req, res) {
   try {
     const { product_id } = req.params;
-    const product = await Product.getProductById(product_id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    const product = await getProductById(product_id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
 
     const dbHash = computeProductHash(product);
     const blockchainProduct = await contract.getProduct(product_id);
@@ -320,14 +190,11 @@ const getProduct = async (req, res) => {
     console.error("❌ Error fetching product:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-//
-// 🔹 Get All Products
-//
-const getAllProducts = async (req, res) => {
+export async function getAllProducts(_req, res) {
   try {
-    const products = await Product.getAllProducts();
+    const products = await getAllProductRecords();
 
     const result = await Promise.all(
       products.map(async (prod) => {
@@ -352,6 +219,4 @@ const getAllProducts = async (req, res) => {
     console.error("❌ Error fetching products:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
-
-module.exports = { registerProduct, updateProduct, getProduct, getAllProducts };
+}

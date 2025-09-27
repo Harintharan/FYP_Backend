@@ -1,30 +1,16 @@
-// const express = require("express");
-// const router = express.Router();
-// const controller = require("../controllers/ProductRegistryController");
+import { Router } from "express";
+import {
+  registerProduct,
+  updateProduct,
+  getProduct,
+  getAllProducts,
+} from "../controllers/ProductRegistryController.js";
 
-// router.post("/", controller.registerProduct);
-// router.put("/:id", controller.updateProduct);
-// router.get("/:id", controller.getProduct);
-// router.get("/", controller.getAllProducts);
+const router = Router();
 
-// module.exports = router;
+router.post("/", registerProduct);
+router.put("/:product_id", updateProduct);
+router.get("/:product_id", getProduct);
+router.get("/", getAllProducts);
 
-
-const express = require("express");
-const router = express.Router();
-const productRegistryController = require("../controllers/ProductRegistryController");
-
-// Register
-router.post("/", productRegistryController.registerProduct);
-
-// Update by product_id
-router.put("/:product_id", productRegistryController.updateProduct);
-
-// Get single by product_id
-router.get("/:product_id", productRegistryController.getProduct);
-
-// Get all
-router.get("/", productRegistryController.getAllProducts);
-
-module.exports = router;
-
+export default router;

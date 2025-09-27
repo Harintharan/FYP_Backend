@@ -1,16 +1,42 @@
 const hre = require("hardhat");
 
-async function main() {
-  const SupplyChain = await hre.ethers.getContractFactory("ShipmentSegmentHandover");
-  const contract = await SupplyChain.deploy();
+const CONTRACTS = [
+  "BatchRegistry",
+  "CheckpointRegistry",
+  "ProductRegistry",
+  "RegistrationRegistry",
+  "ShipmentRegistry",
+  "ShipmentSegmentAcceptance",
+  "ShipmentSegmentHandover",
+  "SupplyChain",
+];
 
-  // In ethers v6:
+async function deployContract(name) {
+  const factory = await hre.ethers.getContractFactory(name);
+  const contract = await factory.deploy();
   await contract.waitForDeployment();
-
-  console.log("✅ SupplyChain deployed to:", await contract.getAddress());
+  const address = await contract.getAddress();
+  console.log(`${name} deployed to: ${address}`);
+  return { name, address };
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+async function main() {
+  const deployments = [];
+  for (const name of CONTRACTS) {
+    console.log(`\n🚀 Deploying ${name}...`);
+    const details = await deployContract(name);
+    deployments.push(details);
+  }
+
+  console.log("\n✅ Deployment summary:");
+  for (const { name, address } of deployments) {
+    console.log(`  • ${name}: ${address}`);
+  }
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

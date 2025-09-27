@@ -3,7 +3,7 @@
  * Creates initial admin user and sample checkpoints
  */
 
-const migrate = async (pool) => {
+export const migrate = async (pool) => {
   try {
     // Start a transaction
     await pool.query("BEGIN");
@@ -104,5 +104,3 @@ const migrate = async (pool) => {
     return false;
   }
 };
-
-module.exports = { migrate };

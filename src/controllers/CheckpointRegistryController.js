@@ -1,20 +1,24 @@
-const { ethers } = require("ethers");
-const Checkpoint = require("../models/CheckpointRegistryModel");
-require("dotenv").config();
+import dotenv from "dotenv";
+import { ethers } from "ethers";
+import CheckpointRegistryArtifact from "../../blockchain/artifacts/contracts/CheckpointRegistry.sol/CheckpointRegistry.json" with { type: "json" };
+import {
+  createCheckpoint,
+  updateCheckpoint as updateCheckpointRecord,
+  getCheckpointById,
+  getAllCheckpoints as getAllCheckpointRecords,
+} from "../models/CheckpointRegistryModel.js";
+
+dotenv.config();
 
 const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
-const contractABI =
-  require("../../blockchain/artifacts/contracts/CheckpointRegistry.sol/CheckpointRegistry.json").abi;
+const contractABI = CheckpointRegistryArtifact.abi;
 const contract = new ethers.Contract(
   process.env.CONTRACT_ADDRESS_CHECKPOINT,
   contractABI,
   wallet
 );
 
-//
-// Helper: Compute hash
-//
 function computeCheckpointHash(checkpoint) {
   const joined = [
     checkpoint.checkpointUUID || checkpoint.checkpoint_uuid,
@@ -31,10 +35,7 @@ function computeCheckpointHash(checkpoint) {
   return ethers.keccak256(ethers.toUtf8Bytes(joined));
 }
 
-//
-// Register Checkpoint
-//
-const registerCheckpoint = async (req, res) => {
+export async function registerCheckpoint(req, res) {
   try {
     const data = req.body;
     const dbHash = computeCheckpointHash(data);
@@ -52,12 +53,14 @@ const registerCheckpoint = async (req, res) => {
       })
       .find((parsed) => parsed && parsed.name === "CheckpointRegistered");
 
-    if (!event) throw new Error("No CheckpointRegistered event found");
+    if (!event) {
+      throw new Error("No CheckpointRegistered event found");
+    }
 
     const blockchainCheckpointId = event.args.checkpointId.toString();
     const blockchainHash = event.args.hash;
 
-    const savedCheckpoint = await Checkpoint.createCheckpoint({
+    const savedCheckpoint = await createCheckpoint({
       checkpoint_id: blockchainCheckpointId,
       ...data,
       checkpoint_hash: blockchainHash,
@@ -70,12 +73,9 @@ const registerCheckpoint = async (req, res) => {
     console.error("❌ Error registering checkpoint:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-//
-// Update Checkpoint
-//
-const updateCheckpoint = async (req, res) => {
+export async function updateCheckpoint(req, res) {
   try {
     const { checkpoint_id } = req.params;
     const data = req.body;
@@ -84,7 +84,7 @@ const updateCheckpoint = async (req, res) => {
     const tx = await contract.updateCheckpoint(checkpoint_id, newDbHash);
     const receipt = await tx.wait();
 
-    const updatedCheckpoint = await Checkpoint.updateCheckpoint(checkpoint_id, {
+    const updatedCheckpoint = await updateCheckpointRecord(checkpoint_id, {
       ...data,
       checkpoint_hash: newDbHash,
       tx_hash: receipt.hash,
@@ -96,17 +96,15 @@ const updateCheckpoint = async (req, res) => {
     console.error("❌ Error updating checkpoint:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-//
-// Get Single Checkpoint
-//
-const getCheckpoint = async (req, res) => {
+export async function getCheckpoint(req, res) {
   try {
     const { checkpoint_id } = req.params;
-    const checkpoint = await Checkpoint.getCheckpointById(checkpoint_id);
-    if (!checkpoint)
+    const checkpoint = await getCheckpointById(checkpoint_id);
+    if (!checkpoint) {
       return res.status(404).json({ message: "Checkpoint not found" });
+    }
 
     const dbHash = computeCheckpointHash(checkpoint);
     const blockchainCheckpoint = await contract.getCheckpoint(checkpoint_id);
@@ -119,14 +117,11 @@ const getCheckpoint = async (req, res) => {
     console.error("❌ Error fetching checkpoint:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
+}
 
-//
-// Get All Checkpoints
-//
-const getAllCheckpoints = async (req, res) => {
+export async function getAllCheckpoints(_req, res) {
   try {
-    const checkpoints = await Checkpoint.getAllCheckpoints();
+    const checkpoints = await getAllCheckpointRecords();
 
     const result = await Promise.all(
       checkpoints.map(async (cp) => {
@@ -135,9 +130,7 @@ const getAllCheckpoints = async (req, res) => {
         let integrity = "unknown";
 
         try {
-          const blockchainCheckpoint = await contract.getCheckpoint(
-            cp.checkpoint_id
-          );
+          const blockchainCheckpoint = await contract.getCheckpoint(cp.checkpoint_id);
           blockchainHash = blockchainCheckpoint.hash;
           integrity = dbHash === blockchainHash ? "valid" : "tampered";
         } catch {
@@ -153,11 +146,4 @@ const getAllCheckpoints = async (req, res) => {
     console.error("❌ Error fetching checkpoints:", err);
     res.status(500).json({ message: "Server error" });
   }
-};
-
-module.exports = {
-  registerCheckpoint,
-  updateCheckpoint,
-  getCheckpoint,
-  getAllCheckpoints,
-};
+}
