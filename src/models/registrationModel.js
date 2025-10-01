@@ -12,7 +12,7 @@ export async function insertRegistration({
   submitterAddress,
 }) {
   const sql = `
-    INSERT INTO registrations (
+    INSERT INTO users (
       client_uuid,
       uuid_hex,
       reg_type,
@@ -53,7 +53,7 @@ export async function insertRegistration({
 
 export async function findByClientUuid(clientUuid) {
   const { rows } = await query(
-    `SELECT * FROM registrations WHERE client_uuid = $1::uuid`,
+    `SELECT * FROM users WHERE client_uuid = $1::uuid`,
     [clientUuid]
   );
   return rows[0] ?? null;
@@ -71,7 +71,7 @@ export async function updateRegistration({
   submitterAddress,
 }) {
   const { rows } = await query(
-    `UPDATE registrations
+    `UPDATE users
        SET uuid_hex = $2,
            reg_type = $3::reg_type,
            public_key = $4,
@@ -105,7 +105,7 @@ export async function updateRegistration({
 export async function findApprovedRegistrationByPublicKey(publicKey) {
   const { rows } = await query(
     `SELECT client_uuid, reg_type, status
-       FROM registrations
+       FROM users
       WHERE public_key = $1
         AND status = 'APPROVED'
       ORDER BY updated_at DESC NULLS LAST, created_at DESC
@@ -118,7 +118,7 @@ export async function findApprovedRegistrationByPublicKey(publicKey) {
 export async function findPendingRegistrationSummaries() {
   const { rows } = await query(
     `SELECT id, client_uuid, reg_type, tx_hash, payload_hash, payload_canonical, payload, created_at
-     FROM registrations
+     FROM users
      WHERE status = 'PENDING'
      ORDER BY created_at DESC`
   );
@@ -127,7 +127,7 @@ export async function findPendingRegistrationSummaries() {
 
 export async function approveRegistration(clientUuid, approverAddress) {
   const { rows } = await query(
-    `UPDATE registrations
+    `UPDATE users
        SET status = 'APPROVED',
            approved_at = now(),
            approved_by_address = $2
@@ -140,7 +140,7 @@ export async function approveRegistration(clientUuid, approverAddress) {
 
 export async function rejectRegistration(clientUuid, approverAddress) {
   const { rows } = await query(
-    `UPDATE registrations
+    `UPDATE users
        SET status = 'REJECTED',
            approved_at = now(),
            approved_by_address = $2

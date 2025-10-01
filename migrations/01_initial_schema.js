@@ -76,7 +76,7 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS registrations (
+      CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         client_uuid UUID UNIQUE NOT NULL,
         uuid_hex CHAR(32) UNIQUE NOT NULL,
@@ -96,13 +96,13 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_registrations_status ON registrations (status)`
+      `CREATE INDEX IF NOT EXISTS idx_registrations_status ON users (status)`
     );
     await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_registrations_tx_hash ON registrations (tx_hash)`
+      `CREATE INDEX IF NOT EXISTS idx_registrations_tx_hash ON users (tx_hash)`
     );
     await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_registrations_payload ON registrations USING GIN (payload)`
+      `CREATE INDEX IF NOT EXISTS idx_registrations_payload ON users USING GIN (payload)`
     );
 
     await pool.query(`
@@ -116,11 +116,11 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(
-      `DROP TRIGGER IF EXISTS registrations_set_updated_at ON registrations`
+      `DROP TRIGGER IF EXISTS registrations_set_updated_at ON users`
     );
     await pool.query(`
       CREATE TRIGGER registrations_set_updated_at
-      BEFORE UPDATE ON registrations
+      BEFORE UPDATE ON users
       FOR EACH ROW
       EXECUTE FUNCTION set_updated_at()
     `);
