@@ -59,8 +59,6 @@ export function requireRegistrationRole(expectedType) {
           return res.status(401).json({ error: "Wallet address missing" });
         }
 
-        console.log("Wallet address:", walletAddress);
-
         const registration = await findApprovedRegistrationByPublicKey(
           walletAddress
         );

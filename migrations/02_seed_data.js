@@ -10,21 +10,6 @@ export const migrate = async (pool) => {
 
     console.log("Running seed data migration...");
 
-    // Create users table if it doesn't exist (for future user management)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        eth_address TEXT UNIQUE NOT NULL,
-        name TEXT NOT NULL,
-        id_number TEXT NOT NULL,
-        company TEXT NOT NULL,
-        role TEXT NOT NULL,
-        details_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
     // Add sample checkpoint data
     await pool.query(`
       INSERT INTO checkpoint_registry (

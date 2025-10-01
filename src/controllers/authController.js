@@ -74,8 +74,6 @@ export async function login(req, res) {
 
     const role = (await getAccountRole(address)) ?? "USER";
 
-    console.log("Authenticated address:", address);
-
     const token = jwt.sign({ role }, jwtPrivateKey, {
       algorithm: "RS256",
       expiresIn: "24h",

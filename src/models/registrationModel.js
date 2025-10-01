@@ -103,7 +103,6 @@ export async function updateRegistration({
 }
 
 export async function findApprovedRegistrationByPublicKey(publicKey) {
-  console.log("findApprovedRegistrationByPublicKey", publicKey);
   const { rows } = await query(
     `SELECT client_uuid, reg_type, status
        FROM registrations

@@ -77,7 +77,6 @@ async function ensureOnChainIntegrity(row) {
 export async function createRegistration(req, res) {
   try {
     const parsed = RegistrationPayload.parse(req.body);
-
     const canonical = stableStringify(parsed);
     const clientUuid = parsed.identification.uuid;
     const uuidHex = uuidToHex32(clientUuid);
@@ -106,7 +105,7 @@ export async function createRegistration(req, res) {
       canonical,
       payloadHash,
       txHash,
-      submitterAddress: req.wallet?.address ?? null,
+      submitterAddress: req.wallet?.walletAddress ?? null,
     });
 
     return res.status(201).json({
@@ -162,7 +161,7 @@ export async function updateRegistrationByClient(req, res) {
       canonical,
       payloadHash,
       txHash,
-      submitterAddress: req.wallet?.address ?? null,
+      submitterAddress: req.wallet?.walletAddress ?? null,
     });
 
     return res.json({
@@ -220,7 +219,7 @@ export async function approveRegistrationByClient(req, res) {
   try {
     const result = await approveRegistration(
       req.params.clientUuid,
-      req.wallet.address
+      req.wallet.walletAddress
     );
     if (!result) {
       return res
@@ -238,7 +237,7 @@ export async function rejectRegistrationByClient(req, res) {
   try {
     const result = await rejectRegistration(
       req.params.clientUuid,
-      req.wallet.address
+      req.wallet.walletAddress
     );
     if (!result) {
       return res

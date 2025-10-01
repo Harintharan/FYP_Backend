@@ -196,7 +196,6 @@ export async function getShipment(req, res) {
   try {
     const { shipment_id } = req.params;
     const shipment = await getShipmentById(shipment_id);
-    console.log("DEBUG fetched shipment:", shipment);
     if (!shipment) {
       return res.status(404).json({ message: "Shipment not found" });
     }
