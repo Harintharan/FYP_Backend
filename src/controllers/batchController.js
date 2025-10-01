@@ -1,4 +1,3 @@
-import dotenv from "dotenv";
 import { ethers } from "ethers";
 import BatchRegistryArtifact from "../../blockchain/artifacts/contracts/BatchRegistry.sol/BatchRegistry.json" with { type: "json" };
 import {
@@ -6,14 +5,13 @@ import {
   updateBatch as updateBatchRecord,
   getBatchById,
 } from "../models/batchModel.js";
+import { chain, operatorWallet, contracts } from "../config.js";
 
-dotenv.config();
-
-const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
+const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
 const contractABI = BatchRegistryArtifact.abi;
 const contract = new ethers.Contract(
-  process.env.CONTRACT_ADDRESS_BATCH,
+  contracts.batchRegistry,
   contractABI,
   wallet
 );

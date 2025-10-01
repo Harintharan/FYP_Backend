@@ -15,6 +15,15 @@ const baseEnvVars = {
   CHAIN_RPC_URL: process.env.CHAIN_RPC_URL,
   CHAIN_PRIVATE_KEY: process.env.CHAIN_PRIVATE_KEY,
   REGISTRY_ADDRESS: process.env.REGISTRY_ADDRESS,
+  PRIVATE_KEY_OTHER: process.env.PRIVATE_KEY_OTHER,
+  CONTRACT_ADDRESS_BATCH: process.env.CONTRACT_ADDRESS_BATCH,
+  CONTRACT_ADDRESS_CHECKPOINT: process.env.CONTRACT_ADDRESS_CHECKPOINT,
+  CONTRACT_ADDRESS_SHIPMENT: process.env.CONTRACT_ADDRESS_SHIPMENT,
+  CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE:
+    process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE,
+  CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER:
+    process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER,
+  CONTRACT_ADDRESS_PRODUCT: process.env.CONTRACT_ADDRESS_PRODUCT,
 };
 
 const required = [
@@ -24,6 +33,13 @@ const required = [
   "CHAIN_RPC_URL",
   "CHAIN_PRIVATE_KEY",
   "REGISTRY_ADDRESS",
+  "PRIVATE_KEY_OTHER",
+  "CONTRACT_ADDRESS_BATCH",
+  "CONTRACT_ADDRESS_CHECKPOINT",
+  "CONTRACT_ADDRESS_SHIPMENT",
+  "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE",
+  "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER",
+  "CONTRACT_ADDRESS_PRODUCT",
 ];
 
 const missing = required.filter((key) => !baseEnvVars[key] || baseEnvVars[key].trim() === "");
@@ -56,15 +72,76 @@ if (!connectionString || connectionString.trim() === "") {
   connectionString = `postgres://${encodeURIComponent(baseEnvVars.DB_USER)}:${encodeURIComponent(baseEnvVars.DB_PASSWORD)}@${baseEnvVars.DB_HOST}:${baseEnvVars.DB_PORT}/${baseEnvVars.DB_NAME}`;
 }
 
-const privateKey = baseEnvVars.CHAIN_PRIVATE_KEY.trim();
-if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
-  throw new Error("CHAIN_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string");
+function assertHex(value, key, regex, message) {
+  if (!value) {
+    throw new Error(`${key} is required`);
+  }
+  const trimmed = value.trim();
+  if (!regex.test(trimmed)) {
+    throw new Error(message);
+  }
+  return trimmed;
 }
 
-const registryAddress = baseEnvVars.REGISTRY_ADDRESS.trim();
-if (!/^0x[0-9a-fA-F]{40}$/.test(registryAddress)) {
-  throw new Error("REGISTRY_ADDRESS must be a valid 0x-prefixed address");
-}
+const privateKey = assertHex(
+  baseEnvVars.CHAIN_PRIVATE_KEY,
+  "CHAIN_PRIVATE_KEY",
+  /^0x[0-9a-fA-F]{64}$/,
+  "CHAIN_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string"
+);
+
+const registryAddress = assertHex(
+  baseEnvVars.REGISTRY_ADDRESS,
+  "REGISTRY_ADDRESS",
+  /^0x[0-9a-fA-F]{40}$/,
+  "REGISTRY_ADDRESS must be a valid 0x-prefixed address"
+);
+
+const operatorPrivateKey = assertHex(
+  baseEnvVars.PRIVATE_KEY_OTHER,
+  "PRIVATE_KEY_OTHER",
+  /^0x[0-9a-fA-F]{64}$/,
+  "PRIVATE_KEY_OTHER must be a 0x-prefixed 32-byte hex string"
+);
+
+const contractAddresses = {
+  batchRegistry: assertHex(
+    baseEnvVars.CONTRACT_ADDRESS_BATCH,
+    "CONTRACT_ADDRESS_BATCH",
+    /^0x[0-9a-fA-F]{40}$/,
+    "CONTRACT_ADDRESS_BATCH must be a valid 0x-prefixed address"
+  ),
+  checkpointRegistry: assertHex(
+    baseEnvVars.CONTRACT_ADDRESS_CHECKPOINT,
+    "CONTRACT_ADDRESS_CHECKPOINT",
+    /^0x[0-9a-fA-F]{40}$/,
+    "CONTRACT_ADDRESS_CHECKPOINT must be a valid 0x-prefixed address"
+  ),
+  shipmentRegistry: assertHex(
+    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT,
+    "CONTRACT_ADDRESS_SHIPMENT",
+    /^0x[0-9a-fA-F]{40}$/,
+    "CONTRACT_ADDRESS_SHIPMENT must be a valid 0x-prefixed address"
+  ),
+  segmentAcceptance: assertHex(
+    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE,
+    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE",
+    /^0x[0-9a-fA-F]{40}$/,
+    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE must be a valid 0x-prefixed address"
+  ),
+  segmentHandover: assertHex(
+    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER,
+    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER",
+    /^0x[0-9a-fA-F]{40}$/,
+    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER must be a valid 0x-prefixed address"
+  ),
+  productRegistry: assertHex(
+    baseEnvVars.CONTRACT_ADDRESS_PRODUCT,
+    "CONTRACT_ADDRESS_PRODUCT",
+    /^0x[0-9a-fA-F]{40}$/,
+    "CONTRACT_ADDRESS_PRODUCT must be a valid 0x-prefixed address"
+  ),
+};
 
 function normalizePem(value) {
   return value.replace(/\\n/g, "\n");
@@ -80,3 +157,9 @@ export const chain = {
   privateKey,
   registryAddress,
 };
+
+export const operatorWallet = {
+  privateKey: operatorPrivateKey,
+};
+
+export const contracts = contractAddresses;

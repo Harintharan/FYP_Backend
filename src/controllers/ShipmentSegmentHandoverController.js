@@ -1,4 +1,3 @@
-import dotenv from "dotenv";
 import { ethers } from "ethers";
 import ShipmentSegmentHandoverArtifact from "../../blockchain/artifacts/contracts/ShipmentSegmentHandover.sol/ShipmentSegmentHandover.json" with { type: "json" };
 import {
@@ -7,14 +6,13 @@ import {
   getHandoverById,
   getAllHandovers as getAllHandoverRecords,
 } from "../models/ShipmentSegmentHandoverModel.js";
+import { chain, operatorWallet, contracts } from "../config.js";
 
-dotenv.config();
-
-const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
+const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
 const contractABI = ShipmentSegmentHandoverArtifact.abi;
 const contract = new ethers.Contract(
-  process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER,
+  contracts.segmentHandover,
   contractABI,
   wallet
 );

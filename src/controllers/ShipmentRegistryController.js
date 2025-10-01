@@ -1,4 +1,3 @@
-import dotenv from "dotenv";
 import { ethers } from "ethers";
 import ShipmentRegistryArtifact from "../../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json" with { type: "json" };
 import {
@@ -13,14 +12,13 @@ import {
   deleteByShipment,
 } from "../models/ShipmentHandoverCheckpointModel.js";
 import { query } from "../db.js";
+import { chain, operatorWallet, contracts } from "../config.js";
 
-dotenv.config();
-
-const provider = new ethers.JsonRpcProvider(process.env.CHAIN_RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_OTHER, provider);
+const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
 const contractABI = ShipmentRegistryArtifact.abi;
 const contract = new ethers.Contract(
-  process.env.CONTRACT_ADDRESS_SHIPMENT,
+  contracts.shipmentRegistry,
   contractABI,
   wallet
 );
