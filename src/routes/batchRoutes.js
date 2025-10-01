@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireRegistrationRole } from "../middleware/roles.js";
 import {
   registerBatch,
   updateBatch,
@@ -7,8 +8,8 @@ import {
 
 const router = Router();
 
-router.post("/", registerBatch);
-router.put("/:id", updateBatch);
-router.get("/:id", getBatch);
+router.post("/", requireRegistrationRole("MANUFACTURER"), registerBatch);
+router.put("/:id", requireRegistrationRole("MANUFACTURER"), updateBatch);
+router.get("/:id", requireRegistrationRole("MANUFACTURER"), getBatch);
 
 export default router;

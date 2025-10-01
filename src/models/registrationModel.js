@@ -4,6 +4,7 @@ export async function insertRegistration({
   clientUuid,
   uuidHex,
   regType,
+  publicKey,
   payload,
   canonical,
   payloadHash,
@@ -15,6 +16,7 @@ export async function insertRegistration({
       client_uuid,
       uuid_hex,
       reg_type,
+      public_key,
       payload,
       payload_canonical,
       payload_hash,
@@ -25,12 +27,13 @@ export async function insertRegistration({
       $1::uuid,
       $2,
       $3::reg_type,
-      $4::jsonb,
-      $5,
+      $4,
+      $5::jsonb,
       $6,
       $7,
+      $8,
       'PENDING',
-      $8
+      $9
     )
     RETURNING id, client_uuid, status, tx_hash, payload_hash, created_at;
   `;
@@ -38,6 +41,7 @@ export async function insertRegistration({
     clientUuid,
     uuidHex,
     regType,
+    publicKey,
     payload,
     canonical,
     payloadHash,
@@ -59,6 +63,7 @@ export async function updateRegistration({
   clientUuid,
   uuidHex,
   regType,
+  publicKey,
   payload,
   canonical,
   payloadHash,
@@ -69,12 +74,13 @@ export async function updateRegistration({
     `UPDATE registrations
        SET uuid_hex = $2,
            reg_type = $3::reg_type,
-           payload = $4::jsonb,
-           payload_canonical = $5,
-           payload_hash = $6,
-           tx_hash = $7,
+           public_key = $4,
+           payload = $5::jsonb,
+           payload_canonical = $6,
+           payload_hash = $7,
+           tx_hash = $8,
            status = 'PENDING',
-           submitter_address = $8,
+           submitter_address = $9,
            approved_at = NULL,
            approved_by = NULL,
            approved_by_address = NULL,
@@ -85,12 +91,27 @@ export async function updateRegistration({
       clientUuid,
       uuidHex,
       regType,
+      publicKey,
       payload,
       canonical,
       payloadHash,
       txHash,
       submitterAddress,
     ]
+  );
+  return rows[0] ?? null;
+}
+
+export async function findApprovedRegistrationByPublicKey(publicKey) {
+  console.log("findApprovedRegistrationByPublicKey", publicKey);
+  const { rows } = await query(
+    `SELECT client_uuid, reg_type, status
+       FROM registrations
+      WHERE public_key = $1
+        AND status = 'APPROVED'
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC
+      LIMIT 1`,
+    [publicKey]
   );
   return rows[0] ?? null;
 }

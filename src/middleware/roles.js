@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { jwtPublicKey } from "../config.js";
+import { findApprovedRegistrationByPublicKey } from "../models/registrationModel.js";
 
 const DEFAULT_ROLE = "USER";
 
@@ -26,7 +27,7 @@ export function requireAuth(req, res, next) {
     const role = typeof payload.role === "string" ? payload.role : DEFAULT_ROLE;
 
     req.wallet = {
-      address: payload.sub.toLowerCase(),
+      walletAddress: payload.sub,
       role,
     };
 
@@ -44,6 +45,38 @@ export function requireRole(requiredRole) {
         return res.status(403).json({ error: "Forbidden" });
       }
       next();
+    });
+  };
+}
+
+export function requireRegistrationRole(expectedType) {
+  return async (req, res, next) => {
+    requireAuth(req, res, async () => {
+      try {
+        const walletAddress = req.wallet?.walletAddress;
+
+        if (!walletAddress) {
+          return res.status(401).json({ error: "Wallet address missing" });
+        }
+
+        console.log("Wallet address:", walletAddress);
+
+        const registration = await findApprovedRegistrationByPublicKey(
+          walletAddress
+        );
+        if (!registration) {
+          return res.status(403).json({ error: "User not registered" });
+        }
+
+        if (registration.reg_type !== expectedType) {
+          return res.status(403).json({ error: "Access Denied" });
+        }
+
+        next();
+      } catch (err) {
+        console.error("requireRegistrationRole error", err);
+        res.status(500).json({ error: "Internal server error" });
+      }
     });
   };
 }

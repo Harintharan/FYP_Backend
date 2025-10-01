@@ -16,6 +16,12 @@ const identificationSchema = z.object({
   )
     .min(2, "identification.countryOfIncorporation must be at least 2 characters")
     .max(3, "identification.countryOfIncorporation must be at most 3 characters"),
+  publicKey: z
+    .string({ required_error: "identification.publicKey is required" })
+    .regex(
+      /^0x[0-9a-fA-F]+$/,
+      "identification.publicKey must be a hex string"
+    ),
 });
 
 const contactSchema = z.object({
