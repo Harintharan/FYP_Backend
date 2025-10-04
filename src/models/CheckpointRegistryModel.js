@@ -5,10 +5,10 @@ export async function createCheckpoint(data) {
     `INSERT INTO checkpoint_registry
        (checkpoint_id, checkpoint_uuid, name, address, latitude, longitude,
         owner_uuid, owner_type, checkpoint_type,
-        checkpoint_hash, tx_hash, created_by, created_at)
+        checkpoint_hash, tx_hash, created_by, pinata_cid, pinata_pinned_at, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,
                $7,$8,$9,
-               $10,$11,$12,NOW())
+               $10,$11,$12,$13,$14,NOW())
        RETURNING *`,
     [
       data.checkpoint_id,
@@ -23,6 +23,8 @@ export async function createCheckpoint(data) {
       data.checkpoint_hash,
       data.tx_hash,
       data.created_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
     ]
   );
   return rows[0];
@@ -33,8 +35,10 @@ export async function updateCheckpoint(checkpoint_id, data) {
     `UPDATE checkpoint_registry SET
          checkpoint_uuid=$1, name=$2, address=$3, latitude=$4, longitude=$5,
          owner_uuid=$6, owner_type=$7, checkpoint_type=$8,
-         checkpoint_hash=$9, tx_hash=$10, updated_by=$11, updated_at=NOW()
-       WHERE checkpoint_id=$12 RETURNING *`,
+         checkpoint_hash=$9, tx_hash=$10, updated_by=$11,
+         pinata_cid=$12, pinata_pinned_at=$13,
+         updated_at=NOW()
+       WHERE checkpoint_id=$14 RETURNING *`,
     [
       data.checkpointUUID,
       data.name,
@@ -47,6 +51,8 @@ export async function updateCheckpoint(checkpoint_id, data) {
       data.checkpoint_hash,
       data.tx_hash,
       data.updated_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
       checkpoint_id,
     ]
   );

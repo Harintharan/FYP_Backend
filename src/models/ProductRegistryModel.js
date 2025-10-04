@@ -12,12 +12,12 @@ export async function createProduct(data) {
         required_storage_temp, transport_route_plan_id, handling_instructions, expiry_date,
         sensor_device_uuid, microprocessor_mac, sensor_types, qr_id,
         wifi_ssid, wifi_password, manufacturer_uuid, origin_facility_addr,
-        product_hash, tx_hash, created_by, created_at, status)
+        product_hash, tx_hash, created_by, pinata_cid, pinata_pinned_at, created_at, status)
        VALUES ($1,$2,$3,$4,$5,
                $6,$7,$8,$9,
                $10,$11,$12,$13,
                $14,$15,$16,$17,
-               $18,$19,$20,NOW(),$21)
+               $18,$19,$20,$21,$22,NOW(),$23)
        RETURNING *`,
     [
       data.product_id,
@@ -40,6 +40,8 @@ export async function createProduct(data) {
       data.product_hash,
       data.tx_hash,
       data.created_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
       data.status,
     ]
   );
@@ -53,8 +55,10 @@ export async function updateProduct(product_id, data) {
          required_storage_temp=$5, transport_route_plan_id=$6, handling_instructions=$7, expiry_date=$8,
          sensor_device_uuid=$9, microprocessor_mac=$10, sensor_types=$11, qr_id=$12,
          wifi_ssid=$13, wifi_password=$14, manufacturer_uuid=$15, origin_facility_addr=$16,
-         product_hash=$17, tx_hash=$18, updated_by=$19, updated_at=NOW(), status=$20
-       WHERE product_id=$21 RETURNING *`,
+         product_hash=$17, tx_hash=$18, updated_by=$19,
+         pinata_cid=$20, pinata_pinned_at=$21,
+         updated_at=NOW(), status=$22
+       WHERE product_id=$23 RETURNING *`,
     [
       data.productUUID,
       data.productName,
@@ -75,6 +79,8 @@ export async function updateProduct(product_id, data) {
       data.product_hash,
       data.tx_hash,
       data.updated_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
       data.status,
       product_id,
     ]

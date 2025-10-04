@@ -13,6 +13,7 @@ import {
 } from "../models/ShipmentHandoverCheckpointModel.js";
 import { query } from "../db.js";
 import { chain, operatorWallet, contracts } from "../config.js";
+import { backupRecord } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -160,7 +161,7 @@ export async function registerShipment(req, res) {
 
     const blockchainShipmentId = event.args.shipmentId.toString();
 
-    const savedShipment = await createShipment({
+    const createPayload = {
       shipment_id: blockchainShipmentId,
       manufacturerUUID,
       destinationPartyUUID,
@@ -168,22 +169,77 @@ export async function registerShipment(req, res) {
       shipment_hash: dbHash,
       tx_hash: receipt.hash,
       created_by: wallet.address,
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "shipment",
+        { ...createPayload, checkpoints },
+        {
+          operation: "create",
+          identifier: blockchainShipmentId,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up shipment to Pinata:",
+        backupErr
+      );
+    }
+
+    const savedShipment = await createShipment({
+      ...createPayload,
+      pinata_cid: pinataBackup?.IpfsHash ?? null,
+      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
     });
 
     for (const checkpoint of checkpoints) {
-      await addCheckpoint({
+      const checkpointPayload = {
         shipment_id: blockchainShipmentId,
-        ...checkpoint,
+        start_checkpoint_id: checkpoint.start_checkpoint_id,
+        end_checkpoint_id: checkpoint.end_checkpoint_id,
+        estimated_arrival_date: checkpoint.estimated_arrival_date,
+        time_tolerance: checkpoint.time_tolerance,
+        expected_ship_date: checkpoint.expected_ship_date,
+        required_action: checkpoint.required_action,
+      };
+
+      let checkpointBackup;
+      try {
+        checkpointBackup = await backupRecord(
+          "shipment_handover_checkpoint",
+          checkpointPayload,
+          {
+            operation: "create",
+            identifier: `${blockchainShipmentId}:${checkpoint.start_checkpoint_id}:${checkpoint.end_checkpoint_id}`,
+          }
+        );
+      } catch (checkpointErr) {
+        console.error(
+          "⚠️ Failed to back up handover checkpoint to Pinata:",
+          checkpointErr
+        );
+      }
+
+      await addCheckpoint({
+        ...checkpointPayload,
+        pinata_cid: checkpointBackup?.IpfsHash ?? null,
+        pinata_pinned_at: checkpointBackup?.Timestamp ?? null,
       });
     }
 
     const savedCheckpoints = await getByShipment(blockchainShipmentId);
 
-    res.status(201).json({
+    const responsePayload = {
       ...savedShipment,
       handover_checkpoints: savedCheckpoints,
       blockchainTx: receipt.hash,
-    });
+    };
+    responsePayload.pinataCid = savedShipment.pinata_cid || null;
+    responsePayload.pinataTimestamp = savedShipment.pinata_pinned_at || null;
+
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error("❌ Error registering shipment:", err.message);
     res.status(500).json({ message: "Server error" });
@@ -296,33 +352,105 @@ export async function updateShipment(req, res) {
       checkpoints
     );
 
+    const priorCheckpoints = await getByShipment(shipment_id);
+    const checkpointMap = new Map();
+    for (const cp of priorCheckpoints) {
+      const key = `${cp.start_checkpoint_id}:${cp.end_checkpoint_id}`;
+      checkpointMap.set(key, cp);
+    }
+
     const tx = await contract.updateShipment(shipment_id, newDbHash);
     const receipt = await tx.wait();
 
-    const updatedShipment = await updateShipmentRecord(shipment_id, {
+    const updatePayload = {
       manufacturerUUID,
       destinationPartyUUID,
       shipmentItems,
       shipment_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
-    });
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "shipment",
+        {
+          shipment_id,
+          ...updatePayload,
+          checkpoints,
+        },
+        {
+          operation: "update",
+          identifier: shipment_id,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up shipment update to Pinata:",
+        backupErr
+      );
+    }
+
+    updatePayload.pinata_cid = pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
+    updatePayload.pinata_pinned_at =
+      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
+
+    const updatedShipment = await updateShipmentRecord(shipment_id, updatePayload);
 
     await deleteByShipment(shipment_id);
     for (const checkpoint of checkpoints) {
-      await addCheckpoint({
+      const checkpointPayload = {
         shipment_id,
-        ...checkpoint,
+        start_checkpoint_id: checkpoint.start_checkpoint_id,
+        end_checkpoint_id: checkpoint.end_checkpoint_id,
+        estimated_arrival_date: checkpoint.estimated_arrival_date,
+        time_tolerance: checkpoint.time_tolerance,
+        expected_ship_date: checkpoint.expected_ship_date,
+        required_action: checkpoint.required_action,
+      };
+
+      let checkpointBackup;
+      try {
+        checkpointBackup = await backupRecord(
+          "shipment_handover_checkpoint",
+          checkpointPayload,
+          {
+            operation: "update",
+            identifier: `${shipment_id}:${checkpoint.start_checkpoint_id}:${checkpoint.end_checkpoint_id}`,
+          }
+        );
+      } catch (checkpointErr) {
+        console.error(
+          "⚠️ Failed to back up handover checkpoint update to Pinata:",
+          checkpointErr
+        );
+      }
+
+      const previous = checkpointMap.get(
+        `${checkpoint.start_checkpoint_id}:${checkpoint.end_checkpoint_id}`
+      );
+
+      await addCheckpoint({
+        ...checkpointPayload,
+        pinata_cid:
+          checkpointBackup?.IpfsHash ?? previous?.pinata_cid ?? null,
+        pinata_pinned_at:
+          checkpointBackup?.Timestamp ?? previous?.pinata_pinned_at ?? null,
       });
     }
 
     const savedCheckpoints = await getByShipment(shipment_id);
 
-    res.status(200).json({
+    const responsePayload = {
       ...updatedShipment,
       handover_checkpoints: savedCheckpoints,
       blockchainTx: receipt.hash,
-    });
+    };
+    responsePayload.pinataCid = updatedShipment.pinata_cid || null;
+    responsePayload.pinataTimestamp = updatedShipment.pinata_pinned_at || null;
+
+    res.status(200).json(responsePayload);
   } catch (err) {
     console.error("❌ Error updating shipment:", err.message);
     res.status(500).json({ message: "Server error" });

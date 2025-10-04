@@ -24,6 +24,10 @@ const baseEnvVars = {
   CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER:
     process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER,
   CONTRACT_ADDRESS_PRODUCT: process.env.CONTRACT_ADDRESS_PRODUCT,
+  PINATA_API_KEY: process.env.PINATA_API_KEY,
+  PINATA_SECRET_API_KEY: process.env.PINATA_SECRET_API_KEY,
+  PINATA_JWT_KEY: process.env.PINATA_JWT_KEY,
+  PINATA_JWT: process.env.PINATA_JWT,
 };
 
 const required = [
@@ -143,6 +147,26 @@ const contractAddresses = {
   ),
 };
 
+const pinataApiKey = baseEnvVars.PINATA_API_KEY
+  ? baseEnvVars.PINATA_API_KEY.trim()
+  : "";
+const pinataSecretApiKey = baseEnvVars.PINATA_SECRET_API_KEY
+  ? baseEnvVars.PINATA_SECRET_API_KEY.trim()
+  : "";
+const pinataJwtKey = (() => {
+  const jwtKey = baseEnvVars.PINATA_JWT_KEY || baseEnvVars.PINATA_JWT;
+  return jwtKey ? jwtKey.trim() : "";
+})();
+
+if (
+  !pinataJwtKey &&
+  (!pinataApiKey || !pinataSecretApiKey)
+) {
+  throw new Error(
+    "PINATA_JWT_KEY (or PINATA_JWT) or PINATA_API_KEY/PINATA_SECRET_API_KEY must be provided"
+  );
+}
+
 function normalizePem(value) {
   return value.replace(/\\n/g, "\n");
 }
@@ -163,3 +187,9 @@ export const operatorWallet = {
 };
 
 export const contracts = contractAddresses;
+
+export const pinata = {
+  apiKey: pinataApiKey || null,
+  secretApiKey: pinataSecretApiKey || null,
+  jwtKey: pinataJwtKey || null,
+};

@@ -6,6 +6,7 @@ import {
   getBatchById,
 } from "../models/batchModel.js";
 import { chain, operatorWallet, contracts } from "../config.js";
+import { backupRecord } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -56,7 +57,7 @@ export async function registerBatch(req, res) {
     const blockchainBatchId = event.args.batchId.toString();
     const blockchainHash = event.args.hash;
 
-    const savedBatch = await createBatch({
+    const dbPayload = {
       batch_id: blockchainBatchId,
       product_category: productCategory,
       manufacturer_uuid: manufacturerUUID,
@@ -67,9 +68,29 @@ export async function registerBatch(req, res) {
       batch_hash: blockchainHash,
       tx_hash: receipt.hash,
       created_by: wallet.address,
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord("batch", dbPayload, {
+        operation: "create",
+        identifier: blockchainBatchId,
+      });
+    } catch (backupErr) {
+      console.error("⚠️ Failed to back up batch to Pinata:", backupErr);
+    }
+
+    const savedBatch = await createBatch({
+      ...dbPayload,
+      pinata_cid: pinataBackup?.IpfsHash ?? null,
+      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
     });
 
-    res.status(201).json({ ...savedBatch, blockchainTx: receipt.hash });
+    const responsePayload = { ...savedBatch, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = savedBatch.pinata_cid || null;
+    responsePayload.pinataTimestamp = savedBatch.pinata_pinned_at || null;
+
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error("❌ Error registering batch:", err);
     res.status(500).json({ message: "Server error" });
@@ -116,7 +137,7 @@ export async function updateBatch(req, res) {
 
     const blockchainHash = event?.args?.newHash;
 
-    const updatedBatch = await updateBatchRecord(id, {
+    const updatePayload = {
       product_category: productCategory,
       manufacturer_uuid: manufacturerUUID,
       facility,
@@ -126,9 +147,35 @@ export async function updateBatch(req, res) {
       batch_hash: blockchainHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
-    });
+    };
 
-    res.json({ ...updatedBatch, blockchainTx: receipt.hash });
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "batch",
+        {
+          batch_id: batch.batch_id,
+          ...updatePayload,
+        },
+        {
+          operation: "update",
+          identifier: batch.batch_id,
+        }
+      );
+    } catch (backupErr) {
+      console.error("⚠️ Failed to back up batch update to Pinata:", backupErr);
+    }
+
+    updatePayload.pinata_cid = pinataBackup?.IpfsHash ?? batch.pinata_cid ?? null;
+    updatePayload.pinata_pinned_at = pinataBackup?.Timestamp ?? batch.pinata_pinned_at ?? null;
+
+    const updatedBatch = await updateBatchRecord(id, updatePayload);
+
+    const responsePayload = { ...updatedBatch, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = updatedBatch.pinata_cid || null;
+    responsePayload.pinataTimestamp = updatedBatch.pinata_pinned_at || null;
+
+    res.json(responsePayload);
   } catch (err) {
     console.error("❌ Error updating batch:", err);
     res.status(500).json({ message: "Server error" });

@@ -4,8 +4,8 @@ export async function createShipment(data) {
   const { rows } = await query(
     `INSERT INTO shipment_registry
        (shipment_id, manufacturer_uuid, destination_party_uuid,
-        shipment_items, shipment_hash, tx_hash, created_by, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+        shipment_items, shipment_hash, tx_hash, created_by, pinata_cid, pinata_pinned_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
        RETURNING *`,
     [
       data.shipment_id,
@@ -15,6 +15,8 @@ export async function createShipment(data) {
       data.shipment_hash,
       data.tx_hash,
       data.created_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
     ]
   );
   return rows[0];
@@ -29,8 +31,10 @@ export async function updateShipment(shipment_id, data) {
          shipment_hash=$4,
          tx_hash=$5,
          updated_by=$6,
+         pinata_cid=$7,
+         pinata_pinned_at=$8,
          updated_at=NOW()
-       WHERE shipment_id=$7 RETURNING *`,
+       WHERE shipment_id=$9 RETURNING *`,
     [
       data.manufacturerUUID,
       data.destinationPartyUUID,
@@ -38,6 +42,8 @@ export async function updateShipment(shipment_id, data) {
       data.shipment_hash,
       data.tx_hash,
       data.updated_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
       shipment_id,
     ]
   );

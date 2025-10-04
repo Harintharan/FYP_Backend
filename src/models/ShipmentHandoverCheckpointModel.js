@@ -4,8 +4,9 @@ export async function addCheckpoint(data) {
   const { rows } = await query(
     `INSERT INTO shipment_handover_checkpoints
        (shipment_id, start_checkpoint_id, end_checkpoint_id,
-        estimated_arrival_date, time_tolerance, expected_ship_date, required_action)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+        estimated_arrival_date, time_tolerance, expected_ship_date, required_action,
+        pinata_cid, pinata_pinned_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING *`,
     [
       data.shipment_id,
@@ -15,6 +16,8 @@ export async function addCheckpoint(data) {
       data.time_tolerance,
       data.expected_ship_date,
       data.required_action,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
     ]
   );
   return rows[0];

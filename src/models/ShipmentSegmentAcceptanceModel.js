@@ -6,8 +6,8 @@ export async function createSegmentAcceptance(data) {
        (acceptance_id, shipment_id, segment_start_checkpoint_id, segment_end_checkpoint_id,
         assigned_role, assigned_party_uuid, estimated_pickup_time, estimated_delivery_time,
         shipment_items, acceptance_timestamp, digital_signature,
-        acceptance_hash, tx_hash, created_by, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
+        acceptance_hash, tx_hash, created_by, pinata_cid, pinata_pinned_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
        RETURNING *`,
     [
       data.acceptance_id,
@@ -24,6 +24,8 @@ export async function createSegmentAcceptance(data) {
       data.acceptance_hash,
       data.tx_hash,
       data.created_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
     ]
   );
   return rows[0];
@@ -36,8 +38,10 @@ export async function updateSegmentAcceptance(acceptance_id, data) {
          assigned_role=$4, assigned_party_uuid=$5, estimated_pickup_time=$6,
          estimated_delivery_time=$7, shipment_items=$8,
          acceptance_timestamp=$9, digital_signature=$10,
-         acceptance_hash=$11, tx_hash=$12, updated_by=$13, updated_at=NOW()
-       WHERE acceptance_id=$14 RETURNING *`,
+         acceptance_hash=$11, tx_hash=$12, updated_by=$13,
+         pinata_cid=$14, pinata_pinned_at=$15,
+         updated_at=NOW()
+       WHERE acceptance_id=$16 RETURNING *`,
     [
       data.shipment_id,
       data.segment_start_checkpoint_id,
@@ -52,6 +56,8 @@ export async function updateSegmentAcceptance(acceptance_id, data) {
       data.acceptance_hash,
       data.tx_hash,
       data.updated_by,
+      data.pinata_cid ?? null,
+      data.pinata_pinned_at ?? null,
       acceptance_id,
     ]
   );

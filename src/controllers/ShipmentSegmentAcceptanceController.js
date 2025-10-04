@@ -7,6 +7,7 @@ import {
   getAllSegmentAcceptances as getAllSegmentAcceptanceRecords,
 } from "../models/ShipmentSegmentAcceptanceModel.js";
 import { chain, operatorWallet, contracts } from "../config.js";
+import { backupRecord } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -158,16 +159,43 @@ export async function registerSegmentAcceptance(req, res) {
 
     const blockchainAcceptanceId = event.args.acceptanceId.toString();
 
-    const saved = await createSegmentAcceptance({
+    const createPayload = {
       ...data,
       acceptance_id: blockchainAcceptanceId,
       shipment_items: data.shipment_items,
       acceptance_hash: dbHash,
       tx_hash: receipt.hash,
       created_by: wallet.address,
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "shipment_segment_acceptance",
+        createPayload,
+        {
+          operation: "create",
+          identifier: blockchainAcceptanceId,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up segment acceptance to Pinata:",
+        backupErr
+      );
+    }
+
+    const saved = await createSegmentAcceptance({
+      ...createPayload,
+      pinata_cid: pinataBackup?.IpfsHash ?? null,
+      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
     });
 
-    res.status(201).json({ ...saved, blockchainTx: receipt.hash });
+    const responsePayload = { ...saved, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = saved.pinata_cid || null;
+    responsePayload.pinataTimestamp = saved.pinata_pinned_at || null;
+
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error("❌ Error registering acceptance:", err.message);
     res.status(500).json({ message: "Server error" });
@@ -224,16 +252,50 @@ export async function updateSegmentAcceptance(req, res) {
 
     console.log("📤 Blockchain update tx hash:", receipt.hash);
 
-    const updated = await updateSegmentAcceptanceRecord(acceptance_id, {
+    const updatePayload = {
       ...data,
       acceptance_timestamp: existing.acceptance_timestamp,
       shipment_items: data.shipment_items,
       acceptance_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
-    });
+    };
 
-    res.json({ ...updated, blockchainTx: receipt.hash });
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "shipment_segment_acceptance",
+        {
+          ...existing,
+          ...updatePayload,
+        },
+        {
+          operation: "update",
+          identifier: acceptance_id,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up segment acceptance update to Pinata:",
+        backupErr
+      );
+    }
+
+    updatePayload.pinata_cid =
+      pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
+    updatePayload.pinata_pinned_at =
+      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
+
+    const updated = await updateSegmentAcceptanceRecord(
+      acceptance_id,
+      updatePayload
+    );
+
+    const responsePayload = { ...updated, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = updated.pinata_cid || null;
+    responsePayload.pinataTimestamp = updated.pinata_pinned_at || null;
+
+    res.json(responsePayload);
   } catch (err) {
     console.error("❌ Error updating acceptance:", err.message);
     res.status(500).json({ message: "Server error" });

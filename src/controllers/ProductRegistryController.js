@@ -8,6 +8,7 @@ import {
 } from "../models/ProductRegistryModel.js";
 import { encrypt, decrypt } from "../utils/encryptionHelper.js";
 import { chain, operatorWallet, contracts } from "../config.js";
+import { backupRecord } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -120,16 +121,41 @@ export async function registerProduct(req, res) {
       encrypt(data.wifi_password || data.wifiPassword)
     );
 
-    const savedProduct = await createProduct({
+    const encryptedWifi = encrypt(data.wifi_password || data.wifiPassword);
+
+    const createPayload = {
       ...data,
       product_id: blockchainProductId,
       product_hash: blockchainHash,
       tx_hash: receipt.hash,
       created_by: wallet.address,
-      wifi_password: encrypt(data.wifi_password || data.wifiPassword),
+      wifi_password: encryptedWifi,
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord("product", createPayload, {
+        operation: "create",
+        identifier: blockchainProductId,
+      });
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up product to Pinata:",
+        backupErr
+      );
+    }
+
+    const savedProduct = await createProduct({
+      ...createPayload,
+      pinata_cid: pinataBackup?.IpfsHash ?? null,
+      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
     });
 
-    res.status(201).json({ ...savedProduct, blockchainTx: receipt.hash });
+    const responsePayload = { ...savedProduct, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = savedProduct.pinata_cid || null;
+    responsePayload.pinataTimestamp = savedProduct.pinata_pinned_at || null;
+
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error("❌ Error registering product:", err);
     res.status(500).json({ message: "Server error" });
@@ -141,6 +167,11 @@ export async function updateProduct(req, res) {
     const { product_id } = req.params;
     const data = req.body;
 
+    const existing = await getProductById(product_id);
+    if (!existing) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
     const newDbHash = computeProductHash(data);
 
     const tx = await contract.updateProduct(product_id, newDbHash);
@@ -151,15 +182,48 @@ export async function updateProduct(req, res) {
       encrypt(data.wifi_password || data.wifiPassword)
     );
 
-    const updatedProduct = await updateProductRecord(product_id, {
+    const encryptedWifi = encrypt(data.wifi_password || data.wifiPassword);
+
+    const updatePayload = {
       ...data,
       product_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
-      wifi_password: encrypt(data.wifi_password || data.wifiPassword),
-    });
+      wifi_password: encryptedWifi,
+    };
 
-    res.status(200).json({ ...updatedProduct, blockchainTx: receipt.hash });
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "product",
+        {
+          ...existing,
+          ...updatePayload,
+          product_id,
+        },
+        {
+          operation: "update",
+          identifier: product_id,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up product update to Pinata:",
+        backupErr
+      );
+    }
+
+    updatePayload.pinata_cid = pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
+    updatePayload.pinata_pinned_at =
+      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
+
+    const updatedProduct = await updateProductRecord(product_id, updatePayload);
+
+    const responsePayload = { ...updatedProduct, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = updatedProduct.pinata_cid || null;
+    responsePayload.pinataTimestamp = updatedProduct.pinata_pinned_at || null;
+
+    res.status(200).json(responsePayload);
   } catch (err) {
     console.error("❌ Error updating product:", err);
     res.status(500).json({ message: "Server error" });

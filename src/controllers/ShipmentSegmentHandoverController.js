@@ -7,6 +7,7 @@ import {
   getAllHandovers as getAllHandoverRecords,
 } from "../models/ShipmentSegmentHandoverModel.js";
 import { chain, operatorWallet, contracts } from "../config.js";
+import { backupRecord } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -105,7 +106,7 @@ export async function registerHandover(req, res) {
 
     const handoverId = event.args.handoverId.toString();
 
-    const saved = await createHandover({
+    const createPayload = {
       handover_id: handoverId,
       ...data,
       handover_hash: dbHash,
@@ -113,9 +114,36 @@ export async function registerHandover(req, res) {
       created_by: wallet.address,
       gps_lat: normalizeNumber(data.gps_lat),
       gps_lon: normalizeNumber(data.gps_lon),
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "shipment_segment_handover",
+        createPayload,
+        {
+          operation: "create",
+          identifier: handoverId,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up handover to Pinata:",
+        backupErr
+      );
+    }
+
+    const saved = await createHandover({
+      ...createPayload,
+      pinata_cid: pinataBackup?.IpfsHash ?? null,
+      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
     });
 
-    res.status(201).json({ ...saved, blockchainTx: receipt.hash });
+    const responsePayload = { ...saved, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = saved.pinata_cid || null;
+    responsePayload.pinataTimestamp = saved.pinata_pinned_at || null;
+
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error("❌ Error registering handover:", err.message);
     res.status(500).json({ message: "Server error" });
@@ -153,16 +181,47 @@ export async function updateHandover(req, res) {
     const receipt = await tx.wait();
     console.log("📤 Blockchain update tx hash:", receipt.hash);
 
-    const updated = await updateHandoverRecord(handover_id, {
+    const updatePayload = {
       ...data,
       handover_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
       gps_lat: normalizeNumber(data.gps_lat),
       gps_lon: normalizeNumber(data.gps_lon),
-    });
+    };
 
-    res.json({ ...updated, blockchainTx: receipt.hash });
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "shipment_segment_handover",
+        {
+          ...existing,
+          ...updatePayload,
+        },
+        {
+          operation: "update",
+          identifier: handover_id,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up handover update to Pinata:",
+        backupErr
+      );
+    }
+
+    updatePayload.pinata_cid =
+      pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
+    updatePayload.pinata_pinned_at =
+      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
+
+    const updated = await updateHandoverRecord(handover_id, updatePayload);
+
+    const responsePayload = { ...updated, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = updated.pinata_cid || null;
+    responsePayload.pinataTimestamp = updated.pinata_pinned_at || null;
+
+    res.json(responsePayload);
   } catch (err) {
     console.error("❌ Error updating handover:", err.message);
     res.status(500).json({ message: "Server error" });

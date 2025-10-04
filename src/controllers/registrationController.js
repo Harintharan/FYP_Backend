@@ -12,6 +12,7 @@ import {
   approveRegistration,
   rejectRegistration,
 } from "../models/registrationModel.js";
+import { backupRecord } from "../services/pinataBackupService.js";
 
 class IntegrityError extends Error {}
 
@@ -96,7 +97,7 @@ export async function createRegistration(req, res) {
       false
     );
 
-    const record = await insertRegistration({
+    const dbPayload = {
       clientUuid,
       uuidHex,
       regType: parsed.type,
@@ -106,6 +107,32 @@ export async function createRegistration(req, res) {
       payloadHash,
       txHash,
       submitterAddress: req.wallet?.walletAddress ?? null,
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "user_registration",
+        {
+          ...dbPayload,
+          walletAddress: req.wallet?.walletAddress ?? null,
+        },
+        {
+          operation: "create",
+          identifier: clientUuid,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up registration to Pinata:",
+        backupErr
+      );
+    }
+
+    const record = await insertRegistration({
+      ...dbPayload,
+      pinataCid: pinataBackup?.IpfsHash ?? null,
+      pinataPinnedAt: pinataBackup?.Timestamp ?? null,
     });
 
     return res.status(201).json({
@@ -114,6 +141,8 @@ export async function createRegistration(req, res) {
       status: record.status,
       txHash: record.tx_hash,
       payloadHash: record.payload_hash,
+      pinataCid: record.pinata_cid ?? null,
+      pinataTimestamp: record.pinata_pinned_at ?? null,
       createdAt: record.created_at,
     });
   } catch (err) {
@@ -152,7 +181,7 @@ export async function updateRegistrationByClient(req, res) {
       true
     );
 
-    const updated = await updateRegistration({
+    const updatePayload = {
       clientUuid: existing.client_uuid,
       uuidHex,
       regType: parsed.type,
@@ -162,7 +191,34 @@ export async function updateRegistrationByClient(req, res) {
       payloadHash,
       txHash,
       submitterAddress: req.wallet?.walletAddress ?? null,
-    });
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "user_registration",
+        {
+          ...existing,
+          ...updatePayload,
+        },
+        {
+          operation: "update",
+          identifier: existing.client_uuid,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up registration update to Pinata:",
+        backupErr
+      );
+    }
+
+    updatePayload.pinataCid =
+      pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
+    updatePayload.pinataPinnedAt =
+      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
+
+    const updated = await updateRegistration(updatePayload);
 
     return res.json({
       id: updated.id,
@@ -170,6 +226,8 @@ export async function updateRegistrationByClient(req, res) {
       status: updated.status,
       txHash: updated.tx_hash,
       payloadHash: updated.payload_hash,
+      pinataCid: updated.pinata_cid ?? null,
+      pinataTimestamp: updated.pinata_pinned_at ?? null,
       updatedAt: updated.updated_at,
     });
   } catch (err) {

@@ -10,6 +10,8 @@ export async function insertRegistration({
   payloadHash,
   txHash,
   submitterAddress,
+  pinataCid,
+  pinataPinnedAt,
 }) {
   const sql = `
     INSERT INTO users (
@@ -21,6 +23,8 @@ export async function insertRegistration({
       payload_canonical,
       payload_hash,
       tx_hash,
+      pinata_cid,
+      pinata_pinned_at,
       status,
       submitter_address
     ) VALUES (
@@ -32,10 +36,12 @@ export async function insertRegistration({
       $6,
       $7,
       $8,
+      $9,
+      $10,
       'PENDING',
-      $9
+      $11
     )
-    RETURNING id, client_uuid, status, tx_hash, payload_hash, created_at;
+    RETURNING id, client_uuid, status, tx_hash, payload_hash, pinata_cid, pinata_pinned_at, created_at;
   `;
   const { rows } = await query(sql, [
     clientUuid,
@@ -46,6 +52,8 @@ export async function insertRegistration({
     canonical,
     payloadHash,
     txHash,
+    pinataCid ?? null,
+    pinataPinnedAt ?? null,
     submitterAddress,
   ]);
   return rows[0];
@@ -69,6 +77,8 @@ export async function updateRegistration({
   payloadHash,
   txHash,
   submitterAddress,
+  pinataCid,
+  pinataPinnedAt,
 }) {
   const { rows } = await query(
     `UPDATE users
@@ -79,14 +89,16 @@ export async function updateRegistration({
            payload_canonical = $6,
            payload_hash = $7,
            tx_hash = $8,
+           pinata_cid = $9,
+           pinata_pinned_at = $10,
            status = 'PENDING',
-           submitter_address = $9,
+           submitter_address = $11,
            approved_at = NULL,
            approved_by = NULL,
            approved_by_address = NULL,
            updated_at = now()
      WHERE client_uuid = $1::uuid
-     RETURNING id, client_uuid, status, tx_hash, payload_hash, updated_at;`,
+     RETURNING id, client_uuid, status, tx_hash, payload_hash, pinata_cid, pinata_pinned_at, updated_at;`,
     [
       clientUuid,
       uuidHex,
@@ -96,6 +108,8 @@ export async function updateRegistration({
       canonical,
       payloadHash,
       txHash,
+      pinataCid ?? null,
+      pinataPinnedAt ?? null,
       submitterAddress,
     ]
   );

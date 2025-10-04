@@ -7,6 +7,7 @@ import {
   getAllCheckpoints as getAllCheckpointRecords,
 } from "../models/CheckpointRegistryModel.js";
 import { chain, operatorWallet, contracts } from "../config.js";
+import { backupRecord } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -58,15 +59,38 @@ export async function registerCheckpoint(req, res) {
     const blockchainCheckpointId = event.args.checkpointId.toString();
     const blockchainHash = event.args.hash;
 
-    const savedCheckpoint = await createCheckpoint({
+    const createPayload = {
       checkpoint_id: blockchainCheckpointId,
       ...data,
       checkpoint_hash: blockchainHash,
       tx_hash: receipt.hash,
       created_by: wallet.address,
+    };
+
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord("checkpoint", createPayload, {
+        operation: "create",
+        identifier: blockchainCheckpointId,
+      });
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up checkpoint to Pinata:",
+        backupErr
+      );
+    }
+
+    const savedCheckpoint = await createCheckpoint({
+      ...createPayload,
+      pinata_cid: pinataBackup?.IpfsHash ?? null,
+      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
     });
 
-    res.status(201).json({ ...savedCheckpoint, blockchainTx: receipt.hash });
+    const responsePayload = { ...savedCheckpoint, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = savedCheckpoint.pinata_cid || null;
+    responsePayload.pinataTimestamp = savedCheckpoint.pinata_pinned_at || null;
+
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error("❌ Error registering checkpoint:", err);
     res.status(500).json({ message: "Server error" });
@@ -79,17 +103,56 @@ export async function updateCheckpoint(req, res) {
     const data = req.body;
     const newDbHash = computeCheckpointHash(data);
 
+    const existing = await getCheckpointById(checkpoint_id);
+    if (!existing) {
+      return res.status(404).json({ message: "Checkpoint not found" });
+    }
+
     const tx = await contract.updateCheckpoint(checkpoint_id, newDbHash);
     const receipt = await tx.wait();
 
-    const updatedCheckpoint = await updateCheckpointRecord(checkpoint_id, {
+    const updatePayload = {
       ...data,
       checkpoint_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
-    });
+    };
 
-    res.status(200).json({ ...updatedCheckpoint, blockchainTx: receipt.hash });
+    let pinataBackup;
+    try {
+      pinataBackup = await backupRecord(
+        "checkpoint",
+        {
+          ...existing,
+          ...updatePayload,
+          checkpoint_id,
+        },
+        {
+          operation: "update",
+          identifier: checkpoint_id,
+        }
+      );
+    } catch (backupErr) {
+      console.error(
+        "⚠️ Failed to back up checkpoint update to Pinata:",
+        backupErr
+      );
+    }
+
+    updatePayload.pinata_cid = pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
+    updatePayload.pinata_pinned_at =
+      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
+
+    const updatedCheckpoint = await updateCheckpointRecord(
+      checkpoint_id,
+      updatePayload
+    );
+
+    const responsePayload = { ...updatedCheckpoint, blockchainTx: receipt.hash };
+    responsePayload.pinataCid = updatedCheckpoint.pinata_cid || null;
+    responsePayload.pinataTimestamp = updatedCheckpoint.pinata_pinned_at || null;
+
+    res.status(200).json(responsePayload);
   } catch (err) {
     console.error("❌ Error updating checkpoint:", err);
     res.status(500).json({ message: "Server error" });
