@@ -23,9 +23,37 @@ export async function deleteNonce(address) {
 }
 
 export async function getAccountRole(address) {
-  const { rows } = await query(
-    `SELECT role FROM accounts WHERE address = $1`,
-    [address]
+  if (typeof address !== "string") {
+    return "USER";
+  }
+
+  const normalizedAddress = address.toLowerCase();
+
+  const adminResult = await query(
+    `SELECT role FROM accounts WHERE address = $1 LIMIT 1`,
+    [normalizedAddress]
   );
-  return rows[0]?.role ?? null;
+
+  if (adminResult.rows[0]?.role === "ADMIN") {
+    return "ADMIN";
+  }
+
+  const registrationResult = await query(
+    `SELECT reg_type
+       FROM users
+      WHERE status = 'APPROVED'
+        AND public_key IS NOT NULL
+        AND LOWER(public_key) = $1
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC
+      LIMIT 1`,
+    [normalizedAddress]
+  );
+
+  const regType = registrationResult.rows[0]?.reg_type;
+
+  if (regType === "MANUFACTURER" || regType === "SUPPLIER" || regType === "WAREHOUSE") {
+    return regType;
+  }
+
+  return "USER";
 }
