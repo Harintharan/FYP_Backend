@@ -9,6 +9,7 @@ import {
   findByClientUuid,
   updateRegistration,
   findPendingRegistrationSummaries,
+  findApprovedRegistrationSummaries,
   approveRegistration,
   rejectRegistration,
 } from "../models/registrationModel.js";
@@ -251,6 +252,22 @@ export async function listPendingRegistrations(_req, res) {
       return res.status(409).json({ error: err.message });
     }
     console.error("GET /api/registrations/pending error", err);
+    return res.status(500).json({ error: "Failed to fetch registrations" });
+  }
+}
+
+export async function listApprovedRegistrations(_req, res) {
+  try {
+    const rows = await findApprovedRegistrationSummaries();
+    await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
+
+    const sanitized = rows.map(({ payload, payload_canonical, ...rest }) => rest);
+    return res.json(sanitized);
+  } catch (err) {
+    if (err instanceof IntegrityError) {
+      return res.status(409).json({ error: err.message });
+    }
+    console.error("GET /api/registrations/approved error", err);
     return res.status(500).json({ error: "Failed to fetch registrations" });
   }
 }

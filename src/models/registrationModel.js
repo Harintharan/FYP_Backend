@@ -139,6 +139,16 @@ export async function findPendingRegistrationSummaries() {
   return rows;
 }
 
+export async function findApprovedRegistrationSummaries() {
+  const { rows } = await query(
+    `SELECT id, client_uuid, reg_type, public_key, status, tx_hash, payload_hash, payload_canonical, payload, approved_at, approved_by_address, created_at, updated_at
+     FROM users
+     WHERE status = 'APPROVED'
+     ORDER BY approved_at DESC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC`
+  );
+  return rows;
+}
+
 export async function approveRegistration(clientUuid, approverAddress) {
   const { rows } = await query(
     `UPDATE users

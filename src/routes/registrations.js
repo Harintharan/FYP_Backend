@@ -4,6 +4,7 @@ import {
   createRegistration,
   updateRegistrationByClient,
   listPendingRegistrations,
+  listApprovedRegistrations,
   getRegistrationByClient,
   approveRegistrationByClient,
   rejectRegistrationByClient,
@@ -13,7 +14,8 @@ const router = Router();
 
 router.post("/", requireAuth, createRegistration);
 router.put("/:clientUuid", requireAuth, updateRegistrationByClient);
-router.get("/pending", listPendingRegistrations);
+router.get("/pending", requireRole("ADMIN"),listPendingRegistrations);
+router.get("/approved", requireRole("ADMIN"), listApprovedRegistrations);
 router.get("/:clientUuid", getRegistrationByClient);
 router.patch(
   "/:clientUuid/approve",
