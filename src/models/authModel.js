@@ -30,7 +30,7 @@ export async function getAccountRole(address) {
   const normalizedAddress = address.toLowerCase();
 
   const adminResult = await query(
-    `SELECT role FROM accounts WHERE address = $1 LIMIT 1`,
+    `SELECT role FROM accounts WHERE LOWER(address) = $1 LIMIT 1`,
     [normalizedAddress]
   );
 
@@ -51,7 +51,11 @@ export async function getAccountRole(address) {
 
   const regType = registrationResult.rows[0]?.reg_type;
 
-  if (regType === "MANUFACTURER" || regType === "SUPPLIER" || regType === "WAREHOUSE") {
+  if (
+    regType === "MANUFACTURER" ||
+    regType === "SUPPLIER" ||
+    regType === "WAREHOUSE"
+  ) {
     return regType;
   }
 
