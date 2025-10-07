@@ -2,30 +2,30 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/roles.js";
 import {
   createRegistration,
-  updateRegistrationByClient,
+  updateRegistrationById,
   listPendingRegistrations,
   listApprovedRegistrations,
-  getRegistrationByClient,
-  approveRegistrationByClient,
-  rejectRegistrationByClient,
+  getRegistrationById,
+  approveRegistrationById,
+  rejectRegistrationById,
 } from "../controllers/registrationController.js";
 
 const router = Router();
 
 router.post("/", requireAuth, createRegistration);
-router.put("/:clientUuid", requireAuth, updateRegistrationByClient);
-router.get("/pending", requireRole("ADMIN"),listPendingRegistrations);
+router.put("/:id", requireAuth, updateRegistrationById);
+router.get("/pending", requireRole("ADMIN"), listPendingRegistrations);
 router.get("/approved", requireRole("ADMIN"), listApprovedRegistrations);
-router.get("/:clientUuid", getRegistrationByClient);
+router.get("/:id", getRegistrationById);
 router.patch(
-  "/:clientUuid/approve",
+  "/:id/approve",
   requireRole("ADMIN"),
-  approveRegistrationByClient
+  approveRegistrationById
 );
 router.patch(
-  "/:clientUuid/reject",
+  "/:id/reject",
   requireRole("ADMIN"),
-  rejectRegistrationByClient
+  rejectRegistrationById
 );
 
 export default router;

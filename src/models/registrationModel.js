@@ -1,8 +1,7 @@
 import { query } from "../db.js";
 
 export async function insertRegistration({
-  clientUuid,
-  uuidHex,
+  id,
   regType,
   publicKey,
   payload,
@@ -15,8 +14,7 @@ export async function insertRegistration({
 }) {
   const sql = `
     INSERT INTO users (
-      client_uuid,
-      uuid_hex,
+      id,
       reg_type,
       public_key,
       payload,
@@ -29,23 +27,21 @@ export async function insertRegistration({
       submitter_address
     ) VALUES (
       $1::uuid,
-      $2,
-      $3::reg_type,
-      $4,
-      $5::jsonb,
+      $2::reg_type,
+      $3,
+      $4::jsonb,
+      $5,
       $6,
       $7,
       $8,
       $9,
-      $10,
       'PENDING',
-      $11
+      $10
     )
-    RETURNING id, client_uuid, status, tx_hash, payload_hash, pinata_cid, pinata_pinned_at, created_at;
+    RETURNING id, status, tx_hash, payload_hash, pinata_cid, pinata_pinned_at, created_at;
   `;
   const { rows } = await query(sql, [
-    clientUuid,
-    uuidHex,
+    id,
     regType,
     publicKey,
     payload,
@@ -59,17 +55,16 @@ export async function insertRegistration({
   return rows[0];
 }
 
-export async function findByClientUuid(clientUuid) {
+export async function findRegistrationById(registrationId) {
   const { rows } = await query(
-    `SELECT * FROM users WHERE client_uuid = $1::uuid`,
-    [clientUuid]
+    `SELECT * FROM users WHERE id = $1::uuid`,
+    [registrationId]
   );
   return rows[0] ?? null;
 }
 
 export async function updateRegistration({
-  clientUuid,
-  uuidHex,
+  id,
   regType,
   publicKey,
   payload,
@@ -82,26 +77,24 @@ export async function updateRegistration({
 }) {
   const { rows } = await query(
     `UPDATE users
-       SET uuid_hex = $2,
-           reg_type = $3::reg_type,
-           public_key = $4,
-           payload = $5::jsonb,
-           payload_canonical = $6,
-           payload_hash = $7,
-           tx_hash = $8,
-           pinata_cid = $9,
-           pinata_pinned_at = $10,
+       SET reg_type = $2::reg_type,
+           public_key = $3,
+           payload = $4::jsonb,
+           payload_canonical = $5,
+           payload_hash = $6,
+           tx_hash = $7,
+           pinata_cid = $8,
+           pinata_pinned_at = $9,
            status = 'PENDING',
-           submitter_address = $11,
+           submitter_address = $10,
            approved_at = NULL,
            approved_by = NULL,
            approved_by_address = NULL,
            updated_at = now()
-     WHERE client_uuid = $1::uuid
-     RETURNING id, client_uuid, status, tx_hash, payload_hash, pinata_cid, pinata_pinned_at, updated_at;`,
+     WHERE id = $1::uuid
+     RETURNING id, status, tx_hash, payload_hash, pinata_cid, pinata_pinned_at, updated_at;`,
     [
-      clientUuid,
-      uuidHex,
+      id,
       regType,
       publicKey,
       payload,
@@ -118,7 +111,7 @@ export async function updateRegistration({
 
 export async function findApprovedRegistrationByPublicKey(publicKey) {
   const { rows } = await query(
-    `SELECT client_uuid, reg_type, status
+    `SELECT id, reg_type, status
        FROM users
       WHERE public_key = $1
         AND status = 'APPROVED'
@@ -131,7 +124,7 @@ export async function findApprovedRegistrationByPublicKey(publicKey) {
 
 export async function findPendingRegistrationSummaries() {
   const { rows } = await query(
-    `SELECT id, client_uuid, reg_type, tx_hash, payload_hash, payload_canonical, payload, created_at
+    `SELECT id, reg_type, tx_hash, payload_hash, payload_canonical, payload, created_at
      FROM users
      WHERE status = 'PENDING'
      ORDER BY created_at DESC`
@@ -141,7 +134,7 @@ export async function findPendingRegistrationSummaries() {
 
 export async function findApprovedRegistrationSummaries() {
   const { rows } = await query(
-    `SELECT id, client_uuid, reg_type, public_key, status, tx_hash, payload_hash, payload_canonical, payload, approved_at, approved_by_address, created_at, updated_at
+    `SELECT id, reg_type, public_key, status, tx_hash, payload_hash, payload_canonical, payload, approved_at, approved_by_address, created_at, updated_at
      FROM users
      WHERE status = 'APPROVED'
      ORDER BY approved_at DESC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC`
@@ -149,28 +142,28 @@ export async function findApprovedRegistrationSummaries() {
   return rows;
 }
 
-export async function approveRegistration(clientUuid, approverAddress) {
+export async function approveRegistration(registrationId, approverAddress) {
   const { rows } = await query(
     `UPDATE users
        SET status = 'APPROVED',
            approved_at = now(),
            approved_by_address = $2
-     WHERE client_uuid = $1::uuid AND status = 'PENDING'
-     RETURNING id, client_uuid, status, approved_at, approved_by_address`,
-    [clientUuid, approverAddress]
+     WHERE id = $1::uuid AND status = 'PENDING'
+     RETURNING id, status, approved_at, approved_by_address`,
+    [registrationId, approverAddress]
   );
   return rows[0] ?? null;
 }
 
-export async function rejectRegistration(clientUuid, approverAddress) {
+export async function rejectRegistration(registrationId, approverAddress) {
   const { rows } = await query(
     `UPDATE users
        SET status = 'REJECTED',
            approved_at = now(),
            approved_by_address = $2
-     WHERE client_uuid = $1::uuid AND status = 'PENDING'
-     RETURNING id, client_uuid, status, approved_at, approved_by_address`,
-    [clientUuid, approverAddress]
+     WHERE id = $1::uuid AND status = 'PENDING'
+     RETURNING id, status, approved_at, approved_by_address`,
+    [registrationId, approverAddress]
   );
   return rows[0] ?? null;
 }

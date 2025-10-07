@@ -6,9 +6,6 @@ const requiredString = (label) =>
     .min(1, `${label} is required`);
 
 const identificationSchema = z.object({
-  uuid: z
-    .string({ required_error: "identification.uuid is required" })
-    .uuid("identification.uuid must be a valid UUID"),
   legalName: requiredString("identification.legalName"),
   businessRegNo: requiredString("identification.businessRegNo"),
   countryOfIncorporation: requiredString(

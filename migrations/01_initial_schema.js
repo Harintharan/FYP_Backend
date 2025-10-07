@@ -78,8 +78,6 @@ export const migrate = async (pool) => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        client_uuid UUID UNIQUE NOT NULL,
-        uuid_hex CHAR(32) UNIQUE NOT NULL,
         reg_type reg_type NOT NULL,
         public_key TEXT,
         payload JSONB NOT NULL,

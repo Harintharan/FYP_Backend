@@ -1,12 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { keccak256, toUtf8Bytes } from "ethers";
 import { RegistrationPayload } from "../domain/registration.schema.js";
 import { stableStringify } from "../utils/canonicalize.js";
-import { uuidToBytes16Hex, uuidToHex32 } from "../utils/uuidHex.js";
+import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { submitOnChain, registry } from "../eth/contract.js";
 import {
   insertRegistration,
-  findByClientUuid,
+  findRegistrationById,
   updateRegistration,
   findPendingRegistrationSummaries,
   findApprovedRegistrationSummaries,
@@ -32,7 +33,7 @@ function formatZodError(err) {
 
 async function ensureOnChainIntegrity(row) {
   const {
-    client_uuid: clientUuid,
+    id: registrationId,
     payload_hash: storedHash,
     payload_canonical: canonical,
     payload,
@@ -59,7 +60,7 @@ async function ensureOnChainIntegrity(row) {
     );
   }
 
-  const uuidBytes16 = uuidToBytes16Hex(clientUuid);
+  const uuidBytes16 = uuidToBytes16Hex(registrationId);
   const exists = await registry.exists(uuidBytes16);
   if (!exists) {
     throw new IntegrityError("Registration record not found on-chain");
@@ -79,10 +80,16 @@ async function ensureOnChainIntegrity(row) {
 export async function createRegistration(req, res) {
   try {
     const parsed = RegistrationPayload.parse(req.body);
-    const canonical = stableStringify(parsed);
-    const clientUuid = parsed.identification.uuid;
-    const uuidHex = uuidToHex32(clientUuid);
-    const uuidBytes16 = uuidToBytes16Hex(clientUuid);
+    const registrationId = randomUUID();
+    const payloadWithUuid = {
+      ...parsed,
+      identification: {
+        ...parsed.identification,
+        uuid: registrationId,
+      },
+    };
+    const canonical = stableStringify(payloadWithUuid);
+    const uuidBytes16 = uuidToBytes16Hex(registrationId);
 
     const alreadyOnChain = await registry.exists(uuidBytes16);
     if (alreadyOnChain) {
@@ -93,17 +100,16 @@ export async function createRegistration(req, res) {
 
     const { txHash, payloadHash } = await submitOnChain(
       uuidBytes16,
-      parsed.type,
+      payloadWithUuid.type,
       canonical,
       false
     );
 
     const dbPayload = {
-      clientUuid,
-      uuidHex,
-      regType: parsed.type,
-      publicKey: parsed.identification.publicKey,
-      payload: parsed,
+      id: registrationId,
+      regType: payloadWithUuid.type,
+      publicKey: payloadWithUuid.identification.publicKey,
+      payload: payloadWithUuid,
       canonical,
       payloadHash,
       txHash,
@@ -120,7 +126,7 @@ export async function createRegistration(req, res) {
         },
         {
           operation: "create",
-          identifier: clientUuid,
+          identifier: registrationId,
         }
       );
     } catch (backupErr) {
@@ -138,7 +144,6 @@ export async function createRegistration(req, res) {
 
     return res.status(201).json({
       id: record.id,
-      clientUuid: record.client_uuid,
       status: record.status,
       txHash: record.tx_hash,
       payloadHash: record.payload_hash,
@@ -155,39 +160,46 @@ export async function createRegistration(req, res) {
   }
 }
 
-export async function updateRegistrationByClient(req, res) {
+export async function updateRegistrationById(req, res) {
   try {
     const parsed = RegistrationPayload.parse(req.body);
-    const clientUuidParam = req.params.clientUuid;
+    const registrationIdParam = req.params.id;
 
-    const existing = await findByClientUuid(clientUuidParam);
+    const existing = await findRegistrationById(registrationIdParam);
     if (!existing) {
       return res.status(404).json({ error: "Not found" });
     }
 
-    if (existing.client_uuid !== parsed.identification.uuid) {
+    const incomingUuid = req.body?.identification?.uuid;
+    if (incomingUuid && existing.id !== incomingUuid) {
       return res
         .status(400)
         .json({ error: "UUID cannot be changed for an update" });
     }
 
-    const canonical = stableStringify(parsed);
-    const uuidHex = uuidToHex32(existing.client_uuid);
-    const uuidBytes16 = uuidToBytes16Hex(existing.client_uuid);
+    const payloadWithUuid = {
+      ...parsed,
+      identification: {
+        ...parsed.identification,
+        uuid: existing.id,
+      },
+    };
+
+    const canonical = stableStringify(payloadWithUuid);
+    const uuidBytes16 = uuidToBytes16Hex(existing.id);
 
     const { txHash, payloadHash } = await submitOnChain(
       uuidBytes16,
-      parsed.type,
+      payloadWithUuid.type,
       canonical,
       true
     );
 
     const updatePayload = {
-      clientUuid: existing.client_uuid,
-      uuidHex,
-      regType: parsed.type,
-      publicKey: parsed.identification.publicKey,
-      payload: parsed,
+      id: existing.id,
+      regType: payloadWithUuid.type,
+      publicKey: payloadWithUuid.identification.publicKey,
+      payload: payloadWithUuid,
       canonical,
       payloadHash,
       txHash,
@@ -204,7 +216,7 @@ export async function updateRegistrationByClient(req, res) {
         },
         {
           operation: "update",
-          identifier: existing.client_uuid,
+          identifier: existing.id,
         }
       );
     } catch (backupErr) {
@@ -223,7 +235,6 @@ export async function updateRegistrationByClient(req, res) {
 
     return res.json({
       id: updated.id,
-      clientUuid: updated.client_uuid,
       status: updated.status,
       txHash: updated.tx_hash,
       payloadHash: updated.payload_hash,
@@ -232,7 +243,7 @@ export async function updateRegistrationByClient(req, res) {
       updatedAt: updated.updated_at,
     });
   } catch (err) {
-    console.error("PUT /api/registrations/:clientUuid error", err);
+    console.error("PUT /api/registrations/:id error", err);
     if (err instanceof ZodError) {
       return res.status(400).json({ errors: formatZodError(err) });
     }
@@ -272,9 +283,9 @@ export async function listApprovedRegistrations(_req, res) {
   }
 }
 
-export async function getRegistrationByClient(req, res) {
+export async function getRegistrationById(req, res) {
   try {
-    const record = await findByClientUuid(req.params.clientUuid);
+    const record = await findRegistrationById(req.params.id);
     if (!record) {
       return res.status(404).json({ error: "Not found" });
     }
@@ -285,43 +296,43 @@ export async function getRegistrationByClient(req, res) {
     if (err instanceof IntegrityError) {
       return res.status(409).json({ error: err.message });
     }
-    console.error("GET /api/registrations/:clientUuid error", err);
+    console.error("GET /api/registrations/:id error", err);
     return res.status(500).json({ error: "Failed to fetch registration" });
   }
 }
 
-export async function approveRegistrationByClient(req, res) {
+export async function approveRegistrationById(req, res) {
   try {
     const result = await approveRegistration(
-      req.params.clientUuid,
+      req.params.id,
       req.wallet.walletAddress
     );
     if (!result) {
       return res
         .status(400)
-        .json({ error: "Invalid registration client UUID or already processed" });
+        .json({ error: "Invalid registration ID or already processed" });
     }
     return res.json(result);
   } catch (err) {
-    console.error("PATCH /api/registrations/:clientUuid/approve error", err);
+    console.error("PATCH /api/registrations/:id/approve error", err);
     return res.status(500).json({ error: "Failed to approve registration" });
   }
 }
 
-export async function rejectRegistrationByClient(req, res) {
+export async function rejectRegistrationById(req, res) {
   try {
     const result = await rejectRegistration(
-      req.params.clientUuid,
+      req.params.id,
       req.wallet.walletAddress
     );
     if (!result) {
       return res
         .status(400)
-        .json({ error: "Invalid registration client UUID or already processed" });
+        .json({ error: "Invalid registration ID or already processed" });
     }
     return res.json(result);
   } catch (err) {
-    console.error("PATCH /api/registrations/:clientUuid/reject error", err);
+    console.error("PATCH /api/registrations/:id/reject error", err);
     return res.status(500).json({ error: "Failed to reject registration" });
   }
 }
