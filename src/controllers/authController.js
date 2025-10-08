@@ -7,6 +7,7 @@ import {
   getNonce,
   deleteNonce,
   getAccountRole,
+  getApprovedUserByAddress,
 } from "../models/authModel.js";
 
 const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
@@ -72,7 +73,8 @@ export async function login(req, res) {
     // Optionally delete nonce after successful login
     await deleteNonce(address);
 
-    const role = (await getAccountRole(address)) ?? "USER";
+    const approvedUser = await getApprovedUserByAddress(address);
+    const role = (await getAccountRole(address, approvedUser)) ?? "USER";
 
     const token = jwt.sign({ role }, jwtPrivateKey, {
       algorithm: "RS256",
@@ -80,7 +82,12 @@ export async function login(req, res) {
       subject: address,
     });
 
-    return res.json({ token, role, address });
+    const responsePayload = { token, role, address };
+    if (approvedUser?.id) {
+      responsePayload.uuid = approvedUser.id;
+    }
+
+    return res.json(responsePayload);
   } catch (err) {
     console.error("POST /auth/login error", err);
     return res.status(500).json({ error: "Authentication failed" });

@@ -22,7 +22,7 @@ export async function deleteNonce(address) {
   await query(`DELETE FROM auth_nonces WHERE address = $1`, [address]);
 }
 
-export async function getAccountRole(address) {
+export async function getAccountRole(address, approvedRegistration) {
   if (typeof address !== "string") {
     return "USER";
   }
@@ -38,18 +38,10 @@ export async function getAccountRole(address) {
     return "ADMIN";
   }
 
-  const registrationResult = await query(
-    `SELECT reg_type
-       FROM users
-      WHERE status = 'APPROVED'
-        AND public_key IS NOT NULL
-        AND LOWER(public_key) = $1
-      ORDER BY updated_at DESC NULLS LAST, created_at DESC
-      LIMIT 1`,
-    [normalizedAddress]
-  );
-
-  const regType = registrationResult.rows[0]?.reg_type;
+  const registration =
+    approvedRegistration ??
+    (await getApprovedUserByAddress(normalizedAddress));
+  const regType = registration?.reg_type;
 
   if (
     regType === "MANUFACTURER" ||
@@ -60,4 +52,25 @@ export async function getAccountRole(address) {
   }
 
   return "USER";
+}
+
+export async function getApprovedUserByAddress(address) {
+  if (typeof address !== "string") {
+    return null;
+  }
+
+  const normalizedAddress = address.toLowerCase();
+
+  const { rows } = await query(
+    `SELECT id, reg_type
+       FROM users
+      WHERE status = 'APPROVED'
+        AND public_key IS NOT NULL
+        AND LOWER(public_key) = $1
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC
+      LIMIT 1`,
+    [normalizedAddress]
+  );
+
+  return rows[0] ?? null;
 }
