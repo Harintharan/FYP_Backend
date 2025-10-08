@@ -8,7 +8,7 @@ function normalizeDate(dateVal) {
 export async function createProduct(data) {
   const { rows } = await query(
     `INSERT INTO product_registry
-       (product_id, product_uuid, product_name, product_category, batch_lot_id,
+       (product_id, product_uuid, product_name, product_category, batch_id,
         required_storage_temp, transport_route_plan_id, handling_instructions, expiry_date,
         sensor_device_uuid, microprocessor_mac, sensor_types, qr_id,
         wifi_ssid, wifi_password, manufacturer_uuid, origin_facility_addr,
@@ -24,7 +24,7 @@ export async function createProduct(data) {
       data.productUUID,
       data.productName,
       data.productCategory,
-      data.batchLotId,
+      data.batchId ?? null,
       data.requiredStorageTemp,
       data.transportRoutePlanId,
       data.handlingInstructions,
@@ -51,7 +51,7 @@ export async function createProduct(data) {
 export async function updateProduct(product_id, data) {
   const { rows } = await query(
     `UPDATE product_registry SET
-         product_uuid=$1, product_name=$2, product_category=$3, batch_lot_id=$4,
+         product_uuid=$1, product_name=$2, product_category=$3, batch_id=$4,
          required_storage_temp=$5, transport_route_plan_id=$6, handling_instructions=$7, expiry_date=$8,
          sensor_device_uuid=$9, microprocessor_mac=$10, sensor_types=$11, qr_id=$12,
          wifi_ssid=$13, wifi_password=$14, manufacturer_uuid=$15, origin_facility_addr=$16,
@@ -63,7 +63,7 @@ export async function updateProduct(product_id, data) {
       data.productUUID,
       data.productName,
       data.productCategory,
-      data.batchLotId,
+      data.batchId ?? null,
       data.requiredStorageTemp,
       data.transportRoutePlanId,
       data.handlingInstructions,

@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 contract BatchRegistry {
     address public owner;
-    uint256 public nextBatchId = 1;
 
     struct Batch {
         string productCategory;
@@ -20,17 +19,17 @@ contract BatchRegistry {
         address updatedBy;
     }
 
-    mapping(uint256 => Batch) public batches;
+    mapping(bytes16 => Batch) public batches;
 
     event BatchRegistered(
-        uint256 indexed batchId,
+        bytes16 indexed batchId,
         bytes32 hash,
         address createdBy,
         uint256 createdAt
     );
 
     event BatchUpdated(
-        uint256 indexed batchId,
+        bytes16 indexed batchId,
         bytes32 newHash,
         address updatedBy,
         uint256 updatedAt
@@ -40,19 +39,21 @@ contract BatchRegistry {
         owner = msg.sender;
     }
 
-    // 🔹 Register a new batch
+    // Register a new batch using the provided UUID
     function registerBatch(
+        bytes16 batchId,
         string memory productCategory,
         string memory manufacturerUUID,
         string memory facility,
         string memory productionWindow,
         string memory quantityProduced,
         string memory releaseStatus
-    ) external returns (uint256) {
-        uint256 batchId = nextBatchId++;
+    ) external returns (bytes16) {
+        require(batches[batchId].createdAt == 0, "Batch already exists");
 
         bytes32 hash = keccak256(
             abi.encodePacked(
+                batchId,
                 productCategory,
                 manufacturerUUID,
                 facility,
@@ -80,9 +81,9 @@ contract BatchRegistry {
         return batchId;
     }
 
-    // 🔹 Update an existing batch
+    // Update an existing batch
     function updateBatch(
-        uint256 batchId,
+        bytes16 batchId,
         string memory productCategory,
         string memory manufacturerUUID,
         string memory facility,
@@ -94,6 +95,7 @@ contract BatchRegistry {
 
         bytes32 newHash = keccak256(
             abi.encodePacked(
+                batchId,
                 productCategory,
                 manufacturerUUID,
                 facility,
@@ -117,8 +119,8 @@ contract BatchRegistry {
         emit BatchUpdated(batchId, newHash, msg.sender, block.timestamp);
     }
 
-    // 🔹 Get a batch by ID
-    function getBatch(uint256 batchId) external view returns (bytes32, Batch memory) {
+    // Get a batch by UUID
+    function getBatch(bytes16 batchId) external view returns (bytes32, Batch memory) {
         require(batches[batchId].createdAt != 0, "Batch does not exist");
         return (batches[batchId].hash, batches[batchId]);
     }

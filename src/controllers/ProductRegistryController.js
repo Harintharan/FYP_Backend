@@ -31,7 +31,9 @@ function normalizeProductInput(p) {
     product_uuid: safe(p.product_uuid || p.productUUID),
     product_name: safe(p.product_name || p.productName),
     product_category: safe(p.product_category || p.productCategory),
-    batch_lot_id: safe(p.batch_lot_id || p.batchLotId),
+    batch_id: safe(
+      p.batch_id || p.batchId || p.batch_lot_id || p.batchLotId
+    ),
     required_storage_temp: safe(p.required_storage_temp || p.requiredStorageTemp),
     transport_route_plan_id: safe(
       p.transport_route_plan_id || p.transportRoutePlanId
@@ -70,7 +72,7 @@ function computeProductHash(product) {
     norm.product_uuid,
     norm.product_name,
     norm.product_category,
-    norm.batch_lot_id,
+    norm.batch_id,
     norm.required_storage_temp,
     norm.transport_route_plan_id,
     norm.handling_instructions,
@@ -123,8 +125,12 @@ export async function registerProduct(req, res) {
 
     const encryptedWifi = encrypt(data.wifi_password || data.wifiPassword);
 
+    const batchIdForStorage =
+      data.batch_id ?? data.batchId ?? data.batchLotId ?? data.batch_lot_id ?? null;
+
     const createPayload = {
       ...data,
+      batchId: batchIdForStorage ?? null,
       product_id: blockchainProductId,
       product_hash: blockchainHash,
       tx_hash: receipt.hash,
@@ -184,8 +190,17 @@ export async function updateProduct(req, res) {
 
     const encryptedWifi = encrypt(data.wifi_password || data.wifiPassword);
 
+    const batchIdForStorage =
+      data.batch_id ??
+      data.batchId ??
+      data.batchLotId ??
+      data.batch_lot_id ??
+      existing.batch_id ??
+      null;
+
     const updatePayload = {
       ...data,
+      batchId: batchIdForStorage ?? null,
       product_hash: newDbHash,
       tx_hash: receipt.hash,
       updated_by: wallet.address,
