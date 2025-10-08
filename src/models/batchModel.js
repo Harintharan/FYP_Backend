@@ -56,3 +56,17 @@ export async function getBatchById(id) {
   const { rows } = await query(`SELECT * FROM batches WHERE id=$1`, [id]);
   return rows[0];
 }
+
+export async function getBatchesByManufacturerUuid(manufacturerUuid) {
+  const { rows } = await query(
+    `SELECT id, batch_id, product_category, manufacturer_uuid, facility,
+            production_window, quantity_produced, release_status, batch_hash,
+            tx_hash, created_by, updated_by, pinata_cid, pinata_pinned_at,
+            created_at, updated_at
+       FROM batches
+      WHERE manufacturer_uuid = $1
+      ORDER BY created_at DESC`,
+    [manufacturerUuid]
+  );
+  return rows;
+}

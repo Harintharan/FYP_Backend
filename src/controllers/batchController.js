@@ -4,6 +4,7 @@ import {
   createBatch,
   updateBatch as updateBatchRecord,
   getBatchById,
+  getBatchesByManufacturerUuid,
 } from "../models/batchModel.js";
 import { chain, operatorWallet, contracts } from "../config.js";
 import { backupRecord } from "../services/pinataBackupService.js";
@@ -221,5 +222,30 @@ export async function getBatch(req, res) {
   } catch (err) {
     console.error("❌ Error fetching batch:", err);
     res.status(500).json({ message: "Server error" });
+  }
+}
+
+export async function listBatchesByManufacturer(req, res) {
+  try {
+    const { manufacturerUuid } = req.params;
+    const registrationId = req.registration?.id;
+
+    if (
+      registrationId &&
+      registrationId.toLowerCase() !== manufacturerUuid.toLowerCase()
+    ) {
+      return res.status(403).json({
+        error: "Cannot access batches for other manufacturers",
+      });
+    }
+
+    const batches = await getBatchesByManufacturerUuid(manufacturerUuid);
+    return res.json(batches);
+  } catch (err) {
+    console.error(
+      "GET /api/batches/manufacturer/:manufacturerUuid error",
+      err
+    );
+    return res.status(500).json({ message: "Server error" });
   }
 }

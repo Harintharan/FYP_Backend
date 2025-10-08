@@ -70,6 +70,7 @@ export function requireRegistrationRole(expectedType) {
           return res.status(403).json({ error: "Access Denied" });
         }
 
+        req.registration = registration;
         next();
       } catch (err) {
         console.error("requireRegistrationRole error", err);
