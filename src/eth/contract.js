@@ -1,12 +1,16 @@
 import { ethers } from "ethers";
-import abi from "../../abi/RegistrationRegistry.json" with { type: "json" };
+import RegistrationRegistryArtifact from "../../blockchain/artifacts/contracts/RegistrationRegistry.sol/RegistrationRegistry.json" with { type: "json" };
 import { chain } from "../config.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(chain.privateKey, provider);
 const registryAddress = chain.registryAddress;
 
-export const registry = new ethers.Contract(registryAddress, abi, wallet);
+export const registry = new ethers.Contract(
+  registryAddress,
+  RegistrationRegistryArtifact.abi,
+  wallet
+);
 
 const REG_TYPE_MAP = {
   MANUFACTURER: 0,
@@ -44,7 +48,7 @@ export async function submitOnChain(
   );
   const receipt = await tx.wait();
 
-  const iface = new ethers.Interface(abi);
+  const iface = new ethers.Interface(RegistrationRegistryArtifact.abi);
   const targetAddress = registryAddress.toLowerCase();
   let payloadHash;
 

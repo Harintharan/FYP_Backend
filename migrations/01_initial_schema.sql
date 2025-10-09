@@ -37,10 +37,11 @@ END
 $$;
 
 CREATE TABLE IF NOT EXISTS accounts (
-  address TEXT PRIMARY KEY,
-  role user_role NOT NULL DEFAULT 'USER',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    address TEXT NOT NULL UNIQUE,
+    role user_role NOT NULL DEFAULT 'USER',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
 
 INSERT INTO accounts (address, role)
 VALUES (LOWER('0xAdminAddressHere'), 'ADMIN')
@@ -53,23 +54,24 @@ CREATE TABLE IF NOT EXISTS auth_nonces (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  reg_type reg_type NOT NULL,
-  public_key TEXT,
-  payload JSONB NOT NULL,
-  payload_canonical TEXT NOT NULL,
-  payload_hash TEXT NOT NULL,
-  tx_hash TEXT NOT NULL,
-  pinata_cid TEXT,
-  pinata_pinned_at TIMESTAMPTZ,
-  status reg_status NOT NULL DEFAULT 'PENDING',
-  submitter_address TEXT,
-  approved_by_address TEXT,
-  approved_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+  CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reg_type reg_type NOT NULL,
+    public_key TEXT,
+    payload JSONB NOT NULL,
+    payload_canonical TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    status reg_status NOT NULL DEFAULT 'PENDING',
+    submitter_address TEXT,
+    approved_by UUID REFERENCES accounts(id),
+    approved_by_address TEXT,
+    approved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pinata_cid TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pinata_pinned_at TIMESTAMPTZ;

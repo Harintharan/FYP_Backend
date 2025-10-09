@@ -51,7 +51,8 @@ export const migrate = async (pool) => {
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS accounts (
-        address TEXT PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        address TEXT NOT NULL UNIQUE,
         role user_role NOT NULL DEFAULT 'USER',
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
@@ -85,6 +86,7 @@ export const migrate = async (pool) => {
         pinata_pinned_at TIMESTAMPTZ,
         status reg_status NOT NULL DEFAULT 'PENDING',
         submitter_address TEXT,
+        approved_by UUID REFERENCES accounts(id),
         approved_by_address TEXT,
         approved_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW(),

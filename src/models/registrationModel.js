@@ -134,7 +134,19 @@ export async function findPendingRegistrationSummaries() {
 
 export async function findApprovedRegistrationSummaries() {
   const { rows } = await query(
-    `SELECT id, reg_type, public_key, status, tx_hash, payload_hash, payload_canonical, payload, approved_at, approved_by_address, created_at, updated_at
+    `SELECT id,
+            reg_type,
+            public_key,
+            status,
+            tx_hash,
+            payload_hash,
+            payload_canonical,
+            payload,
+            approved_at,
+            approved_by,
+            approved_by_address,
+            created_at,
+            updated_at
      FROM users
      WHERE status = 'APPROVED'
      ORDER BY approved_at DESC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC`
@@ -143,27 +155,61 @@ export async function findApprovedRegistrationSummaries() {
 }
 
 export async function approveRegistration(registrationId, approverAddress) {
+  const normalizedAddress =
+    typeof approverAddress === "string"
+      ? approverAddress.toLowerCase()
+      : null;
+
+  if (normalizedAddress) {
+    await query(
+      `INSERT INTO accounts (address)
+       VALUES ($1)
+       ON CONFLICT (address) DO NOTHING`,
+      [normalizedAddress]
+    );
+  }
+
   const { rows } = await query(
     `UPDATE users
        SET status = 'APPROVED',
            approved_at = now(),
+           approved_by = (
+             SELECT id FROM accounts WHERE LOWER(address) = LOWER($2) LIMIT 1
+           ),
            approved_by_address = $2
      WHERE id = $1::uuid AND status = 'PENDING'
-     RETURNING id, status, approved_at, approved_by_address`,
-    [registrationId, approverAddress]
+     RETURNING id, status, approved_at, approved_by, approved_by_address`,
+    [registrationId, normalizedAddress]
   );
   return rows[0] ?? null;
 }
 
 export async function rejectRegistration(registrationId, approverAddress) {
+  const normalizedAddress =
+    typeof approverAddress === "string"
+      ? approverAddress.toLowerCase()
+      : null;
+
+  if (normalizedAddress) {
+    await query(
+      `INSERT INTO accounts (address)
+       VALUES ($1)
+       ON CONFLICT (address) DO NOTHING`,
+      [normalizedAddress]
+    );
+  }
+
   const { rows } = await query(
     `UPDATE users
        SET status = 'REJECTED',
            approved_at = now(),
+           approved_by = (
+             SELECT id FROM accounts WHERE LOWER(address) = LOWER($2) LIMIT 1
+           ),
            approved_by_address = $2
      WHERE id = $1::uuid AND status = 'PENDING'
-     RETURNING id, status, approved_at, approved_by_address`,
-    [registrationId, approverAddress]
+     RETURNING id, status, approved_at, approved_by, approved_by_address`,
+    [registrationId, normalizedAddress]
   );
   return rows[0] ?? null;
 }

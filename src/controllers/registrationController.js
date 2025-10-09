@@ -18,6 +18,9 @@ import { backupRecord } from "../services/pinataBackupService.js";
 
 class IntegrityError extends Error {}
 
+// Must stay in sync with RegistrationRegistry.MAX_PAYLOAD_BYTES on-chain
+const MAX_PAYLOAD_BYTES = 8192;
+
 function normalizeHash(value) {
   if (!value) return null;
   const trimmed = value.trim().toLowerCase();
@@ -89,6 +92,13 @@ export async function createRegistration(req, res) {
       },
     };
     const canonical = stableStringify(payloadWithUuid);
+    const canonicalSize = Buffer.byteLength(canonical, "utf8");
+    if (canonicalSize > MAX_PAYLOAD_BYTES) {
+      return res
+        .status(413)
+        .json({ error: `Payload exceeds limit (${MAX_PAYLOAD_BYTES} bytes)` });
+    }
+    const canonicalHash = normalizeHash(keccak256(toUtf8Bytes(canonical)));
     const uuidBytes16 = uuidToBytes16Hex(registrationId);
 
     const alreadyOnChain = await registry.exists(uuidBytes16);
@@ -104,6 +114,16 @@ export async function createRegistration(req, res) {
       canonical,
       false
     );
+    const normalizedPayloadHash = normalizeHash(payloadHash);
+    if (!normalizedPayloadHash || normalizedPayloadHash !== canonicalHash) {
+      console.error("On-chain payload hash mismatch detected during create", {
+        canonicalHash,
+        payloadHash,
+      });
+      return res
+        .status(502)
+        .json({ error: "On-chain payload hash mismatch detected" });
+    }
 
     const dbPayload = {
       id: registrationId,
@@ -111,7 +131,7 @@ export async function createRegistration(req, res) {
       publicKey: payloadWithUuid.identification.publicKey,
       payload: payloadWithUuid,
       canonical,
-      payloadHash,
+      payloadHash: normalizedPayloadHash,
       txHash,
       submitterAddress: req.wallet?.walletAddress ?? null,
     };
@@ -186,6 +206,13 @@ export async function updateRegistrationById(req, res) {
     };
 
     const canonical = stableStringify(payloadWithUuid);
+    const canonicalSize = Buffer.byteLength(canonical, "utf8");
+    if (canonicalSize > MAX_PAYLOAD_BYTES) {
+      return res
+        .status(413)
+        .json({ error: `Payload exceeds limit (${MAX_PAYLOAD_BYTES} bytes)` });
+    }
+    const canonicalHash = normalizeHash(keccak256(toUtf8Bytes(canonical)));
     const uuidBytes16 = uuidToBytes16Hex(existing.id);
 
     const { txHash, payloadHash } = await submitOnChain(
@@ -194,6 +221,17 @@ export async function updateRegistrationById(req, res) {
       canonical,
       true
     );
+    const normalizedPayloadHash = normalizeHash(payloadHash);
+    if (!normalizedPayloadHash || normalizedPayloadHash !== canonicalHash) {
+      console.error("On-chain payload hash mismatch detected during update", {
+        canonicalHash,
+        payloadHash,
+        registrationId: existing.id,
+      });
+      return res
+        .status(502)
+        .json({ error: "On-chain payload hash mismatch detected" });
+    }
 
     const updatePayload = {
       id: existing.id,
@@ -201,7 +239,7 @@ export async function updateRegistrationById(req, res) {
       publicKey: payloadWithUuid.identification.publicKey,
       payload: payloadWithUuid,
       canonical,
-      payloadHash,
+      payloadHash: normalizedPayloadHash,
       txHash,
       submitterAddress: req.wallet?.walletAddress ?? null,
     };

@@ -14,7 +14,7 @@ const baseEnvVars = {
   JWT_PUBLIC_KEY: process.env.JWT_PUBLIC_KEY,
   CHAIN_RPC_URL: process.env.CHAIN_RPC_URL,
   CHAIN_PRIVATE_KEY: process.env.CHAIN_PRIVATE_KEY,
-  REGISTRY_ADDRESS: process.env.REGISTRY_ADDRESS,
+  CONTRACT_ADDRESS_REGISTRY: process.env.CONTRACT_ADDRESS_REGISTRY,
   PRIVATE_KEY_OTHER: process.env.PRIVATE_KEY_OTHER,
   CONTRACT_ADDRESS_BATCH: process.env.CONTRACT_ADDRESS_BATCH,
   CONTRACT_ADDRESS_CHECKPOINT: process.env.CONTRACT_ADDRESS_CHECKPOINT,
@@ -36,7 +36,7 @@ const required = [
   "JWT_PUBLIC_KEY",
   "CHAIN_RPC_URL",
   "CHAIN_PRIVATE_KEY",
-  "REGISTRY_ADDRESS",
+  "CONTRACT_ADDRESS_REGISTRY",
   "PRIVATE_KEY_OTHER",
   "CONTRACT_ADDRESS_BATCH",
   "CONTRACT_ADDRESS_CHECKPOINT",
@@ -99,10 +99,10 @@ const privateKey = assertHex(
 );
 
 const registryAddress = assertHex(
-  baseEnvVars.REGISTRY_ADDRESS,
-  "REGISTRY_ADDRESS",
+  baseEnvVars.CONTRACT_ADDRESS_REGISTRY,
+  "CONTRACT_ADDRESS_REGISTRY",
   /^0x[0-9a-fA-F]{40}$/,
-  "REGISTRY_ADDRESS must be a valid 0x-prefixed address"
+  "CONTRACT_ADDRESS_REGISTRY must be a valid 0x-prefixed address"
 );
 
 const operatorPrivateKey = assertHex(

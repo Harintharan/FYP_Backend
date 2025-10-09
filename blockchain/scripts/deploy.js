@@ -1,14 +1,23 @@
 const hre = require("hardhat");
 
 const CONTRACTS = [
-  "BatchRegistry",
-  "CheckpointRegistry",
-  "ProductRegistry",
   "RegistrationRegistry",
+  "BatchRegistry",
+  "ProductRegistry",
+  "CheckpointRegistry",
   "ShipmentRegistry",
   "ShipmentSegmentAcceptance",
   "ShipmentSegmentHandover",
-  "SupplyChain",
+];
+
+const ENV_OUTPUT_ORDER = [
+  ["RegistrationRegistry", "CONTRACT_ADDRESS_REGISTRY"],
+  ["BatchRegistry", "CONTRACT_ADDRESS_BATCH"],
+  ["ProductRegistry", "CONTRACT_ADDRESS_PRODUCT"],
+  ["CheckpointRegistry", "CONTRACT_ADDRESS_CHECKPOINT"],
+  ["ShipmentRegistry", "CONTRACT_ADDRESS_SHIPMENT"],
+  ["ShipmentSegmentAcceptance", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE"],
+  ["ShipmentSegmentHandover", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER"],
 ];
 
 async function deployContract(name) {
@@ -28,9 +37,17 @@ async function main() {
     deployments.push(details);
   }
 
-  console.log("\n✅ Deployment summary:");
-  for (const { name, address } of deployments) {
-    console.log(`  • ${name}: ${address}`);
+  const addressByName = deployments.reduce((acc, { name, address }) => {
+    acc[name] = address;
+    return acc;
+  }, {});
+
+  console.log("\n🔑 Environment configuration:");
+  for (const [contractName, envKey] of ENV_OUTPUT_ORDER) {
+    const address = addressByName[contractName];
+    if (address) {
+      console.log(`${envKey}=${address}`);
+    }
   }
 }
 
