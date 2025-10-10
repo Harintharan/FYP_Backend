@@ -63,6 +63,17 @@ export async function findRegistrationById(registrationId) {
   return rows[0] ?? null;
 }
 
+export async function findRegistrationByPublicKey(publicKey) {
+  const { rows } = await query(
+    `SELECT id, status
+       FROM users
+      WHERE LOWER(public_key) = LOWER($1)
+      LIMIT 1`,
+    [publicKey]
+  );
+  return rows[0] ?? null;
+}
+
 export async function updateRegistration({
   id,
   regType,

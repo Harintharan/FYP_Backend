@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { ZodError } from "zod";
 import { keccak256, toUtf8Bytes } from "ethers";
 import { RegistrationPayload } from "../domain/registration.schema.js";
 import { stableStringify } from "../utils/canonicalize.js";
@@ -8,6 +6,7 @@ import { submitOnChain, registry } from "../eth/contract.js";
 import {
   insertRegistration,
   findRegistrationById,
+  findRegistrationByPublicKey,
   updateRegistration,
   findPendingRegistrationSummaries,
   findApprovedRegistrationSummaries,
@@ -15,75 +14,29 @@ import {
   rejectRegistration,
 } from "../models/registrationModel.js";
 import { backupRecord } from "../services/pinataBackupService.js";
+import { allocateRegistrationUuid } from "../services/registrationIdAllocator.js";
+import { normalizeHash, ensureOnChainIntegrity } from "../services/registrationIntegrityService.js";
+import { respondWithRegistrationError } from "../middleware/registrationErrorMiddleware.js";
+import { NotFoundError, RegistrationError } from "../errors/registrationErrors.js";
 
-class IntegrityError extends Error {}
-
-// Must stay in sync with RegistrationRegistry.MAX_PAYLOAD_BYTES on-chain
 const MAX_PAYLOAD_BYTES = 8192;
-
-function normalizeHash(value) {
-  if (!value) return null;
-  const trimmed = value.trim().toLowerCase();
-  return trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
-}
-
-function formatZodError(err) {
-  return err.issues.map((issue) => ({
-    path: issue.path.join("."),
-    message: issue.message,
-  }));
-}
-
-async function ensureOnChainIntegrity(row) {
-  const {
-    id: registrationId,
-    payload_hash: storedHash,
-    payload_canonical: canonical,
-    payload,
-  } = row;
-
-  if (!canonical || typeof canonical !== "string") {
-    throw new IntegrityError("Canonical payload missing or invalid");
-  }
-
-  if (!payload) {
-    throw new IntegrityError("Payload JSON missing");
-  }
-
-  const canonicalFromPayload = stableStringify(payload);
-  if (canonicalFromPayload !== canonical) {
-    throw new IntegrityError("Payload data mismatch detected");
-  }
-
-  const canonicalHash = normalizeHash(keccak256(toUtf8Bytes(canonical)));
-  const normalizedStored = normalizeHash(storedHash);
-  if (normalizedStored && normalizedStored !== canonicalHash) {
-    throw new IntegrityError(
-      "Stored payload hash does not match canonical payload"
-    );
-  }
-
-  const uuidBytes16 = uuidToBytes16Hex(registrationId);
-  const exists = await registry.exists(uuidBytes16);
-  if (!exists) {
-    throw new IntegrityError("Registration record not found on-chain");
-  }
-
-  const onChain = await registry.getRegistration(uuidBytes16);
-  const chainHash = normalizeHash(onChain.payloadHash ?? onChain[0]);
-  if (!chainHash) {
-    throw new IntegrityError("On-chain payload hash missing");
-  }
-
-  if (chainHash !== canonicalHash) {
-    throw new IntegrityError("On-chain payload hash mismatch detected");
-  }
-}
 
 export async function createRegistration(req, res) {
   try {
     const parsed = RegistrationPayload.parse(req.body);
-    const registrationId = randomUUID();
+
+    const existing = await findRegistrationByPublicKey(
+      parsed.identification.publicKey
+    );
+    if (existing) {
+      throw new RegistrationError(
+        "Registration already exists for this User",
+        409
+      );
+    }
+
+    const { registrationId, uuidBytes16 } = await allocateRegistrationUuid();
+
     const payloadWithUuid = {
       ...parsed,
       identification: {
@@ -99,7 +52,6 @@ export async function createRegistration(req, res) {
         .json({ error: `Payload exceeds limit (${MAX_PAYLOAD_BYTES} bytes)` });
     }
     const canonicalHash = normalizeHash(keccak256(toUtf8Bytes(canonical)));
-    const uuidBytes16 = uuidToBytes16Hex(registrationId);
 
     const alreadyOnChain = await registry.exists(uuidBytes16);
     if (alreadyOnChain) {
@@ -172,11 +124,7 @@ export async function createRegistration(req, res) {
       createdAt: record.created_at,
     });
   } catch (err) {
-    console.error("POST /api/registrations error", err);
-    if (err instanceof ZodError) {
-      return res.status(400).json({ errors: formatZodError(err) });
-    }
-    return res.status(500).json({ error: "Failed to submit registration" });
+    return respondWithRegistrationError(res, err);
   }
 }
 
@@ -187,14 +135,7 @@ export async function updateRegistrationById(req, res) {
 
     const existing = await findRegistrationById(registrationIdParam);
     if (!existing) {
-      return res.status(404).json({ error: "Not found" });
-    }
-
-    const incomingUuid = req.body?.identification?.uuid;
-    if (incomingUuid && existing.id !== incomingUuid) {
-      return res
-        .status(400)
-        .json({ error: "UUID cannot be changed for an update" });
+      throw new NotFoundError();
     }
 
     const payloadWithUuid = {
@@ -281,11 +222,7 @@ export async function updateRegistrationById(req, res) {
       updatedAt: updated.updated_at,
     });
   } catch (err) {
-    console.error("PUT /api/registrations/:id error", err);
-    if (err instanceof ZodError) {
-      return res.status(400).json({ errors: formatZodError(err) });
-    }
-    return res.status(500).json({ error: "Failed to update registration" });
+    return respondWithRegistrationError(res, err);
   }
 }
 
@@ -297,11 +234,7 @@ export async function listPendingRegistrations(_req, res) {
     const sanitized = rows.map(({ payload, payload_canonical, ...rest }) => rest);
     return res.json(sanitized);
   } catch (err) {
-    if (err instanceof IntegrityError) {
-      return res.status(409).json({ error: err.message });
-    }
-    console.error("GET /api/registrations/pending error", err);
-    return res.status(500).json({ error: "Failed to fetch registrations" });
+    return respondWithRegistrationError(res, err);
   }
 }
 
@@ -313,11 +246,7 @@ export async function listApprovedRegistrations(_req, res) {
     const sanitized = rows.map(({ payload, payload_canonical, ...rest }) => rest);
     return res.json(sanitized);
   } catch (err) {
-    if (err instanceof IntegrityError) {
-      return res.status(409).json({ error: err.message });
-    }
-    console.error("GET /api/registrations/approved error", err);
-    return res.status(500).json({ error: "Failed to fetch registrations" });
+    return respondWithRegistrationError(res, err);
   }
 }
 
@@ -325,17 +254,13 @@ export async function getRegistrationById(req, res) {
   try {
     const record = await findRegistrationById(req.params.id);
     if (!record) {
-      return res.status(404).json({ error: "Not found" });
+      throw new NotFoundError();
     }
 
     await ensureOnChainIntegrity(record);
     return res.json(record);
   } catch (err) {
-    if (err instanceof IntegrityError) {
-      return res.status(409).json({ error: err.message });
-    }
-    console.error("GET /api/registrations/:id error", err);
-    return res.status(500).json({ error: "Failed to fetch registration" });
+    return respondWithRegistrationError(res, err);
   }
 }
 
@@ -346,14 +271,14 @@ export async function approveRegistrationById(req, res) {
       req.wallet.walletAddress
     );
     if (!result) {
-      return res
-        .status(400)
-        .json({ error: "Invalid registration ID or already processed" });
+      throw new RegistrationError(
+        "Invalid registration ID or already processed",
+        400
+      );
     }
     return res.json(result);
   } catch (err) {
-    console.error("PATCH /api/registrations/:id/approve error", err);
-    return res.status(500).json({ error: "Failed to approve registration" });
+    return handleRegistrationError(res, err);
   }
 }
 
@@ -364,13 +289,13 @@ export async function rejectRegistrationById(req, res) {
       req.wallet.walletAddress
     );
     if (!result) {
-      return res
-        .status(400)
-        .json({ error: "Invalid registration ID or already processed" });
+      throw new RegistrationError(
+        "Invalid registration ID or already processed",
+        400
+      );
     }
     return res.json(result);
   } catch (err) {
-    console.error("PATCH /api/registrations/:id/reject error", err);
-    return res.status(500).json({ error: "Failed to reject registration" });
+    return handleRegistrationError(res, err);
   }
 }
