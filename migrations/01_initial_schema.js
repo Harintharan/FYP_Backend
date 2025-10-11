@@ -146,16 +146,14 @@ export const migrate = async (pool) => {
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS product_registry (
-        id SERIAL PRIMARY KEY,
-        product_id INT UNIQUE NOT NULL,
-        product_uuid TEXT NOT NULL,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         product_name TEXT NOT NULL,
         product_category TEXT NOT NULL,
         batch_id UUID REFERENCES batches(id) ON DELETE SET NULL,
         required_storage_temp TEXT,
         transport_route_plan_id TEXT,
         handling_instructions TEXT,
-        expiry_date TEXT NOT NULL,
+        expiry_date TEXT,
         sensor_device_uuid TEXT,
         microprocessor_mac TEXT,
         sensor_types TEXT,
@@ -167,10 +165,12 @@ export const migrate = async (pool) => {
         product_hash TEXT NOT NULL,
         tx_hash TEXT NOT NULL,
         created_by TEXT NOT NULL,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_by TEXT,
         updated_at TIMESTAMP,
-        status TEXT NOT NULL
+        status TEXT
       )
     `);
 
