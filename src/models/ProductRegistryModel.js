@@ -1,6 +1,6 @@
 import { query } from "../db.js";
 
-function normalizeDate(value) {
+function toNullable(value) {
   if (value === undefined || value === null) {
     return null;
   }
@@ -18,10 +18,8 @@ export async function insertProduct({
   transportRoutePlanId,
   handlingInstructions,
   expiryDate,
-  sensorDeviceUUID,
   microprocessorMac,
   sensorTypes,
-  qrId,
   wifiSSID,
   encryptedWifiPassword,
   manufacturerUUID,
@@ -43,10 +41,8 @@ export async function insertProduct({
        transport_route_plan_id,
        handling_instructions,
        expiry_date,
-       sensor_device_uuid,
        microprocessor_mac,
        sensor_types,
-       qr_id,
        wifi_ssid,
        wifi_password,
        manufacturer_uuid,
@@ -61,9 +57,9 @@ export async function insertProduct({
      )
      VALUES (
        $1,$2,$3,$4,$5,
-       $6,$7,$8,$9,
-       $10,$11,$12,$13,
-       $14,$15,$16,$17,$18,$19,$20,$21,NOW(),$22
+       $6,$7,$8,$9,$10,
+       $11,$12,$13,$14,
+       $15,$16,$17,$18,$19,NOW(),$20
      )
      RETURNING *`,
     [
@@ -74,11 +70,9 @@ export async function insertProduct({
       requiredStorageTemp ?? null,
       transportRoutePlanId ?? null,
       handlingInstructions ?? null,
-      normalizeDate(expiryDate),
-      sensorDeviceUUID ?? null,
+      toNullable(expiryDate),
       microprocessorMac ?? null,
       sensorTypes ?? null,
-      qrId ?? null,
       wifiSSID ?? null,
       encryptedWifiPassword ?? null,
       manufacturerUUID,
@@ -102,10 +96,8 @@ export async function updateProductRecord(id, {
   transportRoutePlanId,
   handlingInstructions,
   expiryDate,
-  sensorDeviceUUID,
   microprocessorMac,
   sensorTypes,
-  qrId,
   wifiSSID,
   encryptedWifiPassword,
   manufacturerUUID,
@@ -126,21 +118,19 @@ export async function updateProductRecord(id, {
             transport_route_plan_id = $6,
             handling_instructions = $7,
             expiry_date = $8,
-            sensor_device_uuid = $9,
-            microprocessor_mac = $10,
-            sensor_types = $11,
-            qr_id = $12,
-            wifi_ssid = $13,
-            wifi_password = $14,
-            manufacturer_uuid = $15,
-            origin_facility_addr = $16,
-            product_hash = $17,
-            tx_hash = $18,
-            updated_by = $19,
-            pinata_cid = $20,
-            pinata_pinned_at = $21,
+            microprocessor_mac = $9,
+            sensor_types = $10,
+            wifi_ssid = $11,
+            wifi_password = $12,
+            manufacturer_uuid = $13,
+            origin_facility_addr = $14,
+            product_hash = $15,
+            tx_hash = $16,
+            updated_by = $17,
+            pinata_cid = $18,
+            pinata_pinned_at = $19,
             updated_at = NOW(),
-            status = $22
+            status = $20
       WHERE id = $1
       RETURNING *`,
     [
@@ -151,11 +141,9 @@ export async function updateProductRecord(id, {
       requiredStorageTemp ?? null,
       transportRoutePlanId ?? null,
       handlingInstructions ?? null,
-      normalizeDate(expiryDate),
-      sensorDeviceUUID ?? null,
+      toNullable(expiryDate),
       microprocessorMac ?? null,
       sensorTypes ?? null,
-      qrId ?? null,
       wifiSSID ?? null,
       encryptedWifiPassword ?? null,
       manufacturerUUID,

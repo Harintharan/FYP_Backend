@@ -56,18 +56,12 @@ function coercePayload(raw) {
       "handling_instructions"
     ),
     expiryDate: pickValue(raw, "expiryDate", "expiry_date"),
-    sensorDeviceUUID: pickValue(
-      raw,
-      "sensorDeviceUUID",
-      "sensor_device_uuid"
-    ),
     microprocessorMac: pickValue(
       raw,
       "microprocessorMac",
       "microprocessor_mac"
     ),
     sensorTypes: pickValue(raw, "sensorTypes", "sensor_types"),
-    qrId: pickValue(raw, "qrId", "qr_id"),
     wifiSSID: pickValue(raw, "wifiSSID", "wifi_ssid"),
     wifiPassword: pickValue(raw, "wifiPassword", "wifi_password"),
     originFacilityAddr: pickValue(
@@ -93,10 +87,8 @@ const PRODUCT_FIELDS = [
   "transportRoutePlanId",
   "handlingInstructions",
   "expiryDate",
-  "sensorDeviceUUID",
   "microprocessorMac",
   "sensorTypes",
-  "qrId",
   "wifiSSID",
   "wifiPassword",
   "originFacilityAddr",
@@ -174,14 +166,10 @@ export function deriveProductPayloadFromRecord(record) {
       record.handling_instructions ?? record.handlingInstructions
     ),
     expiryDate: toNullableString(record.expiry_date ?? record.expiryDate),
-    sensorDeviceUUID: toNullableString(
-      record.sensor_device_uuid ?? record.sensorDeviceUUID
-    ),
     microprocessorMac: toNullableString(
       record.microprocessor_mac ?? record.microprocessorMac
     ),
     sensorTypes: toNullableString(record.sensor_types ?? record.sensorTypes),
-    qrId: toNullableString(record.qr_id ?? record.qrId),
     wifiSSID: toNullableString(record.wifi_ssid ?? record.wifiSSID),
     wifiPassword: toNullableString(
       decryptIfEncrypted(record.wifi_password ?? record.wifiPassword)
@@ -254,10 +242,8 @@ export function formatProductRecord(record) {
     transportRoutePlanId: record.transport_route_plan_id ?? null,
     handlingInstructions: record.handling_instructions ?? null,
     expiryDate: record.expiry_date ?? null,
-    sensorDeviceUUID: record.sensor_device_uuid ?? null,
     microprocessorMac: record.microprocessor_mac ?? null,
     sensorTypes: record.sensor_types ?? null,
-    qrId: record.qr_id ?? null,
     wifiSSID: record.wifi_ssid ?? null,
     originFacilityAddr: record.origin_facility_addr ?? null,
     status: record.status ?? null,
