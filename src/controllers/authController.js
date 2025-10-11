@@ -76,7 +76,12 @@ export async function login(req, res) {
     const approvedUser = await getApprovedUserByAddress(address);
     const role = (await getAccountRole(address, approvedUser)) ?? "USER";
 
-    const token = jwt.sign({ role }, jwtPrivateKey, {
+    const jwtPayload = { role };
+    if (approvedUser?.id) {
+      jwtPayload.uuid = approvedUser.id;
+    }
+
+    const token = jwt.sign(jwtPayload, jwtPrivateKey, {
       algorithm: "RS256",
       expiresIn: "24h",
       subject: address,

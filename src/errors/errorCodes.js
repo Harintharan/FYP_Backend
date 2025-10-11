@@ -1,0 +1,4 @@
+export const ErrorCodes = Object.freeze({
+  INTERNAL_SERVER_ERROR: "INTERNAL_SERVER_ERROR",
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+});
