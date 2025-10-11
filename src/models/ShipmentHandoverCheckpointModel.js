@@ -29,8 +29,8 @@ export async function getByShipment(shipment_id) {
             sc1.name AS start_name,
             sc2.name AS end_name
        FROM shipment_handover_checkpoints shc
-       JOIN checkpoint_registry sc1 ON shc.start_checkpoint_id = sc1.checkpoint_id
-       JOIN checkpoint_registry sc2 ON shc.end_checkpoint_id = sc2.checkpoint_id
+       JOIN checkpoint_registry sc1 ON shc.start_checkpoint_id = sc1.id
+       JOIN checkpoint_registry sc2 ON shc.end_checkpoint_id = sc2.id
        WHERE shc.shipment_id=$1
        ORDER BY shc.id ASC`,
     [shipment_id]

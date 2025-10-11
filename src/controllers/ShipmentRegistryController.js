@@ -65,7 +65,7 @@ function computeShipmentHash(shipment, checkpoints) {
 
 async function assertCheckpointExists(checkpointId) {
   const { rows } = await query(
-    `SELECT 1 FROM checkpoint_registry WHERE checkpoint_id = $1`,
+    `SELECT 1 FROM checkpoint_registry WHERE id = $1`,
     [checkpointId]
   );
   return rows.length > 0;

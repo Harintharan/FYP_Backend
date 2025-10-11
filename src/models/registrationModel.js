@@ -171,15 +171,6 @@ export async function approveRegistration(registrationId, approverAddress) {
       ? approverAddress.toLowerCase()
       : null;
 
-  if (normalizedAddress) {
-    await query(
-      `INSERT INTO accounts (address)
-       VALUES ($1)
-       ON CONFLICT (address) DO NOTHING`,
-      [normalizedAddress]
-    );
-  }
-
   const { rows } = await query(
     `UPDATE users
        SET status = 'APPROVED',

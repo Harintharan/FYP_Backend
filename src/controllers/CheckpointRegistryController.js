@@ -1,210 +1,94 @@
-import { ethers } from "ethers";
-import CheckpointRegistryArtifact from "../../blockchain/artifacts/contracts/CheckpointRegistry.sol/CheckpointRegistry.json" with { type: "json" };
+import { ZodError } from "zod";
 import {
   createCheckpoint,
-  updateCheckpoint as updateCheckpointRecord,
-  getCheckpointById,
-  getAllCheckpoints as getAllCheckpointRecords,
-} from "../models/CheckpointRegistryModel.js";
-import { chain, operatorWallet, contracts } from "../config.js";
-import { backupRecord } from "../services/pinataBackupService.js";
-
-const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
-const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
-const contractABI = CheckpointRegistryArtifact.abi;
-const contract = new ethers.Contract(
-  contracts.checkpointRegistry,
-  contractABI,
-  wallet
-);
-
-function computeCheckpointHash(checkpoint) {
-  const joined = [
-    checkpoint.checkpointUUID || checkpoint.checkpoint_uuid,
-    checkpoint.name,
-    checkpoint.address,
-    checkpoint.latitude,
-    checkpoint.longitude,
-    checkpoint.ownerUUID || checkpoint.owner_uuid,
-    checkpoint.ownerType || checkpoint.owner_type,
-    checkpoint.checkpointType || checkpoint.checkpoint_type,
-  ].join("|");
-
-  console.log("🟦 Hashing string:", joined);
-  return ethers.keccak256(ethers.toUtf8Bytes(joined));
-}
+  updateCheckpointDetails,
+  getCheckpointDetails,
+  listCheckpointsByOwner,
+  listAllCheckpointRecords,
+} from "../services/checkpointService.js";
+import {
+  respondWithZodError,
+  handleControllerError,
+} from "./helpers/errorResponse.js";
 
 export async function registerCheckpoint(req, res) {
   try {
-    const data = req.body;
-    const dbHash = computeCheckpointHash(data);
-
-    const tx = await contract.registerCheckpoint(dbHash);
-    const receipt = await tx.wait();
-
-    const event = receipt.logs
-      .map((log) => {
-        try {
-          return contract.interface.parseLog(log);
-        } catch {
-          return null;
-        }
-      })
-      .find((parsed) => parsed && parsed.name === "CheckpointRegistered");
-
-    if (!event) {
-      throw new Error("No CheckpointRegistered event found");
-    }
-
-    const blockchainCheckpointId = event.args.checkpointId.toString();
-    const blockchainHash = event.args.hash;
-
-    const createPayload = {
-      checkpoint_id: blockchainCheckpointId,
-      ...data,
-      checkpoint_hash: blockchainHash,
-      tx_hash: receipt.hash,
-      created_by: wallet.address,
-    };
-
-    let pinataBackup;
-    try {
-      pinataBackup = await backupRecord("checkpoint", createPayload, {
-        operation: "create",
-        identifier: blockchainCheckpointId,
-      });
-    } catch (backupErr) {
-      console.error(
-        "⚠️ Failed to back up checkpoint to Pinata:",
-        backupErr
-      );
-    }
-
-    const savedCheckpoint = await createCheckpoint({
-      ...createPayload,
-      pinata_cid: pinataBackup?.IpfsHash ?? null,
-      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
+    const { statusCode, body } = await createCheckpoint({
+      payload: req.body,
+      registration: req.registration,
+      wallet: req.wallet,
     });
-
-    const responsePayload = { ...savedCheckpoint, blockchainTx: receipt.hash };
-    responsePayload.pinataCid = savedCheckpoint.pinata_cid || null;
-    responsePayload.pinataTimestamp = savedCheckpoint.pinata_pinned_at || null;
-
-    res.status(201).json(responsePayload);
+    return res.status(statusCode).json(body);
   } catch (err) {
-    console.error("❌ Error registering checkpoint:", err);
-    res.status(500).json({ message: "Server error" });
+    if (err instanceof ZodError) {
+      return respondWithZodError(res, err);
+    }
+    return handleControllerError(res, err, {
+      logMessage: "Error registering checkpoint",
+      fallbackMessage: "Unable to register checkpoint",
+    });
   }
 }
 
 export async function updateCheckpoint(req, res) {
   try {
-    const { checkpoint_id } = req.params;
-    const data = req.body;
-    const newDbHash = computeCheckpointHash(data);
-
-    const existing = await getCheckpointById(checkpoint_id);
-    if (!existing) {
-      return res.status(404).json({ message: "Checkpoint not found" });
-    }
-
-    const tx = await contract.updateCheckpoint(checkpoint_id, newDbHash);
-    const receipt = await tx.wait();
-
-    const updatePayload = {
-      ...data,
-      checkpoint_hash: newDbHash,
-      tx_hash: receipt.hash,
-      updated_by: wallet.address,
-    };
-
-    let pinataBackup;
-    try {
-      pinataBackup = await backupRecord(
-        "checkpoint",
-        {
-          ...existing,
-          ...updatePayload,
-          checkpoint_id,
-        },
-        {
-          operation: "update",
-          identifier: checkpoint_id,
-        }
-      );
-    } catch (backupErr) {
-      console.error(
-        "⚠️ Failed to back up checkpoint update to Pinata:",
-        backupErr
-      );
-    }
-
-    updatePayload.pinata_cid = pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
-    updatePayload.pinata_pinned_at =
-      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
-
-    const updatedCheckpoint = await updateCheckpointRecord(
-      checkpoint_id,
-      updatePayload
-    );
-
-    const responsePayload = { ...updatedCheckpoint, blockchainTx: receipt.hash };
-    responsePayload.pinataCid = updatedCheckpoint.pinata_cid || null;
-    responsePayload.pinataTimestamp = updatedCheckpoint.pinata_pinned_at || null;
-
-    res.status(200).json(responsePayload);
+    const { statusCode, body } = await updateCheckpointDetails({
+      id: req.params.id,
+      payload: req.body,
+      registration: req.registration,
+      wallet: req.wallet,
+    });
+    return res.status(statusCode).json(body);
   } catch (err) {
-    console.error("❌ Error updating checkpoint:", err);
-    res.status(500).json({ message: "Server error" });
+    if (err instanceof ZodError) {
+      return respondWithZodError(res, err);
+    }
+    return handleControllerError(res, err, {
+      logMessage: "Error updating checkpoint",
+      fallbackMessage: "Unable to update checkpoint",
+    });
   }
 }
 
 export async function getCheckpoint(req, res) {
   try {
-    const { checkpoint_id } = req.params;
-    const checkpoint = await getCheckpointById(checkpoint_id);
-    if (!checkpoint) {
-      return res.status(404).json({ message: "Checkpoint not found" });
-    }
-
-    const dbHash = computeCheckpointHash(checkpoint);
-    const blockchainCheckpoint = await contract.getCheckpoint(checkpoint_id);
-    const blockchainHash = blockchainCheckpoint.hash;
-
-    const integrity = dbHash === blockchainHash ? "valid" : "tampered";
-
-    res.status(200).json({ ...checkpoint, dbHash, blockchainHash, integrity });
+    const { statusCode, body } = await getCheckpointDetails({
+      id: req.params.id,
+      registration: req.registration,
+    });
+    return res.status(statusCode).json(body);
   } catch (err) {
-    console.error("❌ Error fetching checkpoint:", err);
-    res.status(500).json({ message: "Server error" });
+    return handleControllerError(res, err, {
+      logMessage: "Error fetching checkpoint",
+      fallbackMessage: "Unable to fetch checkpoint",
+    });
   }
 }
 
-export async function getAllCheckpoints(_req, res) {
+export async function listCheckpointsForOwner(req, res) {
+  console.log("reg", req);
   try {
-    const checkpoints = await getAllCheckpointRecords();
-
-    const result = await Promise.all(
-      checkpoints.map(async (cp) => {
-        const dbHash = computeCheckpointHash(cp);
-        let blockchainHash = null;
-        let integrity = "unknown";
-
-        try {
-          const blockchainCheckpoint = await contract.getCheckpoint(cp.checkpoint_id);
-          blockchainHash = blockchainCheckpoint.hash;
-          integrity = dbHash === blockchainHash ? "valid" : "tampered";
-        } catch {
-          integrity = "not_on_chain";
-        }
-
-        return { ...cp, dbHash, blockchainHash, integrity };
-      })
-    );
-
-    res.status(200).json(result);
+    const { statusCode, body } = await listCheckpointsByOwner({
+      ownerUuid: req.params.ownerUuid,
+      registration: req.registration,
+    });
+    return res.status(statusCode).json(body);
   } catch (err) {
-    console.error("❌ Error fetching checkpoints:", err);
-    res.status(500).json({ message: "Server error" });
+    return handleControllerError(res, err, {
+      logMessage: "GET /api/checkpoints/owner/:ownerUuid error",
+      fallbackMessage: "Unable to list checkpoints",
+    });
+  }
+}
+
+export async function listAllCheckpoints(req, res) {
+  try {
+    const { statusCode, body } = await listAllCheckpointRecords();
+    return res.status(statusCode).json(body);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error listing checkpoints",
+      fallbackMessage: "Unable to list checkpoints",
+    });
   }
 }

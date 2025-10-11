@@ -176,9 +176,7 @@ export const migrate = async (pool) => {
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS checkpoint_registry (
-        id SERIAL PRIMARY KEY,
-        checkpoint_id INT UNIQUE NOT NULL,
-        checkpoint_uuid TEXT NOT NULL,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
         address TEXT,
         latitude TEXT,
@@ -189,6 +187,8 @@ export const migrate = async (pool) => {
         checkpoint_hash TEXT NOT NULL,
         tx_hash TEXT NOT NULL,
         created_by TEXT NOT NULL,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_by TEXT,
         updated_at TIMESTAMP
@@ -215,8 +215,8 @@ export const migrate = async (pool) => {
       CREATE TABLE IF NOT EXISTS shipment_handover_checkpoints (
         id SERIAL PRIMARY KEY,
         shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
-        start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-        end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
+        start_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
+        end_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
         estimated_arrival_date TEXT NOT NULL,
         time_tolerance TEXT NOT NULL,
         expected_ship_date TEXT NOT NULL,
@@ -230,8 +230,8 @@ export const migrate = async (pool) => {
         id SERIAL PRIMARY KEY,
         acceptance_id INT NOT NULL UNIQUE,
         shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
-        segment_start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-        segment_end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
+        segment_start_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
+        segment_end_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
         assigned_role VARCHAR(100) NOT NULL,
         assigned_party_uuid VARCHAR(100) NOT NULL,
         estimated_pickup_time TEXT NOT NULL,
@@ -254,8 +254,8 @@ export const migrate = async (pool) => {
         handover_id INT NOT NULL UNIQUE,
         shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
         acceptance_id INT NOT NULL REFERENCES shipment_segment_acceptance(acceptance_id) ON DELETE CASCADE,
-        segment_start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-        segment_end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
+        segment_start_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
+        segment_end_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
         from_party_uuid VARCHAR(100) NOT NULL,
         to_party_uuid VARCHAR(100) NOT NULL,
         handover_timestamp TEXT NOT NULL,
