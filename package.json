@@ -7,15 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/index.js",
-    "dev:proxy": "nodemon --env-file=.env.ganache src/index.js",
-    "dev:noproxy": "nodemon --env-file=.env.ganache.noproxy src/index.js",
     "start": "node src/index.js",
-    "start:proxy": "node --env-file=.env.ganache src/index.js",
-    "start:noproxy": "node --env-file=.env.ganache.noproxy src/index.js",
-    "migrate": "node migrations/index.js",
-    "proxy:on": "node scripts/toggle-proxy.js on",
-    "proxy:off": "node scripts/toggle-proxy.js off",
-    "proxy:status": "node scripts/toggle-proxy.js status"
+    "migrate": "node migrations/index.js"
   },
   "keywords": [],
   "author": "",
