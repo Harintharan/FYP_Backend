@@ -7,21 +7,30 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/index.js",
+    "dev:proxy": "nodemon --env-file=.env.ganache src/index.js",
+    "dev:noproxy": "nodemon --env-file=.env.ganache.noproxy src/index.js",
     "start": "node src/index.js",
-    "migrate": "node migrations/index.js"
+    "start:proxy": "node --env-file=.env.ganache src/index.js",
+    "start:noproxy": "node --env-file=.env.ganache.noproxy src/index.js",
+    "migrate": "node migrations/index.js",
+    "proxy:on": "node scripts/toggle-proxy.js on",
+    "proxy:off": "node scripts/toggle-proxy.js off",
+    "proxy:status": "node scripts/toggle-proxy.js status"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@pinata/sdk": "^2.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "ethers": "^6.15.0",
     "express": "^4.21.2",
     "helmet": "^7.0.0",
+    "https-proxy-agent": "^7.0.6",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3",
+    "pinata": "^1.10.1",
+    "undici": "^7.16.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

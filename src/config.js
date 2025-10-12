@@ -48,6 +48,8 @@ const baseEnvVars = {
   PINATA_SECRET_API_KEY: process.env.PINATA_SECRET_API_KEY,
   PINATA_JWT_KEY: process.env.PINATA_JWT_KEY,
   PINATA_JWT: process.env.PINATA_JWT,
+  PINATA_PROXY_URL: process.env.PINATA_PROXY_URL,
+  PINATA_USE_PROXY: process.env.PINATA_USE_PROXY,
 };
 
 const required = [
@@ -66,9 +68,13 @@ const required = [
   "CONTRACT_ADDRESS_PRODUCT",
 ];
 
-const missing = required.filter((key) => !baseEnvVars[key] || baseEnvVars[key].trim() === "");
+const missing = required.filter(
+  (key) => !baseEnvVars[key] || baseEnvVars[key].trim() === ""
+);
 if (missing.length) {
-  throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
+  throw new Error(
+    `Missing required environment variables: ${missing.join(", ")}`
+  );
 }
 
 const portValue = Number(baseEnvVars.PORT);
@@ -92,12 +98,24 @@ if (connectionString && connectionString.includes("${")) {
 }
 
 if (!connectionString || connectionString.trim() === "") {
-  const segments = [baseEnvVars.DB_USER, baseEnvVars.DB_PASSWORD, baseEnvVars.DB_HOST, baseEnvVars.DB_PORT, baseEnvVars.DB_NAME];
+  const segments = [
+    baseEnvVars.DB_USER,
+    baseEnvVars.DB_PASSWORD,
+    baseEnvVars.DB_HOST,
+    baseEnvVars.DB_PORT,
+    baseEnvVars.DB_NAME,
+  ];
   const allPresent = segments.every((v) => v && v.trim() !== "");
   if (!allPresent) {
-    throw new Error("DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME must be provided");
+    throw new Error(
+      "DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME must be provided"
+    );
   }
-  connectionString = `postgres://${encodeURIComponent(baseEnvVars.DB_USER)}:${encodeURIComponent(baseEnvVars.DB_PASSWORD)}@${baseEnvVars.DB_HOST}:${baseEnvVars.DB_PORT}/${baseEnvVars.DB_NAME}`;
+  connectionString = `postgres://${encodeURIComponent(
+    baseEnvVars.DB_USER
+  )}:${encodeURIComponent(baseEnvVars.DB_PASSWORD)}@${baseEnvVars.DB_HOST}:${
+    baseEnvVars.DB_PORT
+  }/${baseEnvVars.DB_NAME}`;
 }
 
 function assertHex(value, key, regex, message) {
@@ -182,12 +200,9 @@ const pinataJwtKey = (() => {
   return jwtKey ? jwtKey.trim() : "";
 })();
 
-if (
-  !pinataJwtKey &&
-  (!pinataApiKey || !pinataSecretApiKey)
-) {
+if (!pinataJwtKey) {
   throw new Error(
-    "PINATA_JWT_KEY (or PINATA_JWT) or PINATA_API_KEY/PINATA_SECRET_API_KEY must be provided"
+    "PINATA_JWT_KEY (or PINATA_JWT) is required for the new Pinata SDK"
   );
 }
 
@@ -216,4 +231,8 @@ export const pinata = {
   apiKey: pinataApiKey || null,
   secretApiKey: pinataSecretApiKey || null,
   jwtKey: pinataJwtKey || null,
+  proxyUrl: baseEnvVars.PINATA_PROXY_URL || null,
+  useProxy:
+    baseEnvVars.PINATA_USE_PROXY === "true" ||
+    baseEnvVars.PINATA_USE_PROXY === "1",
 };
