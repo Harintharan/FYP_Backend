@@ -1,6 +1,9 @@
 import { ethers } from "ethers";
 import { stableStringify } from "../utils/canonicalize.js";
-import { ProductPayload } from "../domain/product.schema.js";
+import {
+  ProductPayload,
+  PRODUCT_STATUS_VALUES,
+} from "../domain/product.schema.js";
 import { normalizeHash } from "./registrationIntegrityService.js";
 import { fetchProductOnChain } from "../eth/productContract.js";
 import { decrypt } from "../utils/encryptionHelper.js";
@@ -8,6 +11,7 @@ import { ProductErrorCodes, hashMismatch } from "../errors/productErrors.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
 const EMPTY_FALLBACK = "";
+const VALID_PRODUCT_STATUSES = new Set(PRODUCT_STATUS_VALUES);
 
 function pickValue(source, ...keys) {
   for (const key of keys) {
@@ -30,6 +34,15 @@ function toNullableString(value) {
   return trimmed.length === 0 ? null : trimmed;
 }
 
+function sanitizeStatus(value) {
+  const normalized = toNullableString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return VALID_PRODUCT_STATUSES.has(normalized) ? normalized : null;
+}
+
 function coercePayload(raw) {
   if (!raw || typeof raw !== "object") {
     return {};
@@ -40,22 +53,6 @@ function coercePayload(raw) {
     productName: pickValue(raw, "productName", "product_name"),
     productCategory: pickValue(raw, "productCategory", "product_category"),
     batchId: pickValue(raw, "batchId", "batch_id", "batch_lot_id", "batchLotId"),
-    requiredStorageTemp: pickValue(
-      raw,
-      "requiredStorageTemp",
-      "required_storage_temp"
-    ),
-    transportRoutePlanId: pickValue(
-      raw,
-      "transportRoutePlanId",
-      "transport_route_plan_id"
-    ),
-    handlingInstructions: pickValue(
-      raw,
-      "handlingInstructions",
-      "handling_instructions"
-    ),
-    expiryDate: pickValue(raw, "expiryDate", "expiry_date"),
     microprocessorMac: pickValue(
       raw,
       "microprocessorMac",
@@ -64,11 +61,6 @@ function coercePayload(raw) {
     sensorTypes: pickValue(raw, "sensorTypes", "sensor_types"),
     wifiSSID: pickValue(raw, "wifiSSID", "wifi_ssid"),
     wifiPassword: pickValue(raw, "wifiPassword", "wifi_password"),
-    originFacilityAddr: pickValue(
-      raw,
-      "originFacilityAddr",
-      "origin_facility_addr"
-    ),
     status: pickValue(raw, "status"),
   };
 }
@@ -83,15 +75,10 @@ const PRODUCT_FIELDS = [
   "productCategory",
   "manufacturerUUID",
   "batchId",
-  "requiredStorageTemp",
-  "transportRoutePlanId",
-  "handlingInstructions",
-  "expiryDate",
   "microprocessorMac",
   "sensorTypes",
   "wifiSSID",
   "wifiPassword",
-  "originFacilityAddr",
   "status",
 ];
 
@@ -156,16 +143,6 @@ export function deriveProductPayloadFromRecord(record) {
       record.product_category ?? record.productCategory
     ),
     batchId: toNullableString(record.batch_id ?? record.batchId),
-    requiredStorageTemp: toNullableString(
-      record.required_storage_temp ?? record.requiredStorageTemp
-    ),
-    transportRoutePlanId: toNullableString(
-      record.transport_route_plan_id ?? record.transportRoutePlanId
-    ),
-    handlingInstructions: toNullableString(
-      record.handling_instructions ?? record.handlingInstructions
-    ),
-    expiryDate: toNullableString(record.expiry_date ?? record.expiryDate),
     microprocessorMac: toNullableString(
       record.microprocessor_mac ?? record.microprocessorMac
     ),
@@ -174,10 +151,7 @@ export function deriveProductPayloadFromRecord(record) {
     wifiPassword: toNullableString(
       decryptIfEncrypted(record.wifi_password ?? record.wifiPassword)
     ),
-    originFacilityAddr: toNullableString(
-      record.origin_facility_addr ?? record.originFacilityAddr
-    ),
-    status: toNullableString(record.status),
+    status: sanitizeStatus(record.status),
   };
 }
 
@@ -238,15 +212,10 @@ export function formatProductRecord(record) {
     productCategory: record.product_category ?? null,
     manufacturerUUID: record.manufacturer_uuid ?? null,
     batchId: record.batch_id ?? null,
-    requiredStorageTemp: record.required_storage_temp ?? null,
-    transportRoutePlanId: record.transport_route_plan_id ?? null,
-    handlingInstructions: record.handling_instructions ?? null,
-    expiryDate: record.expiry_date ?? null,
     microprocessorMac: record.microprocessor_mac ?? null,
     sensorTypes: record.sensor_types ?? null,
     wifiSSID: record.wifi_ssid ?? null,
-    originFacilityAddr: record.origin_facility_addr ?? null,
-    status: record.status ?? null,
+    status: sanitizeStatus(record.status),
     productHash: normalizeHash(record.product_hash ?? null),
     txHash: record.tx_hash ?? null,
     createdBy: record.created_by ?? null,

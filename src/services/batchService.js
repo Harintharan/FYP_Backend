@@ -3,6 +3,7 @@ import { BatchPayload } from "../domain/batch.schema.js";
 import {
   prepareBatchPersistence,
   ensureBatchOnChainIntegrity,
+  deriveBatchPayloadFromRecord,
 } from "./batchIntegrityService.js";
 import {
   registerBatchOnChain,
@@ -19,6 +20,17 @@ import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { backupRecord } from "./pinataBackupService.js";
 import * as batchErrors from "../errors/batchErrors.js";
 
+function sanitizeOptional(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+  }
+  return value;
+}
+
 function formatBatchRecord(record) {
   return {
     id: record.id,
@@ -28,6 +40,10 @@ function formatBatchRecord(record) {
     productionWindow: record.production_window,
     quantityProduced: record.quantity_produced,
     releaseStatus: record.release_status,
+    expiryDate: sanitizeOptional(record.expiry_date),
+    handlingInstructions: sanitizeOptional(record.handling_instructions),
+    requiredStartTemp: sanitizeOptional(record.required_start_temp),
+    requiredEndTemp: sanitizeOptional(record.required_end_temp),
     payloadHash: normalizeHash(record.batch_hash ?? null),
     txHash: record.tx_hash ?? null,
     createdBy: record.created_by ?? null,
@@ -68,7 +84,7 @@ export async function createBatch({ payload, registration, wallet }) {
 
   const { txHash, batchHash } = await registerBatchOnChain(
     uuidToBytes16Hex(batchId),
-    normalized
+    canonical
   );
 
   const normalizedOnChain = normalizeHash(batchHash);
@@ -114,6 +130,10 @@ export async function createBatch({ payload, registration, wallet }) {
     productionWindow: normalized.productionWindow,
     quantityProduced: normalized.quantityProduced,
     releaseStatus: normalized.releaseStatus,
+    expiryDate: sanitizeOptional(normalized.expiryDate),
+    handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
+    requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
+    requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
     batchHash: payloadHash,
     txHash,
     createdBy: wallet?.walletAddress ?? null,
@@ -153,14 +173,16 @@ export async function updateBatchDetails({
     throw batchErrors.manufacturerImmutable();
   }
 
+  const defaults = deriveBatchPayloadFromRecord(existing);
   const { normalized, canonical, payloadHash } = prepareBatchPersistence(
     id,
-    parsed
+    parsed,
+    defaults
   );
 
   const { txHash, batchHash } = await updateBatchOnChain(
     uuidToBytes16Hex(id),
-    normalized
+    canonical
   );
 
   const onChainHash =
@@ -207,6 +229,10 @@ export async function updateBatchDetails({
     productionWindow: normalized.productionWindow,
     quantityProduced: normalized.quantityProduced,
     releaseStatus: normalized.releaseStatus,
+    expiryDate: sanitizeOptional(normalized.expiryDate),
+    handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
+    requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
+    requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
     batchHash: payloadHash,
     txHash,
     updatedBy: wallet?.walletAddress ?? null,

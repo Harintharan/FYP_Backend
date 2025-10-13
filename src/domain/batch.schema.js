@@ -6,6 +6,18 @@ const requiredString = (field) =>
     .trim()
     .min(1, `${field} is required`);
 
+const optionalString = (field) =>
+  z
+    .preprocess((value) => {
+      if (value === undefined || value === null) {
+        return undefined;
+      }
+      const str = typeof value === "string" ? value : String(value);
+      const trimmed = str.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }, z.string().min(1, `${field} cannot be empty`))
+    .optional();
+
 const quantitySchema = z
   .union([
     z
@@ -47,5 +59,8 @@ export const BatchPayload = z.object({
   productionWindow: requiredString("productionWindow"),
   quantityProduced: quantitySchema,
   releaseStatus: requiredString("releaseStatus"),
+  expiryDate: optionalString("expiryDate"),
+  handlingInstructions: optionalString("handlingInstructions"),
+  requiredStartTemp: optionalString("requiredStartTemp"),
+  requiredEndTemp: optionalString("requiredEndTemp"),
 });
-

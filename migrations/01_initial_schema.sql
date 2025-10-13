@@ -30,6 +30,20 @@ $$;
 
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'product_status') THEN
+    CREATE TYPE product_status AS ENUM (
+      'CREATED',
+      'READY TO SHIPMENT',
+      'SHIPMENT ACCEPTED',
+      'SHIPMENT HANDOVERED',
+      'SHIPMENT DELIVERED'
+    );
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
     CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
   END IF;
@@ -102,6 +116,10 @@ CREATE TABLE IF NOT EXISTS batches (
   production_window TEXT NOT NULL,
   quantity_produced TEXT NOT NULL,
   release_status TEXT NOT NULL,
+  expiry_date TEXT,
+  handling_instructions TEXT,
+  required_start_temp TEXT,
+  required_end_temp TEXT,
   batch_hash TEXT,
   tx_hash TEXT,
   created_by TEXT NOT NULL,
@@ -117,16 +135,11 @@ CREATE TABLE IF NOT EXISTS product_registry (
   product_name TEXT NOT NULL,
   product_category TEXT NOT NULL,
   batch_id UUID REFERENCES batches(id) ON DELETE SET NULL,
-  required_storage_temp TEXT,
-  transport_route_plan_id TEXT,
-  handling_instructions TEXT,
-  expiry_date TEXT,
   microprocessor_mac TEXT,
   sensor_types TEXT,
   wifi_ssid TEXT,
   wifi_password TEXT,
   manufacturer_uuid TEXT,
-  origin_facility_addr TEXT,
   product_hash TEXT NOT NULL,
   tx_hash TEXT NOT NULL,
   created_by TEXT NOT NULL,
@@ -135,7 +148,7 @@ CREATE TABLE IF NOT EXISTS product_registry (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_by TEXT,
   updated_at TIMESTAMP,
-  status TEXT
+  status product_status
 );
 
 CREATE TABLE IF NOT EXISTS checkpoint_registry (

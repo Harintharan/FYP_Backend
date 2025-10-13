@@ -1,29 +1,15 @@
 import { query } from "../db.js";
 
-function toNullable(value) {
-  if (value === undefined || value === null) {
-    return null;
-  }
-  const str = typeof value === "string" ? value : String(value);
-  const trimmed = str.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
 export async function insertProduct({
   id,
   productName,
   productCategory,
   batchId,
-  requiredStorageTemp,
-  transportRoutePlanId,
-  handlingInstructions,
-  expiryDate,
   microprocessorMac,
   sensorTypes,
   wifiSSID,
   encryptedWifiPassword,
   manufacturerUUID,
-  originFacilityAddr,
   productHash,
   txHash,
   createdBy,
@@ -37,46 +23,36 @@ export async function insertProduct({
        product_name,
        product_category,
        batch_id,
-       required_storage_temp,
-       transport_route_plan_id,
-       handling_instructions,
-       expiry_date,
        microprocessor_mac,
        sensor_types,
        wifi_ssid,
        wifi_password,
        manufacturer_uuid,
-       origin_facility_addr,
        product_hash,
        tx_hash,
        created_by,
        pinata_cid,
        pinata_pinned_at,
-       created_at,
-       status
-     )
-     VALUES (
-       $1,$2,$3,$4,$5,
-       $6,$7,$8,$9,$10,
-       $11,$12,$13,$14,
-       $15,$16,$17,$18,$19,NOW(),$20
-     )
+     created_at,
+     status
+   )
+   VALUES (
+      $1,$2,$3,$4,$5,
+      $6,$7,$8,$9,$10,
+      $11,$12,$13,$14,
+      NOW(),$15
+    )
      RETURNING *`,
     [
       id,
       productName,
       productCategory,
       batchId ?? null,
-      requiredStorageTemp ?? null,
-      transportRoutePlanId ?? null,
-      handlingInstructions ?? null,
-      toNullable(expiryDate),
       microprocessorMac ?? null,
       sensorTypes ?? null,
       wifiSSID ?? null,
       encryptedWifiPassword ?? null,
       manufacturerUUID,
-      originFacilityAddr ?? null,
       productHash,
       txHash,
       createdBy,
@@ -92,16 +68,11 @@ export async function updateProductRecord(id, {
   productName,
   productCategory,
   batchId,
-  requiredStorageTemp,
-  transportRoutePlanId,
-  handlingInstructions,
-  expiryDate,
   microprocessorMac,
   sensorTypes,
   wifiSSID,
   encryptedWifiPassword,
   manufacturerUUID,
-  originFacilityAddr,
   productHash,
   txHash,
   updatedBy,
@@ -114,23 +85,18 @@ export async function updateProductRecord(id, {
         SET product_name = $2,
             product_category = $3,
             batch_id = $4,
-            required_storage_temp = $5,
-            transport_route_plan_id = $6,
-            handling_instructions = $7,
-            expiry_date = $8,
-            microprocessor_mac = $9,
-            sensor_types = $10,
-            wifi_ssid = $11,
-            wifi_password = $12,
-            manufacturer_uuid = $13,
-            origin_facility_addr = $14,
-            product_hash = $15,
-            tx_hash = $16,
-            updated_by = $17,
-            pinata_cid = $18,
-            pinata_pinned_at = $19,
+            microprocessor_mac = $5,
+            sensor_types = $6,
+            wifi_ssid = $7,
+            wifi_password = $8,
+            manufacturer_uuid = $9,
+            product_hash = $10,
+            tx_hash = $11,
+            updated_by = $12,
+            pinata_cid = $13,
+            pinata_pinned_at = $14,
             updated_at = NOW(),
-            status = $20
+            status = $15
       WHERE id = $1
       RETURNING *`,
     [
@@ -138,16 +104,11 @@ export async function updateProductRecord(id, {
       productName,
       productCategory,
       batchId ?? null,
-      requiredStorageTemp ?? null,
-      transportRoutePlanId ?? null,
-      handlingInstructions ?? null,
-      toNullable(expiryDate),
       microprocessorMac ?? null,
       sensorTypes ?? null,
       wifiSSID ?? null,
       encryptedWifiPassword ?? null,
       manufacturerUUID,
-      originFacilityAddr ?? null,
       productHash,
       txHash,
       updatedBy ?? null,

@@ -20,21 +20,31 @@ const optionalString = z
   }, z.string().min(1))
   .optional();
 
+export const PRODUCT_STATUS_VALUES = Object.freeze([
+  "CREATED",
+  "READY TO SHIPMENT",
+  "SHIPMENT ACCEPTED",
+  "SHIPMENT HANDOVERED",
+  "SHIPMENT DELIVERED",
+]);
+
+const optionalStatus = z
+  .preprocess((value) => {
+    const trimmed = toTrimmedString(value);
+    return trimmed === "" ? undefined : trimmed;
+  }, z.enum(PRODUCT_STATUS_VALUES))
+  .optional();
+
 export const ProductPayload = z.object({
   manufacturerUUID: requiredString,
   productName: requiredString,
   productCategory: requiredString,
   batchId: optionalString,
-  requiredStorageTemp: optionalString,
-  transportRoutePlanId: optionalString,
-  handlingInstructions: optionalString,
-  expiryDate: optionalString,
   microprocessorMac: optionalString,
   sensorTypes: optionalString,
   wifiSSID: optionalString,
   wifiPassword: optionalString,
-  originFacilityAddr: optionalString,
-  status: optionalString,
+  status: optionalStatus,
 });
 
 export const ProductUpdatePayload = ProductPayload;

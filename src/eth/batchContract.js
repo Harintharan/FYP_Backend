@@ -35,38 +35,30 @@ function parseReceiptEvent(receipt, eventName) {
   return null;
 }
 
-export async function registerBatchOnChain(batchIdBytes16, payload) {
-  const {
-    productCategory,
-    manufacturerUUID,
-    facility,
-    productionWindow,
-    quantityProduced,
-    releaseStatus,
-  } = payload;
+function toBytes(canonicalPayload) {
+  if (canonicalPayload == null) {
+    throw new TypeError("canonicalPayload is required");
+  }
+  if (canonicalPayload instanceof Uint8Array) {
+    return canonicalPayload;
+  }
+  if (typeof canonicalPayload === "string") {
+    return ethers.toUtf8Bytes(canonicalPayload);
+  }
+  throw new TypeError("canonicalPayload must be a string or Uint8Array");
+}
+
+export async function registerBatchOnChain(batchIdBytes16, canonicalPayload) {
+  const payloadBytes = toBytes(canonicalPayload);
 
   const estimatedGas = await batchRegistry.registerBatch.estimateGas(
     batchIdBytes16,
-    productCategory,
-    manufacturerUUID,
-    facility,
-    productionWindow,
-    quantityProduced,
-    releaseStatus
+    payloadBytes
   );
 
-  const tx = await batchRegistry.registerBatch(
-    batchIdBytes16,
-    productCategory,
-    manufacturerUUID,
-    facility,
-    productionWindow,
-    quantityProduced,
-    releaseStatus,
-    {
-      gasLimit: withSafetyMargin(estimatedGas),
-    }
-  );
+  const tx = await batchRegistry.registerBatch(batchIdBytes16, payloadBytes, {
+    gasLimit: withSafetyMargin(estimatedGas),
+  });
 
   const receipt = await tx.wait();
   const parsed = parseReceiptEvent(receipt, "BatchRegistered");
@@ -81,38 +73,17 @@ export async function registerBatchOnChain(batchIdBytes16, payload) {
   };
 }
 
-export async function updateBatchOnChain(batchIdBytes16, payload) {
-  const {
-    productCategory,
-    manufacturerUUID,
-    facility,
-    productionWindow,
-    quantityProduced,
-    releaseStatus,
-  } = payload;
+export async function updateBatchOnChain(batchIdBytes16, canonicalPayload) {
+  const payloadBytes = toBytes(canonicalPayload);
 
   const estimatedGas = await batchRegistry.updateBatch.estimateGas(
     batchIdBytes16,
-    productCategory,
-    manufacturerUUID,
-    facility,
-    productionWindow,
-    quantityProduced,
-    releaseStatus
+    payloadBytes
   );
 
-  const tx = await batchRegistry.updateBatch(
-    batchIdBytes16,
-    productCategory,
-    manufacturerUUID,
-    facility,
-    productionWindow,
-    quantityProduced,
-    releaseStatus,
-    {
-      gasLimit: withSafetyMargin(estimatedGas),
-    }
-  );
+  const tx = await batchRegistry.updateBatch(batchIdBytes16, payloadBytes, {
+    gasLimit: withSafetyMargin(estimatedGas),
+  });
 
   const receipt = await tx.wait();
   const parsed = parseReceiptEvent(receipt, "BatchUpdated");
@@ -124,24 +95,10 @@ export async function updateBatchOnChain(batchIdBytes16, payload) {
 }
 
 export async function fetchBatchOnChain(batchIdBytes16) {
-  const result = await batchRegistry.getBatch(batchIdBytes16);
-  const hash = result?.[0] ?? result?.hash ?? null;
-  const batch = result?.[1] ?? result?.batch ?? {};
+  const meta = await batchRegistry.getBatch(batchIdBytes16);
 
   return {
-    hash,
-    batch: {
-      productCategory: batch.productCategory,
-      manufacturerUUID: batch.manufacturerUUID,
-      facility: batch.facility,
-      productionWindow: batch.productionWindow,
-      quantityProduced: batch.quantityProduced,
-      releaseStatus: batch.releaseStatus,
-      createdAt: batch.createdAt,
-      updatedAt: batch.updatedAt,
-      createdBy: batch.createdBy,
-      updatedBy: batch.updatedBy,
-    },
+    hash: meta.hash ?? null,
+    meta,
   };
 }
-
