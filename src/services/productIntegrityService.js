@@ -215,6 +215,9 @@ export function formatProductRecord(record) {
     microprocessorMac: record.microprocessor_mac ?? null,
     sensorTypes: record.sensor_types ?? null,
     wifiSSID: record.wifi_ssid ?? null,
+    wifiPassword: toNullableString(
+      decryptIfEncrypted(record.wifi_password ?? record.wifiPassword ?? null)
+    ),
     status: sanitizeStatus(record.status),
     productHash: normalizeHash(record.product_hash ?? null),
     txHash: record.tx_hash ?? null,
