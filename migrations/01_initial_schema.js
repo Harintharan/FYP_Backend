@@ -194,6 +194,8 @@ export const migrate = async (pool) => {
         address TEXT,
         latitude TEXT,
         longitude TEXT,
+        state TEXT,
+        country TEXT,
         owner_uuid TEXT NOT NULL,
         owner_type TEXT NOT NULL,
         checkpoint_type TEXT NOT NULL,

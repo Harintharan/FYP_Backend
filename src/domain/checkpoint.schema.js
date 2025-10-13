@@ -17,6 +17,8 @@ export const CheckpointPayload = z.object({
   address: optionalString,
   latitude: optionalString,
   longitude: optionalString,
+  state: requiredString,
+  country: requiredString,
   ownerUUID: requiredString,
   ownerType: requiredString,
   checkpointType: requiredString,
