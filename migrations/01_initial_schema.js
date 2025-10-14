@@ -216,10 +216,14 @@ export const migrate = async (pool) => {
         shipment_id INT UNIQUE NOT NULL,
         manufacturer_uuid TEXT NOT NULL,
         destination_party_uuid TEXT NOT NULL,
+        state TEXT,
+        country TEXT,
         shipment_items JSONB,
         shipment_hash TEXT,
         tx_hash TEXT,
         created_by TEXT,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_by TEXT,
         updated_at TIMESTAMP
@@ -236,6 +240,8 @@ export const migrate = async (pool) => {
         time_tolerance TEXT NOT NULL,
         expected_ship_date TEXT NOT NULL,
         required_action TEXT NOT NULL,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -257,6 +263,8 @@ export const migrate = async (pool) => {
         acceptance_hash TEXT NOT NULL,
         tx_hash TEXT NOT NULL,
         created_by VARCHAR(100) NOT NULL,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_by VARCHAR(100),
         updated_at TIMESTAMP
@@ -282,6 +290,8 @@ export const migrate = async (pool) => {
         handover_hash TEXT NOT NULL,
         tx_hash TEXT NOT NULL,
         created_by VARCHAR(100) NOT NULL,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_by VARCHAR(100),
         updated_at TIMESTAMP
