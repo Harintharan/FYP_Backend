@@ -94,8 +94,6 @@ export async function createCheckpoint({ payload, registration, wallet }) {
     state: normalized.state ?? null,
     country: normalized.country ?? null,
     ownerUUID: normalized.ownerUUID,
-    ownerType: normalized.ownerType,
-    checkpointType: normalized.checkpointType,
     checkpointHash: payloadHash,
     txHash,
     createdBy:
@@ -192,8 +190,6 @@ export async function updateCheckpointDetails({
     state: normalized.state ?? null,
     country: normalized.country ?? null,
     ownerUUID: normalized.ownerUUID,
-    ownerType: normalized.ownerType,
-    checkpointType: normalized.checkpointType,
     checkpointHash: payloadHash,
     txHash,
     updatedBy:

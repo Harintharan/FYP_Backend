@@ -14,8 +14,6 @@ const CHECKPOINT_FIELDS = [
   "state",
   "country",
   "ownerUUID",
-  "ownerType",
-  "checkpointType",
 ];
 
 const EMPTY = "";
@@ -38,8 +36,6 @@ const coercePayload = (raw) => {
     state: safe(raw.state ?? raw.state_province ?? raw.region),
     country: safe(raw.country),
     ownerUUID: safe(raw.ownerUUID ?? raw.owner_uuid),
-    ownerType: safe(raw.ownerType ?? raw.owner_type),
-    checkpointType: safe(raw.checkpointType ?? raw.checkpoint_type),
   };
 };
 
@@ -131,8 +127,6 @@ export function formatCheckpointRecord(record) {
     state: record.state ?? null,
     country: record.country ?? null,
     ownerUUID: record.owner_uuid ?? record.ownerUUID ?? null,
-    ownerType: record.owner_type ?? record.ownerType ?? null,
-    checkpointType: record.checkpoint_type ?? record.checkpointType ?? null,
     checkpointHash: normalizeHash(record.checkpoint_hash ?? null),
     txHash: record.tx_hash ?? null,
     createdBy: record.created_by ?? null,

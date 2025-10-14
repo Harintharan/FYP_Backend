@@ -20,8 +20,6 @@ export const CheckpointPayload = z.object({
   state: requiredString,
   country: requiredString,
   ownerUUID: requiredString,
-  ownerType: requiredString,
-  checkpointType: requiredString,
 });
 
 export const CheckpointUpdatePayload = CheckpointPayload;

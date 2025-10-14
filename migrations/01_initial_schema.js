@@ -197,8 +197,6 @@ export const migrate = async (pool) => {
         state TEXT,
         country TEXT,
         owner_uuid TEXT NOT NULL,
-        owner_type TEXT NOT NULL,
-        checkpoint_type TEXT NOT NULL,
         checkpoint_hash TEXT NOT NULL,
         tx_hash TEXT NOT NULL,
         created_by TEXT NOT NULL,
