@@ -16,6 +16,7 @@ const REG_TYPE_MAP = {
   MANUFACTURER: 0,
   SUPPLIER: 1,
   WAREHOUSE: 2,
+  CONSUMER: 3,
 };
 
 export async function submitOnChain(

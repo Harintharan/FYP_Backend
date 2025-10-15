@@ -23,7 +23,7 @@ export const migrate = async (pool) => {
       DO $$
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reg_type') THEN
-          CREATE TYPE reg_type AS ENUM ('MANUFACTURER', 'SUPPLIER', 'WAREHOUSE');
+          CREATE TYPE reg_type AS ENUM ('MANUFACTURER', 'SUPPLIER', 'WAREHOUSE', 'CONSUMER');
         END IF;
       END
       $$;

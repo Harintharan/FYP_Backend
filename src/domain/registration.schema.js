@@ -34,9 +34,12 @@ const contactSchema = z.object({
   address: requiredString("contact.address"),
 });
 
-const registrationTypeEnum = z.enum(["MANUFACTURER", "SUPPLIER", "WAREHOUSE"], {
-  required_error: "metadata.smartContractRole is required",
-});
+const registrationTypeEnum = z.enum(
+  ["MANUFACTURER", "SUPPLIER", "WAREHOUSE", "CONSUMER"],
+  {
+    required_error: "metadata.smartContractRole is required",
+  }
+);
 
 const metadataSchema = z.object({
   publicKey: z
@@ -83,6 +86,15 @@ const warehouseDetailsSchema = z.object({
     .max(3, "details.countryOfIncorporation must be at most 3 characters"),
 });
 
+const consumerDetailsSchema = z
+  .object({
+    notes: z
+      .string()
+      .max(500, "details.notes must be at most 500 characters")
+      .optional(),
+  })
+  .optional();
+
 const baseRegistrationSchema = z.object({
   identification: identificationSchema,
   contact: contactSchema,
@@ -105,27 +117,35 @@ const warehouseSchema = baseRegistrationSchema.extend({
   details: warehouseDetailsSchema,
 });
 
-export const RegistrationPayload = z.discriminatedUnion("type", [
-  manufacturerSchema,
-  supplierSchema,
-  warehouseSchema,
-]).superRefine((value, ctx) => {
-  const expectedRole = value.type;
-  if (value.metadata.smartContractRole !== expectedRole) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["metadata", "smartContractRole"],
-      message: `metadata.smartContractRole must match ${expectedRole}`,
-    });
-  }
-
-  const identificationKey = value.identification?.publicKey ?? "";
-  const metadataKey = value.metadata?.publicKey ?? "";
-  if (identificationKey.toLowerCase() !== metadataKey.toLowerCase()) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["metadata", "publicKey"],
-      message: "metadata.publicKey must match identification.publicKey",
-    });
-  }
+const consumerSchema = baseRegistrationSchema.extend({
+  type: z.literal("CONSUMER"),
+  details: consumerDetailsSchema,
 });
+
+export const RegistrationPayload = z
+  .discriminatedUnion("type", [
+    manufacturerSchema,
+    supplierSchema,
+    warehouseSchema,
+    consumerSchema,
+  ])
+  .superRefine((value, ctx) => {
+    const expectedRole = value.type;
+    if (value.metadata.smartContractRole !== expectedRole) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["metadata", "smartContractRole"],
+        message: `metadata.smartContractRole must match ${expectedRole}`,
+      });
+    }
+
+    const identificationKey = value.identification?.publicKey ?? "";
+    const metadataKey = value.metadata?.publicKey ?? "";
+    if (identificationKey.toLowerCase() !== metadataKey.toLowerCase()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["metadata", "publicKey"],
+        message: "metadata.publicKey must match identification.publicKey",
+      });
+    }
+  });

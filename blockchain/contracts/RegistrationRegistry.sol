@@ -7,7 +7,8 @@ contract RegistrationRegistry {
     enum RegistrationType {
         MANUFACTURER,
         SUPPLIER,
-        WAREHOUSE
+        WAREHOUSE,
+        CONSUMER
     }
 
     struct Registration {
@@ -40,7 +41,7 @@ contract RegistrationRegistry {
         string calldata payloadCanonicalJson,
         bool isUpdate
     ) external {
-        if (regType > uint8(RegistrationType.WAREHOUSE)) {
+        if (regType > uint8(RegistrationType.CONSUMER)) {
             revert InvalidRegistrationType(regType);
         }
 
