@@ -11,14 +11,17 @@ const identificationSchema = z.object({
   countryOfIncorporation: requiredString(
     "identification.countryOfIncorporation"
   )
-    .min(2, "identification.countryOfIncorporation must be at least 2 characters")
-    .max(3, "identification.countryOfIncorporation must be at most 3 characters"),
+    .min(
+      2,
+      "identification.countryOfIncorporation must be at least 2 characters"
+    )
+    .max(
+      3,
+      "identification.countryOfIncorporation must be at most 3 characters"
+    ),
   publicKey: z
     .string({ required_error: "identification.publicKey is required" })
-    .regex(
-      /^0x[0-9a-fA-F]+$/,
-      "identification.publicKey must be a hex string"
-    ),
+    .regex(/^0x[0-9a-fA-F]+$/, "identification.publicKey must be a hex string"),
 });
 
 const contactSchema = z.object({
@@ -31,20 +34,34 @@ const contactSchema = z.object({
   address: requiredString("contact.address"),
 });
 
+const registrationTypeEnum = z.enum(["MANUFACTURER", "SUPPLIER", "WAREHOUSE"], {
+  required_error: "metadata.smartContractRole is required",
+});
+
 const metadataSchema = z.object({
   publicKey: z
     .string({ required_error: "metadata.publicKey is required" })
     .regex(/^0x[0-9a-fA-F]+$/, "metadata.publicKey must be a hex string"),
-  smartContractRole: z.enum(["MANUFACTURER", "SUPPLIER", "WAREHOUSE"], {
-    required_error: "metadata.smartContractRole is required",
-  }),
+  smartContractRole: registrationTypeEnum,
   dateOfRegistration: requiredString("metadata.dateOfRegistration"),
+});
+
+const checkpointSchema = z.object({
+  name: requiredString("checkpoint.name"),
+  address: requiredString("checkpoint.address"),
+  latitude: requiredString("checkpoint.latitude"),
+  longitude: requiredString("checkpoint.longitude"),
+  state: requiredString("checkpoint.state"),
+  country: requiredString("checkpoint.country"),
 });
 
 const manufacturerDetailsSchema = z.object({
   productCategoriesManufactured: z
     .array(requiredString("details.productCategoriesManufactured item"))
-    .min(1, "details.productCategoriesManufactured must contain at least one item"),
+    .min(
+      1,
+      "details.productCategoriesManufactured must contain at least one item"
+    ),
   certifications: z
     .array(requiredString("details.certifications item"))
     .min(1, "details.certifications must contain at least one item"),
@@ -66,23 +83,49 @@ const warehouseDetailsSchema = z.object({
     .max(3, "details.countryOfIncorporation must be at most 3 characters"),
 });
 
-const baseSchema = z.object({
+const baseRegistrationSchema = z.object({
   identification: identificationSchema,
   contact: contactSchema,
   metadata: metadataSchema,
+  checkpoint: checkpointSchema,
+});
+
+const manufacturerSchema = baseRegistrationSchema.extend({
+  type: z.literal("MANUFACTURER"),
+  details: manufacturerDetailsSchema,
+});
+
+const supplierSchema = baseRegistrationSchema.extend({
+  type: z.literal("SUPPLIER"),
+  details: supplierDetailsSchema,
+});
+
+const warehouseSchema = baseRegistrationSchema.extend({
+  type: z.literal("WAREHOUSE"),
+  details: warehouseDetailsSchema,
 });
 
 export const RegistrationPayload = z.discriminatedUnion("type", [
-  baseSchema.extend({
-    type: z.literal("MANUFACTURER"),
-    details: manufacturerDetailsSchema,
-  }),
-  baseSchema.extend({
-    type: z.literal("SUPPLIER"),
-    details: supplierDetailsSchema,
-  }),
-  baseSchema.extend({
-    type: z.literal("WAREHOUSE"),
-    details: warehouseDetailsSchema,
-  }),
-]);
+  manufacturerSchema,
+  supplierSchema,
+  warehouseSchema,
+]).superRefine((value, ctx) => {
+  const expectedRole = value.type;
+  if (value.metadata.smartContractRole !== expectedRole) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["metadata", "smartContractRole"],
+      message: `metadata.smartContractRole must match ${expectedRole}`,
+    });
+  }
+
+  const identificationKey = value.identification?.publicKey ?? "";
+  const metadataKey = value.metadata?.publicKey ?? "";
+  if (identificationKey.toLowerCase() !== metadataKey.toLowerCase()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["metadata", "publicKey"],
+      message: "metadata.publicKey must match identification.publicKey",
+    });
+  }
+});

@@ -3,12 +3,7 @@ import { stableStringify } from "../utils/canonicalize.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { registry } from "../eth/contract.js";
 import { IntegrityError } from "../errors/registrationErrors.js";
-
-export function normalizeHash(value) {
-  if (!value) return null;
-  const trimmed = value.trim().toLowerCase();
-  return trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
-}
+import { normalizeHash } from "../utils/hash.js";
 
 export function formatZodError(err) {
   return err.issues.map((issue) => ({

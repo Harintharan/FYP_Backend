@@ -7,7 +7,7 @@ import {
   getAllSegmentAcceptances as getAllSegmentAcceptanceRecords,
 } from "../models/ShipmentSegmentAcceptanceModel.js";
 import { chain, operatorWallet, contracts } from "../config.js";
-import { backupRecord } from "../services/pinataBackupService.js";
+import { backupRecordSafely } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -168,22 +168,14 @@ export async function registerSegmentAcceptance(req, res) {
       created_by: wallet.address,
     };
 
-    let pinataBackup;
-    try {
-      pinataBackup = await backupRecord(
-        "shipment_segment_acceptance",
-        createPayload,
-        {
-          operation: "create",
-          identifier: blockchainAcceptanceId,
-        }
-      );
-    } catch (backupErr) {
-      console.error(
-        "⚠️ Failed to back up segment acceptance to Pinata:",
-        backupErr
-      );
-    }
+    const pinataBackup = await backupRecordSafely({
+      entity: "shipment_segment_acceptance",
+      record: createPayload,
+      walletAddress: wallet.address,
+      operation: "create",
+      identifier: blockchainAcceptanceId,
+      errorMessage: "⚠️ Failed to back up segment acceptance to Pinata:",
+    });
 
     const saved = await createSegmentAcceptance({
       ...createPayload,
@@ -261,25 +253,17 @@ export async function updateSegmentAcceptance(req, res) {
       updated_by: wallet.address,
     };
 
-    let pinataBackup;
-    try {
-      pinataBackup = await backupRecord(
-        "shipment_segment_acceptance",
-        {
-          ...existing,
-          ...updatePayload,
-        },
-        {
-          operation: "update",
-          identifier: acceptance_id,
-        }
-      );
-    } catch (backupErr) {
-      console.error(
-        "⚠️ Failed to back up segment acceptance update to Pinata:",
-        backupErr
-      );
-    }
+    const pinataBackup = await backupRecordSafely({
+      entity: "shipment_segment_acceptance",
+      record: {
+        ...existing,
+        ...updatePayload,
+      },
+      walletAddress: wallet.address,
+      operation: "update",
+      identifier: acceptance_id,
+      errorMessage: "⚠️ Failed to back up segment acceptance update to Pinata:",
+    });
 
     updatePayload.pinata_cid =
       pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
@@ -378,3 +362,5 @@ export async function getAllSegmentAcceptances(_req, res) {
     res.status(500).json({ message: "Server error" });
   }
 }
+
+

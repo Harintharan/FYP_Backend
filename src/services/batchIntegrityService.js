@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import { stableStringify } from "../utils/canonicalize.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { fetchBatchOnChain } from "../eth/batchContract.js";
-import { normalizeHash } from "./registrationIntegrityService.js";
+import { normalizeHash } from "../utils/hash.js";
 
 function firstDefined(...values) {
   for (const value of values) {

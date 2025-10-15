@@ -15,9 +15,9 @@ import {
   findBatchById,
   listBatchesByManufacturerUuid,
 } from "../models/batchModel.js";
-import { normalizeHash } from "./registrationIntegrityService.js";
+import { normalizeHash } from "../utils/hash.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
-import { backupRecord } from "./pinataBackupService.js";
+import { backupRecordSafely } from "./pinataBackupService.js";
 import * as batchErrors from "../errors/batchErrors.js";
 
 function sanitizeOptional(value) {
@@ -101,26 +101,20 @@ export async function createBatch({ payload, registration, wallet }) {
     });
   }
 
-  let pinataBackup;
-  try {
-    pinataBackup = await backupRecord(
-      "batch",
-      {
-        id: batchId,
-        ...normalized,
-        payloadCanonical: canonical,
-        payloadHash,
-        txHash,
-        walletAddress: wallet?.walletAddress ?? null,
-      },
-      {
-        operation: "create",
-        identifier: batchId,
-      }
-    );
-  } catch (backupErr) {
-    console.error("?? Failed to back up batch to Pinata:", backupErr);
-  }
+  const pinataBackup = await backupRecordSafely({
+    entity: "batch",
+    record: {
+      id: batchId,
+      ...normalized,
+      payloadCanonical: canonical,
+      payloadHash,
+      txHash,
+    },
+    walletAddress: wallet?.walletAddress ?? null,
+    operation: "create",
+    identifier: batchId,
+    errorMessage: "⚠️ Failed to back up batch to Pinata:",
+  });
 
   const record = await insertBatch({
     id: batchId,
@@ -200,26 +194,20 @@ export async function updateBatchDetails({
     });
   }
 
-  let pinataBackup;
-  try {
-    pinataBackup = await backupRecord(
-      "batch",
-      {
-        id,
-        ...normalized,
-        payloadCanonical: canonical,
-        payloadHash,
-        txHash,
-        walletAddress: wallet?.walletAddress ?? null,
-      },
-      {
-        operation: "update",
-        identifier: id,
-      }
-    );
-  } catch (backupErr) {
-    console.error("?? Failed to back up batch update to Pinata:", backupErr);
-  }
+  const pinataBackup = await backupRecordSafely({
+    entity: "batch",
+    record: {
+      id,
+      ...normalized,
+      payloadCanonical: canonical,
+      payloadHash,
+      txHash,
+    },
+    walletAddress: wallet?.walletAddress ?? null,
+    operation: "update",
+    identifier: id,
+    errorMessage: "⚠️ Failed to back up batch update to Pinata:",
+  });
 
   const record = await updateBatchRecord({
     id,

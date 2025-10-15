@@ -28,6 +28,20 @@ export class ValidationError extends RegistrationError {
   }
 }
 
+export class DuplicateRegistrationError extends RegistrationError {
+  constructor() {
+    super("Registration already exists for this user", 409);
+    this.name = "DuplicateRegistrationError";
+  }
+}
+
+export class RegistrationOnChainDuplicateError extends RegistrationError {
+  constructor() {
+    super("Registration already exists on-chain for this UUID", 409);
+    this.name = "RegistrationOnChainDuplicateError";
+  }
+}
+
 const BUILTIN_STATUS = {
   ValidationError: 400,
   IntegrityError: 409,

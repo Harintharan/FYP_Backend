@@ -4,7 +4,7 @@ import {
   ProductPayload,
   PRODUCT_STATUS_VALUES,
 } from "../domain/product.schema.js";
-import { normalizeHash } from "./registrationIntegrityService.js";
+import { normalizeHash } from "../utils/hash.js";
 import { fetchProductOnChain } from "../eth/productContract.js";
 import { decrypt } from "../utils/encryptionHelper.js";
 import { ProductErrorCodes, hashMismatch } from "../errors/productErrors.js";

@@ -7,7 +7,7 @@ import {
   getAllHandovers as getAllHandoverRecords,
 } from "../models/ShipmentSegmentHandoverModel.js";
 import { chain, operatorWallet, contracts } from "../config.js";
-import { backupRecord } from "../services/pinataBackupService.js";
+import { backupRecordSafely } from "../services/pinataBackupService.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
@@ -116,22 +116,14 @@ export async function registerHandover(req, res) {
       gps_lon: normalizeNumber(data.gps_lon),
     };
 
-    let pinataBackup;
-    try {
-      pinataBackup = await backupRecord(
-        "shipment_segment_handover",
-        createPayload,
-        {
-          operation: "create",
-          identifier: handoverId,
-        }
-      );
-    } catch (backupErr) {
-      console.error(
-        "⚠️ Failed to back up handover to Pinata:",
-        backupErr
-      );
-    }
+    const pinataBackup = await backupRecordSafely({
+      entity: "shipment_segment_handover",
+      record: createPayload,
+      walletAddress: wallet.address,
+      operation: "create",
+      identifier: handoverId,
+      errorMessage: "⚠️ Failed to back up handover to Pinata:",
+    });
 
     const saved = await createHandover({
       ...createPayload,
@@ -190,25 +182,17 @@ export async function updateHandover(req, res) {
       gps_lon: normalizeNumber(data.gps_lon),
     };
 
-    let pinataBackup;
-    try {
-      pinataBackup = await backupRecord(
-        "shipment_segment_handover",
-        {
-          ...existing,
-          ...updatePayload,
-        },
-        {
-          operation: "update",
-          identifier: handover_id,
-        }
-      );
-    } catch (backupErr) {
-      console.error(
-        "⚠️ Failed to back up handover update to Pinata:",
-        backupErr
-      );
-    }
+    const pinataBackup = await backupRecordSafely({
+      entity: "shipment_segment_handover",
+      record: {
+        ...existing,
+        ...updatePayload,
+      },
+      walletAddress: wallet.address,
+      operation: "update",
+      identifier: handover_id,
+      errorMessage: "⚠️ Failed to back up handover update to Pinata:",
+    });
 
     updatePayload.pinata_cid =
       pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;

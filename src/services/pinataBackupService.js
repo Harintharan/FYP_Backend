@@ -1,33 +1,34 @@
 import { PinataSDK } from "pinata";
-import { HttpsProxyAgent } from "https-proxy-agent";
 import { setGlobalDispatcher, ProxyAgent } from "undici";
 import { pinata as pinataConfig } from "../config.js";
 
-// Configure global dispatcher with proxy if needed
-if (pinataConfig.useProxy && pinataConfig.proxyUrl) {
-  const proxyAgent = new ProxyAgent(pinataConfig.proxyUrl);
-  setGlobalDispatcher(proxyAgent);
-  console.log(`🌐 Configured Pinata to use proxy: ${pinataConfig.proxyUrl}`);
-} else if (pinataConfig.proxyUrl && !pinataConfig.useProxy) {
-  console.log(`🚫 Proxy available but disabled: ${pinataConfig.proxyUrl}`);
-} else {
-  console.log(`🌍 Pinata configured for direct connection (no proxy)`);
+const pinata = createPinataClient(pinataConfig);
+
+function createPinataClient(config) {
+  configureProxy(config);
+  ensureJwt(config.jwtKey);
+  return new PinataSDK({ pinataJwt: config.jwtKey });
 }
 
-function buildPinataConfig(config) {
-  const pinataConfig = {};
-
-  if (config.jwtKey) {
-    pinataConfig.pinataJwt = config.jwtKey;
+function configureProxy(config) {
+  if (config.useProxy && config.proxyUrl) {
+    setGlobalDispatcher(new ProxyAgent(config.proxyUrl));
+    console.log(`🌐 Pinata proxy enabled: ${config.proxyUrl}`);
+    return;
   }
 
-  // Note: The new SDK primarily uses JWT authentication
-  // If you need to use API keys, you might need to handle them differently
-
-  return pinataConfig;
+  if (config.proxyUrl && !config.useProxy) {
+    console.log(`🚫 Pinata proxy disabled by configuration: ${config.proxyUrl}`);
+  } else {
+    console.log("🌍 Pinata configured for direct connection");
+  }
 }
 
-const pinataClient = new PinataSDK(buildPinataConfig(pinataConfig));
+function ensureJwt(jwtKey) {
+  if (!jwtKey) {
+    throw new Error("PINATA_JWT_KEY is required to use Pinata");
+  }
+}
 
 function resolveIdentifier(entity, record, explicitId) {
   if (explicitId !== undefined && explicitId !== null) {
@@ -49,83 +50,82 @@ function resolveIdentifier(entity, record, explicitId) {
     `${entity}UUID`,
   ];
 
-  for (const key of candidates) {
-    if (record[key] !== undefined && record[key] !== null) {
-      return record[key];
-    }
-  }
-
-  return null;
+  return candidates
+    .map((key) => record[key])
+    .find((value) => value !== undefined && value !== null) ?? null;
 }
 
-export async function backupRecord(entity, record, options = {}) {
-  if (!entity || typeof entity !== "string") {
-    throw new Error("entity is required to back up data to Pinata");
-  }
-
-  if (!record) {
-    throw new Error("record is required to back up data to Pinata");
-  }
-
-  const {
-    operation = "create",
-    identifier,
-    metadata = {},
-    pinataOptions = {},
-  } = options;
-
-  const resolvedIdentifier = resolveIdentifier(entity, record, identifier);
-
-  const payload = {
+function buildPayload({ entity, operation, identifier, record }) {
+  return {
     entity,
     operation,
-    identifier: resolvedIdentifier,
+    identifier,
     record,
     backupTimestamp: new Date().toISOString(),
   };
+}
 
-  const providedMetadata = metadata || {};
-  const providedKeyvalues = providedMetadata.keyvalues || {};
-  const incomingMetadata = pinataOptions.pinataMetadata || {};
-  const incomingKeyvalues = incomingMetadata.keyvalues || {};
+function buildMetadata({ entity, operation, identifier }, metadata = {}, pinataOptions = {}) {
+  const provided = metadata ?? {};
+  const providedKeyvalues = provided.keyvalues ?? {};
+  const incomingMetadata = pinataOptions.pinataMetadata ?? {};
+  const incomingKeyvalues = incomingMetadata.keyvalues ?? {};
 
-  const mergedKeyvalues = {
+  const keyvalues = {
     entity,
     operation,
     ...incomingKeyvalues,
     ...providedKeyvalues,
   };
 
-  if (resolvedIdentifier !== null && resolvedIdentifier !== undefined) {
-    mergedKeyvalues.identifier = String(resolvedIdentifier);
+  if (identifier !== null && identifier !== undefined) {
+    keyvalues.identifier = String(identifier);
   }
 
-  const mergedMetadata = {
+  return {
     name:
-      providedMetadata.name ||
-      incomingMetadata.name ||
-      `${entity}-${operation}-${resolvedIdentifier ?? Date.now()}`,
-    keyvalues: mergedKeyvalues,
+      provided.name ??
+      incomingMetadata.name ??
+      `${entity}-${operation}-${identifier ?? Date.now()}`,
+    keyvalues,
   };
+}
 
-  // Create a JSON file from the payload
-  const jsonString = JSON.stringify(payload, null, 2);
-  const file = new File([jsonString], mergedMetadata.name + ".json", {
-    type: "application/json",
-  });
+export async function backupRecord(entity, record, options = {}) {
+  assertEntity(entity);
+  assertRecord(record);
 
-  // Upload using the new SDK
+  const {
+    operation = "create",
+    identifier,
+    metadata,
+    pinataOptions,
+  } = options;
+
+  const resolvedIdentifier = resolveIdentifier(entity, record, identifier);
+  const payload = buildPayload({ entity, operation, identifier: resolvedIdentifier, record });
+  const finalMetadata = buildMetadata(
+    { entity, operation, identifier: resolvedIdentifier },
+    metadata,
+    pinataOptions
+  );
+
+  const file = new File(
+    [JSON.stringify(payload, null, 2)],
+    `${finalMetadata.name}.json`,
+    { type: "application/json" }
+  );
+
   try {
-    console.log(`📤 Attempting to upload to Pinata: ${mergedMetadata.name}`);
+    console.log(`📤 Uploading ${finalMetadata.name} to Pinata`);
 
-    const upload = await pinataClient.upload.file(file).addMetadata({
-      name: mergedMetadata.name,
-      keyValues: mergedKeyvalues,
+    const upload = await pinata.upload.file(file).addMetadata({
+      name: finalMetadata.name,
+      keyValues: finalMetadata.keyvalues,
     });
 
-    console.log(`✅ Successfully uploaded to Pinata: ${upload.cid}`);
+    console.log(`✅ Pinata upload successful: ${upload.cid}`);
 
-    // Return in similar format to the old SDK
     return {
       IpfsHash: upload.cid,
       PinSize: upload.size,
@@ -134,16 +134,60 @@ export async function backupRecord(entity, record, options = {}) {
       ...upload,
     };
   } catch (error) {
-    console.error(`❌ Pinata upload failed:`, {
-      message: error.message,
-      stack: error.stack,
-      cause: error.cause,
-      proxyConfigured: !!pinataConfig.proxyUrl,
-    });
+    logPinataFailure(error);
     throw new Error(`Failed to upload to Pinata: ${error.message}`);
   }
 }
 
+function assertEntity(entity) {
+  if (!entity || typeof entity !== "string") {
+    throw new Error("entity is required to back up data to Pinata");
+  }
+}
+
+function assertRecord(record) {
+  if (!record) {
+    throw new Error("record is required to back up data to Pinata");
+  }
+}
+
+function logPinataFailure(error) {
+  console.error("❌ Pinata upload failed:", {
+    message: error.message,
+    stack: error.stack,
+    cause: error.cause,
+    proxyConfigured: !!pinataConfig.proxyUrl,
+  });
+}
+
 export function getPinataClient() {
-  return pinataClient;
+  return pinata;
+}
+
+export async function backupRecordSafely({
+  entity,
+  record,
+  walletAddress = null,
+  operation = "create",
+  identifier,
+  metadata,
+  pinataOptions,
+  errorMessage = "⚠️ Failed to back up record to Pinata:",
+}) {
+  const payload = {
+    ...record,
+    walletAddress: walletAddress ?? record?.walletAddress ?? null,
+  };
+
+  try {
+    return await backupRecord(entity, payload, {
+      operation,
+      identifier,
+      metadata,
+      pinataOptions,
+    });
+  } catch (err) {
+    console.error(errorMessage, err);
+    return null;
+  }
 }

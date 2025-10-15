@@ -1,5 +1,12 @@
 import { query } from "../db.js";
 
+function resolveExecutor(dbClient) {
+  if (dbClient && typeof dbClient.query === "function") {
+    return (text, params) => dbClient.query(text, params);
+  }
+  return query;
+}
+
 function toNullable(value) {
   if (value === undefined || value === null) {
     return null;
@@ -23,8 +30,9 @@ export async function insertCheckpoint({
   createdBy,
   pinataCid,
   pinataPinnedAt,
-}) {
-  const { rows } = await query(
+}, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `INSERT INTO checkpoint_registry (
        id,
        name,
@@ -80,8 +88,9 @@ export async function updateCheckpointRecord(id, {
   updatedBy,
   pinataCid,
   pinataPinnedAt,
-}) {
-  const { rows } = await query(
+}, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `UPDATE checkpoint_registry
         SET name = $2,
             address = $3,
@@ -117,8 +126,9 @@ export async function updateCheckpointRecord(id, {
   return rows[0] ?? null;
 }
 
-export async function findCheckpointById(id) {
-  const { rows } = await query(
+export async function findCheckpointById(id, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `SELECT * FROM checkpoint_registry WHERE id = $1 LIMIT 1`,
     [id]
   );

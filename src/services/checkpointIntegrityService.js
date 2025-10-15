@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { stableStringify } from "../utils/canonicalize.js";
 import { CheckpointPayload } from "../domain/checkpoint.schema.js";
-import { normalizeHash } from "./registrationIntegrityService.js";
+import { normalizeHash } from "../utils/hash.js";
 import { fetchCheckpointOnChain } from "../eth/checkpointContract.js";
 import { CheckpointErrorCodes, hashMismatch } from "../errors/checkpointErrors.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
@@ -40,8 +40,14 @@ const coercePayload = (raw) => {
 };
 
 export function normalizeCheckpointPayload(rawPayload, defaults = {}) {
-  const coerced = { ...defaults, ...coercePayload(rawPayload) };
-  return CheckpointPayload.parse(coerced);
+  const base = { ...defaults };
+  const coerced = coercePayload(rawPayload);
+  for (const [key, value] of Object.entries(coerced)) {
+    if (value !== undefined) {
+      base[key] = value;
+    }
+  }
+  return CheckpointPayload.parse(base);
 }
 
 export function buildCheckpointCanonicalPayload(checkpointId, payload) {

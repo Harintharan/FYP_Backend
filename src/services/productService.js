@@ -23,9 +23,9 @@ import {
   registerProductOnChain,
   updateProductOnChain,
 } from "../eth/productContract.js";
-import { normalizeHash } from "./registrationIntegrityService.js";
+import { normalizeHash } from "../utils/hash.js";
 import { encrypt } from "../utils/encryptionHelper.js";
-import { backupRecord } from "./pinataBackupService.js";
+import { backupRecordSafely } from "./pinataBackupService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
 function ensureManufacturerAccess(registration, manufacturerUUID) {
@@ -72,26 +72,20 @@ export async function createProduct({ payload, registration, wallet }) {
     });
   }
 
-  let pinataBackup;
-  try {
-    pinataBackup = await backupRecord(
-      "product",
-      {
-        id: productId,
-        payloadCanonical: canonical,
-        payloadHash,
-        payload: normalized,
-        txHash,
-        walletAddress: wallet?.walletAddress ?? null,
-      },
-      {
-        operation: "create",
-        identifier: productId,
-      }
-    );
-  } catch (err) {
-    console.error("⚠️ Failed to back up product to Pinata:", err);
-  }
+  const pinataBackup = await backupRecordSafely({
+    entity: "product",
+    record: {
+      id: productId,
+      payloadCanonical: canonical,
+      payloadHash,
+      payload: normalized,
+      txHash,
+    },
+    walletAddress: wallet?.walletAddress ?? null,
+    operation: "create",
+    identifier: productId,
+    errorMessage: "⚠️ Failed to back up product to Pinata:",
+  });
 
   const encryptedWifiPassword = normalized.wifiPassword
     ? encrypt(normalized.wifiPassword)
@@ -180,26 +174,20 @@ export async function updateProductDetails({
     });
   }
 
-  let pinataBackup;
-  try {
-    pinataBackup = await backupRecord(
-      "product",
-      {
-        id,
-        payloadCanonical: canonical,
-        payloadHash,
-        payload: normalized,
-        txHash,
-        walletAddress: wallet?.walletAddress ?? null,
-      },
-      {
-        operation: "update",
-        identifier: id,
-      }
-    );
-  } catch (err) {
-    console.error("⚠️ Failed to back up product update to Pinata:", err);
-  }
+  const pinataBackup = await backupRecordSafely({
+    entity: "product",
+    record: {
+      id,
+      payloadCanonical: canonical,
+      payloadHash,
+      payload: normalized,
+      txHash,
+    },
+    walletAddress: wallet?.walletAddress ?? null,
+    operation: "update",
+    identifier: id,
+    errorMessage: "⚠️ Failed to back up product update to Pinata:",
+  });
 
   const encryptedWifiPassword = normalized.wifiPassword
     ? encrypt(normalized.wifiPassword)

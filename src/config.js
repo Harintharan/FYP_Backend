@@ -50,6 +50,7 @@ const baseEnvVars = {
   PINATA_JWT: process.env.PINATA_JWT,
   PINATA_PROXY_URL: process.env.PINATA_PROXY_URL,
   PINATA_USE_PROXY: process.env.PINATA_USE_PROXY,
+  DEFAULT_MAX_PAYLOAD_BYTES: process.env.DEFAULT_MAX_PAYLOAD_BYTES,
 };
 
 const required = [
@@ -236,3 +237,13 @@ export const pinata = {
     baseEnvVars.PINATA_USE_PROXY === "true" ||
     baseEnvVars.PINATA_USE_PROXY === "1",
 };
+
+const parsedRegistrationPayloadLimit = baseEnvVars.DEFAULT_MAX_PAYLOAD_BYTES
+  ? Number.parseInt(baseEnvVars.DEFAULT_MAX_PAYLOAD_BYTES, 10)
+  : Number.NaN;
+
+export const registrationPayloadMaxBytes =
+  Number.isFinite(parsedRegistrationPayloadLimit) &&
+  parsedRegistrationPayloadLimit > 0
+    ? parsedRegistrationPayloadLimit
+    : 8192;
