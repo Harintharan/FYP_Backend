@@ -9,8 +9,18 @@ const toTrimmed = (value) => {
   return trimmed.length === 0 ? undefined : trimmed;
 };
 
-const requiredString = z.preprocess(toTrimmed, z.string().min(1, "Value is required"));
+const requiredString = z.preprocess(
+  toTrimmed,
+  z.string().min(1, "Value is required")
+);
 const optionalString = z.preprocess(toTrimmed, z.string().min(1)).optional();
+const ownerUuidString = z.preprocess(
+  toTrimmed,
+  z
+    .string({ required_error: "ownerUUID is required" })
+    .uuid("ownerUUID must be a valid UUID")
+    .transform((value) => value.toLowerCase())
+);
 
 export const CheckpointPayload = z.object({
   name: requiredString,
@@ -19,7 +29,7 @@ export const CheckpointPayload = z.object({
   longitude: optionalString,
   state: requiredString,
   country: requiredString,
-  ownerUUID: requiredString,
+  ownerUUID: ownerUuidString,
 });
 
 export const CheckpointUpdatePayload = CheckpointPayload;

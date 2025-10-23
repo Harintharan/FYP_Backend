@@ -9,8 +9,8 @@ import {
 const router = Router();
 
 router.post("/shipments", registerShipment);
-router.put("/shipments/:shipment_id", updateShipment);
-router.get("/shipments/:shipment_id", getShipment);
+router.put("/shipments/:id", updateShipment);
+router.get("/shipments/:id", getShipment);
 router.get("/shipments", getAllShipments);
 
 export default router;

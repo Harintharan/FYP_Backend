@@ -1,12 +1,12 @@
 const hre = require("hardhat");
 
 async function main() {
-  const factory = await hre.ethers.getContractFactory("ShipmentSegmentAcceptance");
+  const factory = await hre.ethers.getContractFactory("ShipmentSegmentRegistry");
   const contract = await factory.deploy();
   await contract.waitForDeployment();
 
   console.log(
-    "ShipmentSegmentAcceptance deployed to:",
+    "ShipmentSegmentRegistry deployed to:",
     await contract.getAddress()
   );
 }

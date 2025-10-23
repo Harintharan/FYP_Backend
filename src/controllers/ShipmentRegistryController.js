@@ -1,5 +1,4 @@
-import { ethers } from "ethers";
-import ShipmentRegistryArtifact from "../../blockchain/artifacts/contracts/ShipmentRegistry.sol/ShipmentRegistry.json" with { type: "json" };
+import { randomUUID } from "node:crypto";
 import {
   createShipment,
   updateShipment as updateShipmentRecord,
@@ -7,62 +6,74 @@ import {
   getAllShipments as getAllShipmentRecords,
 } from "../models/ShipmentRegistryModel.js";
 import {
-  addCheckpoint,
-  getByShipment,
-  deleteByShipment,
-} from "../models/ShipmentHandoverCheckpointModel.js";
+  findProductById,
+  listProductsByShipmentUuid,
+  assignProductToShipment,
+  clearProductsFromShipment,
+} from "../models/ProductRegistryModel.js";
+import {
+  createShipmentSegment,
+  listShipmentSegmentsForShipment,
+  deleteShipmentSegmentsByShipmentId,
+} from "../services/shipmentSegmentService.js";
 import { query } from "../db.js";
-import { chain, operatorWallet, contracts } from "../config.js";
 import { backupRecord } from "../services/pinataBackupService.js";
-
-const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
-const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
-const contractABI = ShipmentRegistryArtifact.abi;
-const contract = new ethers.Contract(
-  contracts.shipmentRegistry,
-  contractABI,
-  wallet
-);
-
-function computeShipmentHash(shipment, checkpoints) {
-  const manufacturer = shipment.manufacturer_uuid || shipment.manufacturerUUID;
-  const destination =
-    shipment.destination_party_uuid || shipment.destinationPartyUUID;
-
-  const normalizedCheckpoints = Array.isArray(checkpoints) ? checkpoints : [];
-  const checkpointsStr = normalizedCheckpoints
-    .map((cp) =>
-      [
-        cp.start_checkpoint_id,
-        cp.end_checkpoint_id,
-        cp.estimated_arrival_date,
-        cp.time_tolerance,
-        cp.expected_ship_date,
-        cp.required_action,
-      ].join(",")
-    )
-    .join("|");
-
-  let items = [];
-  if (shipment.shipmentItems) {
-    items = shipment.shipmentItems;
-  } else if (shipment.shipment_items) {
-    items =
-      typeof shipment.shipment_items === "string"
-        ? JSON.parse(shipment.shipment_items)
-        : shipment.shipment_items;
+import { uuidToBytes16Hex } from "../utils/uuidHex.js";
+import {
+  prepareShipmentPersistence,
+  ensureShipmentOnChainIntegrity,
+  formatShipmentRecord,
+} from "../services/shipmentIntegrityService.js";
+import {
+  registerShipmentOnChain,
+  updateShipmentOnChain,
+  shipmentOperatorAddress,
+} from "../eth/shipmentContract.js";
+import { normalizeHash } from "../utils/hash.js";
+import { hashMismatch, ShipmentErrorCodes } from "../errors/shipmentErrors.js";
+const PRODUCT_STATUS_READY_FOR_SHIPMENT = "PRODUCT_READY_FOR_SHIPMENT";
+function normalizeShipmentResponse(payload) {
+  if (!payload || typeof payload !== "object") {
+    return payload;
   }
-  const itemsStr = items
-    .map((item) => `${item.product_uuid},${item.quantity}`)
-    .join("|");
-
-  const joined = [manufacturer, destination, checkpointsStr, itemsStr].join(
-    "|"
-  );
-
-  return ethers.keccak256(ethers.toUtf8Bytes(joined));
+  const consumerValue =
+    payload.consumer_uuid ??
+    payload.consumerUUID ??
+    payload.destination_party_uuid ??
+    payload.destinationPartyUUID ??
+    null;
+  return {
+    ...payload,
+    consumerUUID: consumerValue,
+    destinationPartyUUID: consumerValue,
+  };
 }
-
+function buildCheckpointsFromSegments(segments) {
+  if (!Array.isArray(segments)) {
+    return [];
+  }
+  return segments.map((segment) => ({
+    start_checkpoint_id: segment.startCheckpointId ?? null,
+    start_name: segment.startName ?? null,
+    end_checkpoint_id: segment.endCheckpointId ?? null,
+    end_name: segment.endName ?? null,
+    estimated_arrival_date: segment.estimatedArrivalDate ?? null,
+    time_tolerance: segment.timeTolerance ?? null,
+    expected_ship_date: segment.expectedShipDate ?? null,
+  }));
+}
+function buildCanonicalCheckpointsFromSegments(segments) {
+  if (!Array.isArray(segments)) {
+    return [];
+  }
+  return segments.map((segment) => ({
+    start_checkpoint_id: segment.startCheckpointId ?? null,
+    end_checkpoint_id: segment.endCheckpointId ?? null,
+    estimated_arrival_date: segment.estimatedArrivalDate ?? null,
+    time_tolerance: segment.timeTolerance ?? null,
+    expected_ship_date: segment.expectedShipDate ?? null,
+  }));
+}
 async function assertCheckpointExists(checkpointId) {
   const { rows } = await query(
     `SELECT 1 FROM checkpoint_registry WHERE id = $1`,
@@ -70,43 +81,147 @@ async function assertCheckpointExists(checkpointId) {
   );
   return rows.length > 0;
 }
-
+async function normalizeShipmentItemsInput(
+  shipmentItems,
+  manufacturerUUID,
+  currentShipmentId = null
+) {
+  if (!Array.isArray(shipmentItems)) {
+    return [];
+  }
+  const normalized = [];
+  for (const [index, item] of shipmentItems.entries()) {
+    const productIdRaw =
+      item?.product_uuid ?? item?.productUUID ?? item?.productId ?? null;
+    if (!productIdRaw || typeof productIdRaw !== "string") {
+      const err = new Error(
+        `shipmentItems[${index}].product_uuid is required`
+      );
+      err.status = 400;
+      throw err;
+    }
+    const productId = productIdRaw.trim();
+    const product = await findProductById(productId);
+    if (!product) {
+      const err = new Error(
+        `shipmentItems[${index}].product_uuid does not exist`
+      );
+      err.status = 400;
+      throw err;
+    }
+    if (
+      typeof manufacturerUUID === "string" &&
+      product.manufacturer_uuid &&
+      product.manufacturer_uuid.toLowerCase() !== manufacturerUUID.toLowerCase()
+    ) {
+      const err = new Error(
+        `shipmentItems[${index}].product_uuid belongs to a different manufacturer`
+      );
+      err.status = 400;
+      throw err;
+    }
+    if (
+      product.shipment_id &&
+      (!currentShipmentId ||
+        product.shipment_id.toLowerCase() !== currentShipmentId.toLowerCase())
+    ) {
+      const err = new Error(
+        `shipmentItems[${index}].product_uuid is already assigned to another shipment`
+      );
+      err.status = 409;
+      throw err;
+    }
+    const currentStatus = product.status ?? null;
+    const isSameShipment =
+      currentShipmentId &&
+      product.shipment_id &&
+      product.shipment_id.toLowerCase() === currentShipmentId.toLowerCase();
+    if (!isSameShipment) {
+      if (currentStatus !== PRODUCT_STATUS_READY_FOR_SHIPMENT) {
+        const err = new Error(
+          `shipmentItems[${index}].product_uuid must be in status ${PRODUCT_STATUS_READY_FOR_SHIPMENT}`
+        );
+        err.status = 409;
+        throw err;
+      }
+    }
+    let quantityValue = null;
+    if (Object.prototype.hasOwnProperty.call(item ?? {}, "quantity")) {
+      const rawQuantity = item?.quantity;
+      if (rawQuantity === "" || rawQuantity === undefined || rawQuantity === null) {
+        quantityValue = null;
+      } else {
+        const parsed = Number(rawQuantity);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          const err = new Error(
+            `shipmentItems[${index}].quantity must be a non-negative number`
+          );
+          err.status = 400;
+          throw err;
+        }
+        quantityValue = Math.trunc(parsed);
+      }
+    }
+    if (quantityValue === null && product.quantity !== undefined && product.quantity !== null) {
+      const parsed = Number(product.quantity);
+      quantityValue = Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+    }
+    normalized.push({
+      product_uuid: product.id,
+      quantity: quantityValue,
+    });
+  }
+  return normalized;
+}
 export async function registerShipment(req, res) {
   try {
-    const {
-      manufacturerUUID,
-      destinationPartyUUID,
-      shipmentItems,
-      checkpoints,
-    } = req.body;
-
-    if (!manufacturerUUID || !destinationPartyUUID) {
+    const manufacturerUUID =
+      req.body.manufacturerUUID ?? req.body.manufacturer_uuid ?? null;
+    const consumerUUID =
+      req.body.consumerUUID ??
+      req.body.consumer_uuid ??
+      req.body.destinationPartyUUID ??
+      req.body.destination_party_uuid ??
+      null;
+    const shipmentItems = Array.isArray(req.body.shipmentItems)
+      ? req.body.shipmentItems
+      : [];
+    const checkpoints = Array.isArray(req.body.checkpoints)
+      ? req.body.checkpoints
+      : [];
+    if (!manufacturerUUID || !consumerUUID) {
       return res.status(400).json({
-        message: "manufacturerUUID and destinationPartyUUID are required",
+        message: "manufacturerUUID and consumerUUID are required",
       });
     }
-
-    if (!Array.isArray(shipmentItems) || shipmentItems.length === 0) {
+    if (shipmentItems.length === 0) {
       return res
         .status(400)
         .json({ message: "At least one shipment item is required" });
     }
-
-    if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
+    let normalizedItems;
+    try {
+      normalizedItems = await normalizeShipmentItemsInput(
+        shipmentItems,
+        manufacturerUUID
+      );
+    } catch (itemErr) {
+      return res
+        .status(itemErr.status ?? 400)
+        .json({ message: itemErr.message });
+    }
+    if (checkpoints.length === 0) {
       return res
         .status(400)
         .json({ message: "At least one checkpoint is required" });
     }
-
     const requiredFields = [
       "start_checkpoint_id",
       "end_checkpoint_id",
       "estimated_arrival_date",
       "time_tolerance",
       "expected_ship_date",
-      "required_action",
     ];
-
     for (const [index, checkpoint] of checkpoints.entries()) {
       for (const field of requiredFields) {
         if (!checkpoint[field]) {
@@ -116,7 +231,6 @@ export async function registerShipment(req, res) {
         }
       }
     }
-
     for (const [index, checkpoint] of checkpoints.entries()) {
       const startExists = await assertCheckpointExists(
         checkpoint.start_checkpoint_id
@@ -124,7 +238,6 @@ export async function registerShipment(req, res) {
       const endExists = await assertCheckpointExists(
         checkpoint.end_checkpoint_id
       );
-
       if (!startExists) {
         return res.status(400).json({
           message: `checkpoints[${index}].start_checkpoint_id does not exist`,
@@ -136,49 +249,60 @@ export async function registerShipment(req, res) {
         });
       }
     }
-
-    const dbHash = computeShipmentHash(
-      { manufacturerUUID, destinationPartyUUID, shipmentItems },
-      checkpoints
+    const shipmentId = randomUUID();
+    const {
+      normalized,
+      normalizedItems: canonicalItems,
+      normalizedCheckpoints,
+      canonical,
+      payloadHash,
+    } = prepareShipmentPersistence(
+      shipmentId,
+      { manufacturerUUID, consumerUUID },
+      {
+        shipmentItems: normalizedItems,
+        checkpoints,
+      }
     );
-
-    const tx = await contract.registerShipment(dbHash);
-    const receipt = await tx.wait();
-
-    const event = receipt.logs
-      .map((log) => {
-        try {
-          return contract.interface.parseLog(log);
-        } catch {
-          return null;
-        }
-      })
-      .find((parsed) => parsed && parsed.name === "ShipmentRegistered");
-
-    if (!event) {
-      throw new Error("No ShipmentRegistered event found");
+    const { txHash, shipmentHash } = await registerShipmentOnChain(
+      uuidToBytes16Hex(shipmentId),
+      payloadHash
+    );
+    const normalizedOnChain = normalizeHash(shipmentHash);
+    const normalizedComputed = normalizeHash(payloadHash);
+    if (normalizedOnChain !== normalizedComputed) {
+      throw hashMismatch({
+        reason: "On-chain shipment hash mismatch detected during registration",
+        onChain: normalizedOnChain,
+        computed: normalizedComputed,
+      });
     }
-
-    const blockchainShipmentId = event.args.shipmentId.toString();
-
     const createPayload = {
-      shipment_id: blockchainShipmentId,
-      manufacturerUUID,
-      destinationPartyUUID,
-      shipmentItems,
-      shipment_hash: dbHash,
-      tx_hash: receipt.hash,
-      created_by: wallet.address,
+      id: shipmentId,
+      manufacturerUUID: normalized.manufacturerUUID,
+      consumerUUID: normalized.consumerUUID,
+      shipment_hash: payloadHash,
+      tx_hash: txHash,
+      created_by:
+        req.wallet?.walletAddress ?? shipmentOperatorAddress ?? null,
     };
-
     let pinataBackup;
     try {
       pinataBackup = await backupRecord(
         "shipment",
-        { ...createPayload, checkpoints },
+        {
+          ...createPayload,
+          payloadCanonical: canonical,
+          payloadHash,
+          payload: {
+            ...normalized,
+            shipmentItems: canonicalItems,
+            checkpoints: normalizedCheckpoints,
+          },
+        },
         {
           operation: "create",
-          identifier: blockchainShipmentId,
+          identifier: shipmentId,
         }
       );
     } catch (backupErr) {
@@ -187,136 +311,205 @@ export async function registerShipment(req, res) {
         backupErr
       );
     }
-
     const savedShipment = await createShipment({
       ...createPayload,
       pinata_cid: pinataBackup?.IpfsHash ?? null,
       pinata_pinned_at: pinataBackup?.Timestamp ?? null,
     });
-
+    const formattedShipment = formatShipmentRecord(savedShipment);
+    await Promise.all(
+      normalizedItems.map((item) =>
+        assignProductToShipment(item.product_uuid, shipmentId, item.quantity)
+      )
+    );
     for (const checkpoint of checkpoints) {
-      const checkpointPayload = {
-        shipment_id: blockchainShipmentId,
-        start_checkpoint_id: checkpoint.start_checkpoint_id,
-        end_checkpoint_id: checkpoint.end_checkpoint_id,
-        estimated_arrival_date: checkpoint.estimated_arrival_date,
-        time_tolerance: checkpoint.time_tolerance,
-        expected_ship_date: checkpoint.expected_ship_date,
-        required_action: checkpoint.required_action,
-      };
-
-      let checkpointBackup;
-      try {
-        checkpointBackup = await backupRecord(
-          "shipment_handover_checkpoint",
-          checkpointPayload,
-          {
-            operation: "create",
-            identifier: `${blockchainShipmentId}:${checkpoint.start_checkpoint_id}:${checkpoint.end_checkpoint_id}`,
-          }
-        );
-      } catch (checkpointErr) {
-        console.error(
-          "⚠️ Failed to back up handover checkpoint to Pinata:",
-          checkpointErr
-        );
-      }
-
-      await addCheckpoint({
-        ...checkpointPayload,
-        pinata_cid: checkpointBackup?.IpfsHash ?? null,
-        pinata_pinned_at: checkpointBackup?.Timestamp ?? null,
+      await createShipmentSegment({
+        shipmentId,
+        startCheckpointId: checkpoint.start_checkpoint_id,
+        endCheckpointId: checkpoint.end_checkpoint_id,
+        expectedShipDate: checkpoint.expected_ship_date,
+        estimatedArrivalDate: checkpoint.estimated_arrival_date,
+        timeTolerance: checkpoint.time_tolerance ?? null,
+        fromUserId: null,
+        toUserId: null,
+        status: "PENDING",
+        walletAddress: req.wallet?.walletAddress ?? null,
       });
     }
-
-    const savedCheckpoints = await getByShipment(blockchainShipmentId);
-
-    const responsePayload = {
-      ...savedShipment,
+    const shipmentSegments = await listShipmentSegmentsForShipment(
+      shipmentId
+    );
+    const savedCheckpoints = buildCheckpointsFromSegments(shipmentSegments);
+    const assignedProducts = await listProductsByShipmentUuid(shipmentId);
+    const shipmentItemsPayload = assignedProducts.map((product) => ({
+      product_uuid: product.id,
+      quantity:
+        product.quantity !== undefined && product.quantity !== null
+          ? Number(product.quantity)
+          : null,
+    }));
+    const responsePayload = normalizeShipmentResponse({
+      ...formattedShipment,
       handover_checkpoints: savedCheckpoints,
-      blockchainTx: receipt.hash,
-    };
-    responsePayload.pinataCid = savedShipment.pinata_cid || null;
-    responsePayload.pinataTimestamp = savedShipment.pinata_pinned_at || null;
-
+      shipmentItems: shipmentItemsPayload,
+      shipmentSegments,
+      blockchainTx: txHash,
+      dbHash: payloadHash,
+      blockchainHash: normalizedOnChain,
+    });
+    responsePayload.pinataCid = formattedShipment.pinataCid ?? null;
+    responsePayload.pinataTimestamp = formattedShipment.pinataPinnedAt ?? null;
     res.status(201).json(responsePayload);
   } catch (err) {
     console.error("❌ Error registering shipment:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 }
-
 export async function getShipment(req, res) {
   try {
-    const { shipment_id } = req.params;
-    const shipment = await getShipmentById(shipment_id);
+    const shipmentId = req.params.id ?? req.params.shipment_id ?? null;
+    if (!shipmentId) {
+      return res.status(400).json({ message: "Shipment id is required" });
+    }
+    const shipment = await getShipmentById(shipmentId);
     if (!shipment) {
       return res.status(404).json({ message: "Shipment not found" });
     }
-
-    const checkpoints = await getByShipment(shipment_id);
-    const dbHash = computeShipmentHash(shipment, checkpoints);
-
-    const onchainShipment = await contract.getShipment(shipment_id);
-    const blockchainHash = onchainShipment.hash;
-
-    res.json({
-      ...shipment,
-      checkpoints,
-      dbHash,
-      blockchainHash,
-      integrity: dbHash === blockchainHash ? "valid" : "tampered",
-    });
+    const formattedShipment = formatShipmentRecord(shipment);
+    const shipmentSegments = await listShipmentSegmentsForShipment(
+      shipmentId
+    );
+    const checkpoints = buildCheckpointsFromSegments(shipmentSegments);
+    const canonicalCheckpoints =
+      buildCanonicalCheckpointsFromSegments(shipmentSegments);
+    const assignedProducts = await listProductsByShipmentUuid(shipmentId);
+    const shipmentItems = assignedProducts.map((product) => ({
+      product_uuid: product.id,
+      quantity:
+        product.quantity !== undefined && product.quantity !== null
+          ? Number(product.quantity)
+          : null,
+    }));
+    let dbHash = null;
+    let blockchainHash = null;
+    let integrity = "not_on_chain";
+    try {
+      const integrityResult = await ensureShipmentOnChainIntegrity({
+        shipmentRecord: shipment,
+        checkpoints: canonicalCheckpoints,
+        shipmentItems,
+      });
+      dbHash = integrityResult.hash;
+      blockchainHash = integrityResult.hash;
+      integrity = "valid";
+    } catch (integrityErr) {
+      const details = integrityErr?.details ?? {};
+      if (details.computed) {
+        dbHash = normalizeHash(details.computed);
+      } else {
+        try {
+          const prepared = prepareShipmentPersistence(
+            shipmentId,
+            {
+              manufacturerUUID: formattedShipment.manufacturerUUID,
+              consumerUUID: formattedShipment.consumerUUID,
+            },
+            {
+              shipmentItems,
+              checkpoints: canonicalCheckpoints,
+            }
+          );
+          dbHash = normalizeHash(prepared.payloadHash);
+        } catch (computeErr) {
+          console.warn(
+            "⚠️ Failed to recompute shipment hash locally:",
+            computeErr.message
+          );
+        }
+      }
+      if (details.onChain) {
+        blockchainHash = normalizeHash(details.onChain);
+        integrity = "tampered";
+      } else if (integrityErr.code === ShipmentErrorCodes.HASH_MISMATCH) {
+        integrity = "tampered";
+      }
+    }
+    res.json(
+      normalizeShipmentResponse({
+        ...formattedShipment,
+        checkpoints,
+        shipmentItems,
+        shipmentSegments,
+        dbHash,
+        blockchainHash,
+        integrity,
+      })
+    );
   } catch (err) {
     console.error("❌ Error fetching shipment:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 }
-
 export async function updateShipment(req, res) {
   try {
-    const { shipment_id } = req.params;
-    const {
-      manufacturerUUID,
-      destinationPartyUUID,
-      shipmentItems,
-      checkpoints,
-    } = req.body;
-
-    const existing = await getShipmentById(shipment_id);
+    const shipmentId = req.params.id ?? req.params.shipment_id ?? null;
+    if (!shipmentId) {
+      return res.status(400).json({ message: "Shipment id is required" });
+    }
+    const existing = await getShipmentById(shipmentId);
     if (!existing) {
       return res
         .status(404)
-        .json({ message: `Shipment ${shipment_id} not found` });
+        .json({ message: `Shipment ${shipmentId} not found` });
     }
-
-    if (!manufacturerUUID || !destinationPartyUUID) {
+    const manufacturerUUID =
+      req.body.manufacturerUUID ?? req.body.manufacturer_uuid ?? null;
+    const consumerUUID =
+      req.body.consumerUUID ??
+      req.body.consumer_uuid ??
+      req.body.destinationPartyUUID ??
+      req.body.destination_party_uuid ??
+      null;
+    const shipmentItems = Array.isArray(req.body.shipmentItems)
+      ? req.body.shipmentItems
+      : [];
+    const checkpoints = Array.isArray(req.body.checkpoints)
+      ? req.body.checkpoints
+      : [];
+    if (!manufacturerUUID || !consumerUUID) {
       return res.status(400).json({
-        message: "manufacturerUUID and destinationPartyUUID are required",
+        message: "manufacturerUUID and consumerUUID are required",
       });
     }
-
-    if (!Array.isArray(shipmentItems) || shipmentItems.length === 0) {
+    if (shipmentItems.length === 0) {
       return res
         .status(400)
         .json({ message: "At least one shipment item is required" });
     }
-
-    if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
+    let normalizedItems;
+    try {
+      normalizedItems = await normalizeShipmentItemsInput(
+        shipmentItems,
+        manufacturerUUID,
+        shipmentId
+      );
+    } catch (itemErr) {
+      return res
+        .status(itemErr.status ?? 400)
+        .json({ message: itemErr.message });
+    }
+    if (checkpoints.length === 0) {
       return res
         .status(400)
         .json({ message: "At least one checkpoint is required" });
     }
-
     const requiredFields = [
       "start_checkpoint_id",
       "end_checkpoint_id",
       "estimated_arrival_date",
       "time_tolerance",
       "expected_ship_date",
-      "required_action",
     ];
-
     for (const [index, checkpoint] of checkpoints.entries()) {
       for (const field of requiredFields) {
         if (!checkpoint[field]) {
@@ -326,7 +519,6 @@ export async function updateShipment(req, res) {
         }
       }
     }
-
     for (const [index, checkpoint] of checkpoints.entries()) {
       const startExists = await assertCheckpointExists(
         checkpoint.start_checkpoint_id
@@ -334,7 +526,6 @@ export async function updateShipment(req, res) {
       const endExists = await assertCheckpointExists(
         checkpoint.end_checkpoint_id
       );
-
       if (!startExists) {
         return res.status(400).json({
           message: `checkpoints[${index}].start_checkpoint_id does not exist`,
@@ -346,43 +537,65 @@ export async function updateShipment(req, res) {
         });
       }
     }
-
-    const newDbHash = computeShipmentHash(
-      { manufacturerUUID, destinationPartyUUID, shipmentItems },
-      checkpoints
+    const {
+      normalized,
+      normalizedItems: canonicalItems,
+      normalizedCheckpoints,
+      canonical,
+      payloadHash,
+    } = prepareShipmentPersistence(
+      shipmentId,
+      { manufacturerUUID, consumerUUID },
+      {
+        shipmentItems: normalizedItems,
+        checkpoints,
+      }
     );
-
-    const priorCheckpoints = await getByShipment(shipment_id);
-    const checkpointMap = new Map();
-    for (const cp of priorCheckpoints) {
-      const key = `${cp.start_checkpoint_id}:${cp.end_checkpoint_id}`;
-      checkpointMap.set(key, cp);
+    await deleteShipmentSegmentsByShipmentId(shipmentId);
+    const { txHash, shipmentHash } = await updateShipmentOnChain(
+      uuidToBytes16Hex(shipmentId),
+      payloadHash
+    );
+    const normalizedOnChain = shipmentHash
+      ? normalizeHash(shipmentHash)
+      : normalizeHash(payloadHash);
+    const normalizedComputed = normalizeHash(payloadHash);
+    if (normalizedOnChain !== normalizedComputed) {
+      throw hashMismatch({
+        reason: "On-chain shipment hash mismatch detected during update",
+        onChain: normalizedOnChain,
+        computed: normalizedComputed,
+      });
     }
-
-    const tx = await contract.updateShipment(shipment_id, newDbHash);
-    const receipt = await tx.wait();
-
     const updatePayload = {
-      manufacturerUUID,
-      destinationPartyUUID,
-      shipmentItems,
-      shipment_hash: newDbHash,
-      tx_hash: receipt.hash,
-      updated_by: wallet.address,
+      manufacturerUUID: normalized.manufacturerUUID,
+      consumerUUID: normalized.consumerUUID,
+      shipment_hash: payloadHash,
+      tx_hash: txHash,
+      updated_by:
+        req.wallet?.walletAddress ??
+        shipmentOperatorAddress ??
+        existing.updated_by ??
+        null,
     };
-
     let pinataBackup;
     try {
       pinataBackup = await backupRecord(
         "shipment",
         {
-          shipment_id,
+          shipment_id: shipmentId,
           ...updatePayload,
-          checkpoints,
+          payloadCanonical: canonical,
+          payloadHash,
+          payload: {
+            ...normalized,
+            shipmentItems: canonicalItems,
+            checkpoints: normalizedCheckpoints,
+          },
         },
         {
           operation: "update",
-          identifier: shipment_id,
+          identifier: shipmentId,
         }
       );
     } catch (backupErr) {
@@ -391,113 +604,143 @@ export async function updateShipment(req, res) {
         backupErr
       );
     }
-
-    updatePayload.pinata_cid = pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
+    updatePayload.pinata_cid =
+      pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
     updatePayload.pinata_pinned_at =
       pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
-
-    const updatedShipment = await updateShipmentRecord(shipment_id, updatePayload);
-
-    await deleteByShipment(shipment_id);
+    const updatedShipment = await updateShipmentRecord(
+      shipmentId,
+      updatePayload
+    );
+    const formattedShipment = formatShipmentRecord(updatedShipment);
+    const keepProductIds = normalizedItems.map((item) => item.product_uuid);
+    await clearProductsFromShipment(shipmentId, keepProductIds);
+    await Promise.all(
+      normalizedItems.map((item) =>
+        assignProductToShipment(item.product_uuid, shipmentId, item.quantity)
+      )
+    );
     for (const checkpoint of checkpoints) {
-      const checkpointPayload = {
-        shipment_id,
-        start_checkpoint_id: checkpoint.start_checkpoint_id,
-        end_checkpoint_id: checkpoint.end_checkpoint_id,
-        estimated_arrival_date: checkpoint.estimated_arrival_date,
-        time_tolerance: checkpoint.time_tolerance,
-        expected_ship_date: checkpoint.expected_ship_date,
-        required_action: checkpoint.required_action,
-      };
-
-      let checkpointBackup;
-      try {
-        checkpointBackup = await backupRecord(
-          "shipment_handover_checkpoint",
-          checkpointPayload,
-          {
-            operation: "update",
-            identifier: `${shipment_id}:${checkpoint.start_checkpoint_id}:${checkpoint.end_checkpoint_id}`,
-          }
-        );
-      } catch (checkpointErr) {
-        console.error(
-          "⚠️ Failed to back up handover checkpoint update to Pinata:",
-          checkpointErr
-        );
-      }
-
-      const previous = checkpointMap.get(
-        `${checkpoint.start_checkpoint_id}:${checkpoint.end_checkpoint_id}`
-      );
-
-      await addCheckpoint({
-        ...checkpointPayload,
-        pinata_cid:
-          checkpointBackup?.IpfsHash ?? previous?.pinata_cid ?? null,
-        pinata_pinned_at:
-          checkpointBackup?.Timestamp ?? previous?.pinata_pinned_at ?? null,
+      await createShipmentSegment({
+        shipmentId,
+        startCheckpointId: checkpoint.start_checkpoint_id,
+        endCheckpointId: checkpoint.end_checkpoint_id,
+        expectedShipDate: checkpoint.expected_ship_date,
+        estimatedArrivalDate: checkpoint.estimated_arrival_date,
+        timeTolerance: checkpoint.time_tolerance ?? null,
+        fromUserId: null,
+        toUserId: null,
+        status: "PENDING",
+        walletAddress: req.wallet?.walletAddress ?? null,
       });
     }
-
-    const savedCheckpoints = await getByShipment(shipment_id);
-
-    const responsePayload = {
-      ...updatedShipment,
+    const shipmentSegments = await listShipmentSegmentsForShipment(
+      shipmentId
+    );
+    const savedCheckpoints = buildCheckpointsFromSegments(shipmentSegments);
+    const assignedProducts = await listProductsByShipmentUuid(shipmentId);
+    const shipmentItemsPayload = assignedProducts.map((product) => ({
+      product_uuid: product.id,
+      quantity:
+        product.quantity !== undefined && product.quantity !== null
+          ? Number(product.quantity)
+          : null,
+    }));
+    const responsePayload = normalizeShipmentResponse({
+      ...formattedShipment,
       handover_checkpoints: savedCheckpoints,
-      blockchainTx: receipt.hash,
-    };
-    responsePayload.pinataCid = updatedShipment.pinata_cid || null;
-    responsePayload.pinataTimestamp = updatedShipment.pinata_pinned_at || null;
-
+      shipmentItems: shipmentItemsPayload,
+      shipmentSegments,
+      blockchainTx: txHash,
+      dbHash: payloadHash,
+      blockchainHash: normalizedOnChain,
+    });
+    responsePayload.pinataCid = formattedShipment.pinataCid ?? null;
+    responsePayload.pinataTimestamp = formattedShipment.pinataPinnedAt ?? null;
     res.status(200).json(responsePayload);
   } catch (err) {
     console.error("❌ Error updating shipment:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 }
-
 export async function getAllShipments(_req, res) {
   try {
     const shipments = await getAllShipmentRecords();
-
     const result = await Promise.all(
       shipments.map(async (shipment) => {
-        const checkpoints = await getByShipment(shipment.shipment_id);
-
-        const normalizedShipment = {
-          manufacturerUUID: shipment.manufacturer_uuid,
-          destinationPartyUUID: shipment.destination_party_uuid,
-          shipmentItems:
-            typeof shipment.shipment_items === "string"
-              ? JSON.parse(shipment.shipment_items)
-              : shipment.shipment_items,
-        };
-
-        const dbHash = computeShipmentHash(normalizedShipment, checkpoints);
-
+        const shipmentId = shipment.id ?? shipment.shipment_id;
+        const shipmentSegments = await listShipmentSegmentsForShipment(
+          shipmentId
+        );
+        const checkpoints = buildCheckpointsFromSegments(shipmentSegments);
+        const canonicalCheckpoints =
+          buildCanonicalCheckpointsFromSegments(shipmentSegments);
+        const assignedProducts = await listProductsByShipmentUuid(shipmentId);
+        const shipmentItems = assignedProducts.map((product) => ({
+          product_uuid: product.id,
+          quantity:
+            product.quantity !== undefined && product.quantity !== null
+              ? Number(product.quantity)
+              : null,
+        }));
+        let dbHash = null;
         let blockchainHash = null;
-        let integrity = "unknown";
+        let integrity = "not_on_chain";
         try {
-          const onchainShipment = await contract.getShipment(
-            shipment.shipment_id
-          );
-          blockchainHash = onchainShipment.hash;
-          integrity = dbHash === blockchainHash ? "valid" : "tampered";
-        } catch (err) {
-          integrity = "not_on_chain";
+          const integrityResult = await ensureShipmentOnChainIntegrity({
+            shipmentRecord: shipment,
+            checkpoints: canonicalCheckpoints,
+            shipmentItems,
+          });
+          dbHash = integrityResult.hash;
+          blockchainHash = integrityResult.hash;
+          integrity = "valid";
+        } catch (integrityErr) {
+          const details = integrityErr?.details ?? {};
+          if (details.computed) {
+            dbHash = normalizeHash(details.computed);
+          } else {
+            try {
+              const prepared = prepareShipmentPersistence(
+                shipmentId,
+                {
+                  manufacturerUUID:
+                    shipment.manufacturer_uuid ?? shipment.manufacturerUUID,
+                  consumerUUID:
+                    shipment.consumer_uuid ??
+                    shipment.destination_party_uuid ??
+                    shipment.consumerUUID ??
+                  shipment.destinationPartyUUID,
+              },
+              {
+                shipmentItems,
+                checkpoints: canonicalCheckpoints,
+              }
+            );
+              dbHash = normalizeHash(prepared.payloadHash);
+            } catch {
+              // swallow recomputation errors for list view
+            }
+          }
+          if (details.onChain) {
+            blockchainHash = normalizeHash(details.onChain);
+            integrity = "tampered";
+          } else if (integrityErr.code === ShipmentErrorCodes.HASH_MISMATCH) {
+            integrity = "tampered";
+          }
         }
-
-        return {
-          ...shipment,
+        const formattedShipment = formatShipmentRecord(shipment);
+        return normalizeShipmentResponse({
+          ...formattedShipment,
           checkpoints,
+          shipmentItems,
+          shipmentSegments,
           dbHash,
           blockchainHash,
           integrity,
-        };
+        });
       })
     );
-
     res.json(result);
   } catch (err) {
     console.error("❌ Error fetching all shipments:", err.message);

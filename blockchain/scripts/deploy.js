@@ -6,8 +6,7 @@ const CONTRACTS = [
   "ProductRegistry",
   "CheckpointRegistry",
   "ShipmentRegistry",
-  "ShipmentSegmentAcceptance",
-  "ShipmentSegmentHandover",
+  "ShipmentSegmentRegistry",
 ];
 
 const ENV_OUTPUT_ORDER = [
@@ -16,8 +15,7 @@ const ENV_OUTPUT_ORDER = [
   ["ProductRegistry", "CONTRACT_ADDRESS_PRODUCT"],
   ["CheckpointRegistry", "CONTRACT_ADDRESS_CHECKPOINT"],
   ["ShipmentRegistry", "CONTRACT_ADDRESS_SHIPMENT"],
-  ["ShipmentSegmentAcceptance", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE"],
-  ["ShipmentSegmentHandover", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER"],
+  ["ShipmentSegmentRegistry", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT"],
 ];
 
 async function deployContract(name) {

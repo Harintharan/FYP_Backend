@@ -99,10 +99,13 @@ const baseRegistrationSchema = z.object({
   identification: identificationSchema,
   contact: contactSchema,
   metadata: metadataSchema,
+});
+
+const registrationWithCheckpointSchema = baseRegistrationSchema.extend({
   checkpoint: checkpointSchema,
 });
 
-const manufacturerSchema = baseRegistrationSchema.extend({
+const manufacturerSchema = registrationWithCheckpointSchema.extend({
   type: z.literal("MANUFACTURER"),
   details: manufacturerDetailsSchema,
 });
@@ -112,12 +115,12 @@ const supplierSchema = baseRegistrationSchema.extend({
   details: supplierDetailsSchema,
 });
 
-const warehouseSchema = baseRegistrationSchema.extend({
+const warehouseSchema = registrationWithCheckpointSchema.extend({
   type: z.literal("WAREHOUSE"),
   details: warehouseDetailsSchema,
 });
 
-const consumerSchema = baseRegistrationSchema.extend({
+const consumerSchema = registrationWithCheckpointSchema.extend({
   type: z.literal("CONSUMER"),
   details: consumerDetailsSchema,
 });

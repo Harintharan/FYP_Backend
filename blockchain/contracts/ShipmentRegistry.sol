@@ -3,27 +3,26 @@ pragma solidity ^0.8.20;
 
 contract ShipmentRegistry {
     address public owner;
-    uint256 public nextShipmentId = 1;
 
     struct ShipmentMeta {
-        bytes32 hash;        // integrity hash (from DB)
+        bytes32 hash;
         uint256 createdAt;
         uint256 updatedAt;
         address createdBy;
         address updatedBy;
     }
 
-    mapping(uint256 => ShipmentMeta) public shipments;
+    mapping(bytes16 => ShipmentMeta) public shipments;
 
-    event ShipmentRegistered(uint256 indexed shipmentId, bytes32 hash, address createdBy, uint256 createdAt);
-    event ShipmentUpdated(uint256 indexed shipmentId, bytes32 newHash, address updatedBy, uint256 updatedAt);
+    event ShipmentRegistered(bytes16 indexed shipmentId, bytes32 hash, address createdBy, uint256 createdAt);
+    event ShipmentUpdated(bytes16 indexed shipmentId, bytes32 newHash, address updatedBy, uint256 updatedAt);
 
     constructor() {
         owner = msg.sender;
     }
 
-    function registerShipment(bytes32 dbHash) external returns (uint256) {
-        uint256 shipmentId = nextShipmentId++;
+    function registerShipment(bytes16 shipmentId, bytes32 dbHash) external {
+        require(shipments[shipmentId].createdAt == 0, "Shipment already exists");
 
         shipments[shipmentId] = ShipmentMeta({
             hash: dbHash,
@@ -34,10 +33,9 @@ contract ShipmentRegistry {
         });
 
         emit ShipmentRegistered(shipmentId, dbHash, msg.sender, block.timestamp);
-        return shipmentId;
     }
 
-    function updateShipment(uint256 shipmentId, bytes32 newHash) external {
+    function updateShipment(bytes16 shipmentId, bytes32 newHash) external {
         require(shipments[shipmentId].createdAt != 0, "Shipment does not exist");
 
         ShipmentMeta storage sh = shipments[shipmentId];
@@ -48,7 +46,7 @@ contract ShipmentRegistry {
         emit ShipmentUpdated(shipmentId, newHash, msg.sender, block.timestamp);
     }
 
-    function getShipment(uint256 shipmentId) external view returns (ShipmentMeta memory) {
+    function getShipment(bytes16 shipmentId) external view returns (ShipmentMeta memory) {
         return shipments[shipmentId];
     }
 }

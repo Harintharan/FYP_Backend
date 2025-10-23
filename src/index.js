@@ -9,8 +9,7 @@ import batchRoutes from "./routes/batchRoutes.js";
 import productRegistryRoutes from "./routes/ProductRegistryRoutes.js";
 import checkpointRoutes from "./routes/checkpointRoutes.js";
 import shipmentRoutes from "./routes/shipmentRoutes.js";
-import ShipmentSegmentHandoverRoutes from "./routes/ShipmentSegmentHandoverRoutes.js";
-import ShipmentSegmentAcceptanceRoutes from "./routes/shipmentSegmentAcceptanceRoutes.js";
+import shipmentSegmentRoutes from "./routes/shipmentSegmentRoutes.js";
 import { runMigrations } from "../migrations/index.js";
 
 const app = express();
@@ -30,8 +29,7 @@ app.use("/api/batches", batchRoutes);
 app.use("/api/product-registry", productRegistryRoutes);
 app.use("/api", checkpointRoutes);
 app.use("/api", shipmentRoutes);
-app.use("/api", ShipmentSegmentAcceptanceRoutes);
-app.use("/api", ShipmentSegmentHandoverRoutes);
+app.use("/api", shipmentSegmentRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error", err);

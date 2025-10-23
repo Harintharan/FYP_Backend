@@ -53,6 +53,8 @@ function coercePayload(raw) {
     productName: pickValue(raw, "productName", "product_name"),
     productCategory: pickValue(raw, "productCategory", "product_category"),
     batchId: pickValue(raw, "batchId", "batch_id", "batch_lot_id", "batchLotId"),
+    shipmentId: pickValue(raw, "shipmentId", "shipment_id"),
+    quantity: pickValue(raw, "quantity"),
     microprocessorMac: pickValue(
       raw,
       "microprocessorMac",
@@ -75,6 +77,8 @@ const PRODUCT_FIELDS = [
   "productCategory",
   "manufacturerUUID",
   "batchId",
+  "shipmentId",
+  "quantity",
   "microprocessorMac",
   "sensorTypes",
   "wifiSSID",
@@ -109,6 +113,12 @@ export function computeProductHash(productId, payload) {
 
 export function prepareProductPersistence(productId, rawPayload, defaults = {}) {
   const normalized = normalizeProductPayload(rawPayload, defaults);
+  if (normalized.shipmentId) {
+    normalized.shipmentId = normalized.shipmentId.toLowerCase();
+  }
+  if (normalized.quantity !== undefined && normalized.quantity !== null) {
+    normalized.quantity = Number(normalized.quantity);
+  }
   const canonical = buildProductCanonicalPayload(productId, normalized);
   const payloadHash = computeProductHashFromCanonical(canonical);
   return {
@@ -143,6 +153,11 @@ export function deriveProductPayloadFromRecord(record) {
       record.product_category ?? record.productCategory
     ),
     batchId: toNullableString(record.batch_id ?? record.batchId),
+    shipmentId: toNullableString(record.shipment_id ?? record.shipmentId),
+    quantity:
+      record.quantity !== undefined && record.quantity !== null
+        ? Number(record.quantity)
+        : null,
     microprocessorMac: toNullableString(
       record.microprocessor_mac ?? record.microprocessorMac
     ),
@@ -212,6 +227,11 @@ export function formatProductRecord(record) {
     productCategory: record.product_category ?? null,
     manufacturerUUID: record.manufacturer_uuid ?? null,
     batchId: record.batch_id ?? null,
+    shipmentId: toNullableString(record.shipment_id ?? record.shipmentId),
+    quantity:
+      record.quantity !== undefined && record.quantity !== null
+        ? Number(record.quantity)
+        : null,
     microprocessorMac: record.microprocessor_mac ?? null,
     sensorTypes: record.sensor_types ?? null,
     wifiSSID: record.wifi_ssid ?? null,

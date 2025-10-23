@@ -2,6 +2,7 @@ import { RegistrationPayload } from "../domain/registration.schema.js";
 import {
   findPendingRegistrationSummaries,
   findApprovedRegistrationSummaries,
+  findRegistrationById,
   approveRegistration,
   rejectRegistration,
 } from "../models/registrationModel.js";
@@ -11,7 +12,10 @@ import {
   updateRegistrationRecord,
 } from "../services/registrationService.js";
 import { respondWithRegistrationError } from "../middleware/registrationErrorMiddleware.js";
-import { RegistrationError } from "../errors/registrationErrors.js";
+import {
+  RegistrationError,
+  NotFoundError,
+} from "../errors/registrationErrors.js";
 
 export async function createRegistration(req, res) {
   try {
@@ -50,7 +54,9 @@ export async function listPendingRegistrations(_req, res) {
     const rows = await findPendingRegistrationSummaries();
     await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
 
-    const sanitized = rows.map(({ payload, payload_canonical, ...rest }) => rest);
+    const sanitized = rows.map(
+      ({ payload, payload_canonical, ...rest }) => rest
+    );
     return res.json(sanitized);
   } catch (err) {
     return respondWithRegistrationError(res, err);
@@ -62,7 +68,9 @@ export async function listApprovedRegistrations(_req, res) {
     const rows = await findApprovedRegistrationSummaries();
     await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
 
-    const sanitized = rows.map(({ payload, payload_canonical, ...rest }) => rest);
+    const sanitized = rows.map(
+      ({ payload, payload_canonical, ...rest }) => rest
+    );
     return res.json(sanitized);
   } catch (err) {
     return respondWithRegistrationError(res, err);
@@ -77,7 +85,8 @@ export async function getRegistrationById(req, res) {
     }
 
     await ensureOnChainIntegrity(record);
-    return res.json(record);
+    const { payload_canonical, ...sanitized } = record;
+    return res.json(sanitized);
   } catch (err) {
     return respondWithRegistrationError(res, err);
   }
@@ -97,7 +106,7 @@ export async function approveRegistrationById(req, res) {
     }
     return res.json(result);
   } catch (err) {
-    return handleRegistrationError(res, err);
+    return respondWithRegistrationError(res, err);
   }
 }
 
@@ -115,6 +124,6 @@ export async function rejectRegistrationById(req, res) {
     }
     return res.json(result);
   } catch (err) {
-    return handleRegistrationError(res, err);
+    return respondWithRegistrationError(res, err);
   }
 }

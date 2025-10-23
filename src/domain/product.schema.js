@@ -20,12 +20,39 @@ const optionalString = z
   }, z.string().min(1))
   .optional();
 
+const optionalUuid = z.preprocess((value) => {
+  const trimmed = toTrimmedString(value);
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed;
+}, z.string().uuid().optional());
+
+const optionalQuantity = z
+  .preprocess((value) => {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    const trimmed = toTrimmedString(value);
+    if (trimmed === undefined || trimmed === "") {
+      return undefined;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : value;
+  }, z.number().int().min(0, "quantity must be a non-negative integer"))
+  .optional();
+
 export const PRODUCT_STATUS_VALUES = Object.freeze([
-  "CREATED",
-  "READY TO SHIPMENT",
-  "SHIPMENT ACCEPTED",
-  "SHIPMENT HANDOVERED",
-  "SHIPMENT DELIVERED",
+  "PRODUCT_CREATED",
+  "PRODUCT_READY_FOR_SHIPMENT",
+  "PRODUCT_ALLOCATED",
+  "PRODUCT_IN_TRANSIT",
+  "PRODUCT_DELIVERED",
+  "PRODUCT_RETURNED",
+  "PRODUCT_CANCELLED",
 ]);
 
 const optionalStatus = z
@@ -40,6 +67,8 @@ export const ProductPayload = z.object({
   productName: requiredString,
   productCategory: requiredString,
   batchId: optionalString,
+  shipmentId: optionalUuid,
+  quantity: optionalQuantity,
   microprocessorMac: optionalString,
   sensorTypes: optionalString,
   wifiSSID: optionalString,

@@ -139,8 +139,8 @@ export async function listCheckpointsByOwnerUuid(ownerUuid) {
   const { rows } = await query(
     `SELECT *
        FROM checkpoint_registry
-      WHERE LOWER(owner_uuid) = LOWER($1)
-      ORDER BY created_at DESC`,
+       WHERE owner_uuid = $1::uuid
+       ORDER BY created_at DESC`,
     [ownerUuid]
   );
   return rows;

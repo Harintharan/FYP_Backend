@@ -39,10 +39,7 @@ const baseEnvVars = {
   CONTRACT_ADDRESS_BATCH: process.env.CONTRACT_ADDRESS_BATCH,
   CONTRACT_ADDRESS_CHECKPOINT: process.env.CONTRACT_ADDRESS_CHECKPOINT,
   CONTRACT_ADDRESS_SHIPMENT: process.env.CONTRACT_ADDRESS_SHIPMENT,
-  CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE:
-    process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE,
-  CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER:
-    process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER,
+  CONTRACT_ADDRESS_SHIPMENT_SEGMENT: process.env.CONTRACT_ADDRESS_SHIPMENT_SEGMENT,
   CONTRACT_ADDRESS_PRODUCT: process.env.CONTRACT_ADDRESS_PRODUCT,
   PINATA_API_KEY: process.env.PINATA_API_KEY,
   PINATA_SECRET_API_KEY: process.env.PINATA_SECRET_API_KEY,
@@ -64,8 +61,6 @@ const required = [
   "CONTRACT_ADDRESS_BATCH",
   "CONTRACT_ADDRESS_CHECKPOINT",
   "CONTRACT_ADDRESS_SHIPMENT",
-  "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE",
-  "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER",
   "CONTRACT_ADDRESS_PRODUCT",
 ];
 
@@ -151,6 +146,25 @@ const operatorPrivateKey = assertHex(
   "PRIVATE_KEY_OTHER must be a 0x-prefixed 32-byte hex string"
 );
 
+const resolveShipmentSegmentAddress = () => {
+  const candidates = [
+    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT,
+    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_REGISTRY,
+    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE,
+    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && candidate.trim() !== "") {
+      return candidate.trim();
+    }
+  }
+
+  throw new Error(
+    "Missing required environment variables: CONTRACT_ADDRESS_SHIPMENT_SEGMENT"
+  );
+};
+
 const contractAddresses = {
   batchRegistry: assertHex(
     baseEnvVars.CONTRACT_ADDRESS_BATCH,
@@ -170,17 +184,11 @@ const contractAddresses = {
     /^0x[0-9a-fA-F]{40}$/,
     "CONTRACT_ADDRESS_SHIPMENT must be a valid 0x-prefixed address"
   ),
-  segmentAcceptance: assertHex(
-    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE,
-    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE",
+  shipmentSegment: assertHex(
+    resolveShipmentSegmentAddress(),
+    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT",
     /^0x[0-9a-fA-F]{40}$/,
-    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_ACCEPTANCE must be a valid 0x-prefixed address"
-  ),
-  segmentHandover: assertHex(
-    baseEnvVars.CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER,
-    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER",
-    /^0x[0-9a-fA-F]{40}$/,
-    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT_HANDOVER must be a valid 0x-prefixed address"
+    "CONTRACT_ADDRESS_SHIPMENT_SEGMENT must be a valid 0x-prefixed address"
   ),
   productRegistry: assertHex(
     baseEnvVars.CONTRACT_ADDRESS_PRODUCT,

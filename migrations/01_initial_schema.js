@@ -44,11 +44,32 @@ export const migrate = async (pool) => {
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'product_status') THEN
           CREATE TYPE product_status AS ENUM (
-            'CREATED',
-            'READY TO SHIPMENT',
-            'SHIPMENT ACCEPTED',
-            'SHIPMENT HANDOVERED',
-            'SHIPMENT DELIVERED'
+            'PRODUCT_CREATED',
+            'PRODUCT_READY_FOR_SHIPMENT',
+            'PRODUCT_ALLOCATED',
+            'PRODUCT_IN_TRANSIT',
+            'PRODUCT_DELIVERED',
+            'PRODUCT_RETURNED',
+            'PRODUCT_CANCELLED'
+          );
+        END IF;
+      END
+      $$;
+    `);
+
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_type WHERE typname = 'shipment_segment_status'
+        ) THEN
+          CREATE TYPE shipment_segment_status AS ENUM (
+            'PENDING',
+            'ACCEPTED',
+            'IN_TRANSIT',
+            'DELIVERED',
+            'CLOSED',
+            'CANCELLED'
           );
         END IF;
       END
@@ -165,11 +186,57 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS checkpoint_registry (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        address TEXT,
+        latitude TEXT,
+        longitude TEXT,
+        state TEXT,
+        country TEXT,
+        owner_uuid UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        checkpoint_hash TEXT NOT NULL,
+        tx_hash TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_by TEXT,
+        updated_at TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_checkpoint_registry_owner_uuid
+        ON checkpoint_registry(owner_uuid);
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS shipment_registry (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        manufacturer_uuid TEXT NOT NULL,
+        consumer_uuid TEXT NOT NULL,
+        shipment_hash TEXT,
+        tx_hash TEXT,
+        created_by TEXT,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_by TEXT,
+        updated_at TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_checkpoint_registry_owner_uuid
+        ON checkpoint_registry(owner_uuid)
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS product_registry (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         product_name TEXT NOT NULL,
         product_category TEXT NOT NULL,
         batch_id UUID REFERENCES batches(id) ON DELETE SET NULL,
+        shipment_id UUID REFERENCES shipment_registry(id) ON DELETE SET NULL,
+        quantity INT,
         microprocessor_mac TEXT,
         sensor_types TEXT,
         wifi_ssid TEXT,
@@ -188,112 +255,29 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS checkpoint_registry (
+      CREATE TABLE IF NOT EXISTS shipment_segment (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL,
-        address TEXT,
-        latitude TEXT,
-        longitude TEXT,
-        state TEXT,
-        country TEXT,
-        owner_uuid TEXT NOT NULL,
-        checkpoint_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        created_by TEXT NOT NULL,
-        pinata_cid TEXT,
-        pinata_pinned_at TIMESTAMPTZ,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_by TEXT,
-        updated_at TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS shipment_registry (
-        id SERIAL PRIMARY KEY,
-        shipment_id INT UNIQUE NOT NULL,
-        manufacturer_uuid TEXT NOT NULL,
-        destination_party_uuid TEXT NOT NULL,
-        state TEXT,
-        country TEXT,
-        shipment_items JSONB,
-        shipment_hash TEXT,
-        tx_hash TEXT,
-        created_by TEXT,
-        pinata_cid TEXT,
-        pinata_pinned_at TIMESTAMPTZ,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_by TEXT,
-        updated_at TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS shipment_handover_checkpoints (
-        id SERIAL PRIMARY KEY,
-        shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
+        shipment_id UUID NOT NULL REFERENCES shipment_registry(id) ON DELETE CASCADE,
         start_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
         end_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
-        estimated_arrival_date TEXT NOT NULL,
-        time_tolerance TEXT NOT NULL,
         expected_ship_date TEXT NOT NULL,
-        required_action TEXT NOT NULL,
+        estimated_arrival_date TEXT NOT NULL,
+        time_tolerance TEXT,
+        from_user_id UUID REFERENCES users(id),
+        to_user_id UUID REFERENCES users(id),
+        status shipment_segment_status NOT NULL DEFAULT 'PENDING',
+        segment_hash TEXT NOT NULL,
+        tx_hash TEXT,
         pinata_cid TEXT,
         pinata_pinned_at TIMESTAMPTZ,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS shipment_segment_acceptance (
-        id SERIAL PRIMARY KEY,
-        acceptance_id INT NOT NULL UNIQUE,
-        shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
-        segment_start_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
-        segment_end_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
-        assigned_role VARCHAR(100) NOT NULL,
-        assigned_party_uuid VARCHAR(100) NOT NULL,
-        estimated_pickup_time TEXT NOT NULL,
-        estimated_delivery_time TEXT NOT NULL,
-        shipment_items JSONB NOT NULL,
-        acceptance_timestamp TEXT NOT NULL,
-        digital_signature TEXT,
-        acceptance_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        created_by VARCHAR(100) NOT NULL,
-        pinata_cid TEXT,
-        pinata_pinned_at TIMESTAMPTZ,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_by VARCHAR(100),
-        updated_at TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS shipment_segment_handover (
-        id SERIAL PRIMARY KEY,
-        handover_id INT NOT NULL UNIQUE,
-        shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
-        acceptance_id INT NOT NULL REFERENCES shipment_segment_acceptance(acceptance_id) ON DELETE CASCADE,
-        segment_start_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
-        segment_end_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry(id),
-        from_party_uuid VARCHAR(100) NOT NULL,
-        to_party_uuid VARCHAR(100) NOT NULL,
-        handover_timestamp TEXT NOT NULL,
-        gps_lat NUMERIC(10, 6),
-        gps_lon NUMERIC(10, 6),
-        quantity_transferred INT NOT NULL,
-        from_party_signature TEXT NOT NULL,
-        to_party_signature TEXT NOT NULL,
-        handover_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        created_by VARCHAR(100) NOT NULL,
-        pinata_cid TEXT,
-        pinata_pinned_at TIMESTAMPTZ,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_by VARCHAR(100),
-        updated_at TIMESTAMP
-      )
+      CREATE INDEX IF NOT EXISTS idx_shipment_segment_shipment
+        ON shipment_segment (shipment_id);
     `);
 
     await pool.query(
