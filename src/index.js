@@ -12,6 +12,7 @@ import shipmentRoutes from "./routes/shipmentRoutes.js";
 import ShipmentSegmentHandoverRoutes from "./routes/ShipmentSegmentHandoverRoutes.js";
 import ShipmentSegmentAcceptanceRoutes from "./routes/shipmentSegmentAcceptanceRoutes.js";
 import { runMigrations } from "../migrations/index.js";
+import securityRoutes from "./routes/security.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/security", securityRoutes);
 app.use("/api/registrations", registrationRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/batches", batchRoutes);

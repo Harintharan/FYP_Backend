@@ -9,6 +9,12 @@ import {
   respondWithZodError,
   handleControllerError,
 } from "./helpers/errorResponse.js";
+import {
+  summarizeFalsification,
+  DEFAULT_HASH_BITS,
+} from "../services/falsificationAnalysis.js";
+import { buildProductIntegrityMatrix } from "../services/productIntegrityMatrix.js";
+import { listProductsByManufacturerUuid } from "../models/ProductRegistryModel.js";
 
 export async function registerProduct(req, res) {
   try {
@@ -17,7 +23,8 @@ export async function registerProduct(req, res) {
       registration: req.registration,
       wallet: req.wallet,
     });
-    return res.status(statusCode).json(body);
+    const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+    return res.status(statusCode).json({ ...body, security });
   } catch (err) {
     if (err instanceof ZodError) {
       return respondWithZodError(res, err);
@@ -70,6 +77,12 @@ export async function listProductsByManufacturer(req, res) {
       manufacturerUuid: req.params.manufacturerUuid,
       registration: req.registration,
     });
+    if (String(req.query.integrityMatrix).toLowerCase() === "true") {
+      const rows = await listProductsByManufacturerUuid(req.params.manufacturerUuid);
+      const integrityMatrix = await buildProductIntegrityMatrix(rows);
+      const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+      return res.status(statusCode).json({ items: body, integrityMatrix, security });
+    }
     return res.status(statusCode).json(body);
   } catch (err) {
     return handleControllerError(res, err, {
@@ -85,6 +98,12 @@ export async function listProducts(req, res) {
       manufacturerUuid: req.registration?.id,
       registration: req.registration,
     });
+    if (String(req.query.integrityMatrix).toLowerCase() === "true") {
+      const rows = await listProductsByManufacturerUuid(req.registration?.id);
+      const integrityMatrix = await buildProductIntegrityMatrix(rows);
+      const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+      return res.status(statusCode).json({ items: body, integrityMatrix, security });
+    }
     return res.status(statusCode).json(body);
   } catch (err) {
     return handleControllerError(res, err, {

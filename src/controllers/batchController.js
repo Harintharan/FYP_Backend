@@ -9,6 +9,12 @@ import {
   respondWithZodError,
   handleControllerError,
 } from "./helpers/errorResponse.js";
+import {
+  summarizeFalsification,
+  DEFAULT_HASH_BITS,
+} from "../services/falsificationAnalysis.js";
+import { buildBatchIntegrityMatrix } from "../services/batchIntegrityMatrix.js";
+import { listBatchesByManufacturerUuid as listBatchesRaw } from "../models/batchModel.js";
 
 export async function registerBatch(req, res) {
   try {
@@ -17,7 +23,8 @@ export async function registerBatch(req, res) {
       registration: req.registration,
       wallet: req.wallet,
     });
-    return res.status(statusCode).json(body);
+    const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+    return res.status(statusCode).json({ ...body, security });
   } catch (err) {
     if (err instanceof ZodError) {
       return respondWithZodError(res, err);
@@ -70,6 +77,12 @@ export async function listBatchesByManufacturer(req, res) {
       manufacturerUuid: req.params.manufacturerUuid,
       registration: req.registration,
     });
+    if (String(req.query.integrityMatrix).toLowerCase() === "true") {
+      const rows = await listBatchesRaw(req.params.manufacturerUuid);
+      const integrityMatrix = await buildBatchIntegrityMatrix(rows);
+      const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+      return res.status(statusCode).json({ items: body, integrityMatrix, security });
+    }
     return res.status(statusCode).json(body);
   } catch (err) {
     return handleControllerError(res, err, {

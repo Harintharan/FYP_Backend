@@ -12,6 +12,11 @@ import {
 } from "../services/registrationService.js";
 import { respondWithRegistrationError } from "../middleware/registrationErrorMiddleware.js";
 import { RegistrationError } from "../errors/registrationErrors.js";
+import {
+  summarizeFalsification,
+  DEFAULT_HASH_BITS,
+} from "../services/falsificationAnalysis.js";
+import { buildIntegrityMatrix } from "../services/registrationIntegrityMatrix.js";
 
 export async function createRegistration(req, res) {
   try {
@@ -22,7 +27,8 @@ export async function createRegistration(req, res) {
       walletAddress: req.wallet?.walletAddress ?? null,
     });
 
-    return res.status(result.status).json(result.body);
+    const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+    return res.status(result.status).json({ ...result.body, security });
   } catch (err) {
     return respondWithRegistrationError(res, err);
   }
@@ -45,24 +51,36 @@ export async function updateRegistrationById(req, res) {
   }
 }
 
-export async function listPendingRegistrations(_req, res) {
+export async function listPendingRegistrations(req, res) {
   try {
     const rows = await findPendingRegistrationSummaries();
     await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
 
     const sanitized = rows.map(({ payload, payload_canonical, ...rest }) => rest);
+
+    if (String(req.query.integrityMatrix).toLowerCase() === "true") {
+      const integrityMatrix = await buildIntegrityMatrix(rows);
+      const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+      return res.json({ items: sanitized, integrityMatrix, security });
+    }
     return res.json(sanitized);
   } catch (err) {
     return respondWithRegistrationError(res, err);
   }
 }
 
-export async function listApprovedRegistrations(_req, res) {
+export async function listApprovedRegistrations(req, res) {
   try {
     const rows = await findApprovedRegistrationSummaries();
     await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
 
     const sanitized = rows.map(({ payload, payload_canonical, ...rest }) => rest);
+
+    if (String(req.query.integrityMatrix).toLowerCase() === "true") {
+      const integrityMatrix = await buildIntegrityMatrix(rows);
+      const security = summarizeFalsification({ b: DEFAULT_HASH_BITS, N: 1 });
+      return res.json({ items: sanitized, integrityMatrix, security });
+    }
     return res.json(sanitized);
   } catch (err) {
     return respondWithRegistrationError(res, err);

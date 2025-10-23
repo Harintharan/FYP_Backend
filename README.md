@@ -136,3 +136,24 @@ The reference Solidity contract lives in `blockchain/contracts/RegistrationRegis
 - Nonces expire after 10 minutes and are single-use.
 - Replace `abi/RegistrationRegistry.json` with the contract ABI used on-chain if it differs from the placeholder.
 - Updating a registration triggers a new on-chain transaction and the record re-enters the `PENDING` state until re-approved.
+
+## Integrity Matrix (Registration)
+- The integrity matrix reports, per registration row, whether the on-chain payload hash matches the recomputed hash from the stored JSON, and whether the stored DB hash matches the recomputed hash.
+- For now, each registration anchors a single hash on-chain (m = 0). The falsification probability for a single hash is exactly `1 / 2^b` (Keccak-256 → `b = 256`).
+- When we adopt batched Merkle-root anchoring, `m` becomes the Merkle path length: `m = ceil(log2(N))` for a batch size `N`. The large-b approximation is `(m + 1) / 2^b`.
+
+### Security analysis endpoint
+Query the falsification summary directly:
+
+```bash
+curl "http://localhost:8080/security/falsification?N=1&b=256"
+```
+
+Responses include `{ b, N, m, exact, approx }`. For `N=1` and `b=256`, both `exact` and `approx` are `1/2^256`.
+
+### List endpoints with integrityMatrix
+Append `?integrityMatrix=true` to list endpoints to include an `integrityMatrix` array and a `security` object alongside the existing data. Example:
+
+```bash
+curl "http://localhost:8080/api/registrations/pending?integrityMatrix=true"
+```
