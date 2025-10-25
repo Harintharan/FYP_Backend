@@ -1,5 +1,12 @@
 import { query } from "../db.js";
 
+function resolveExecutor(dbClient) {
+  if (dbClient && typeof dbClient.query === "function") {
+    return (text, params) => dbClient.query(text, params);
+  }
+  return query;
+}
+
 export async function insertProduct({
   id,
   productName,
@@ -18,8 +25,9 @@ export async function insertProduct({
   status,
   pinataCid,
   pinataPinnedAt,
-}) {
-  const { rows } = await query(
+}, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `INSERT INTO product_registry (
        id,
        product_name,
@@ -87,8 +95,9 @@ export async function updateProductRecord(id, {
   status,
   pinataCid,
   pinataPinnedAt,
-}) {
-  const { rows } = await query(
+}, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `UPDATE product_registry
         SET product_name = $2,
             product_category = $3,
@@ -132,16 +141,18 @@ export async function updateProductRecord(id, {
   return rows[0] ?? null;
 }
 
-export async function findProductById(id) {
-  const { rows } = await query(
+export async function findProductById(id, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `SELECT * FROM product_registry WHERE id = $1 LIMIT 1`,
     [id]
   );
   return rows[0] ?? null;
 }
 
-export async function listProductsByManufacturerUuid(manufacturerUuid) {
-  const { rows } = await query(
+export async function listProductsByManufacturerUuid(manufacturerUuid, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `SELECT *
        FROM product_registry
       WHERE LOWER(manufacturer_uuid) = LOWER($1)
@@ -151,8 +162,9 @@ export async function listProductsByManufacturerUuid(manufacturerUuid) {
   return rows;
 }
 
-export async function listProductsByShipmentUuid(shipmentId) {
-  const { rows } = await query(
+export async function listProductsByShipmentUuid(shipmentId, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `SELECT id, shipment_id, quantity
        FROM product_registry
       WHERE shipment_id = $1`,
@@ -161,8 +173,9 @@ export async function listProductsByShipmentUuid(shipmentId) {
   return rows;
 }
 
-export async function assignProductToShipment(productId, shipmentId, quantity) {
-  await query(
+export async function assignProductToShipment(productId, shipmentId, quantity, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  await exec(
     `UPDATE product_registry
         SET shipment_id = $2::uuid,
             quantity = COALESCE($3::int, quantity),
@@ -176,11 +189,16 @@ export async function assignProductToShipment(productId, shipmentId, quantity) {
   );
 }
 
-export async function clearProductsFromShipment(shipmentId, keepProductIds = []) {
+export async function clearProductsFromShipment(
+  shipmentId,
+  keepProductIds = [],
+  dbClient
+) {
   if (!shipmentId) {
     return;
   }
 
+  const exec = resolveExecutor(dbClient);
   const keepSet = new Set(
     Array.isArray(keepProductIds)
       ? keepProductIds.map((id) => id.toLowerCase())
@@ -188,7 +206,7 @@ export async function clearProductsFromShipment(shipmentId, keepProductIds = [])
   );
 
   if (keepSet.size === 0) {
-    await query(
+    await exec(
       `UPDATE product_registry
           SET shipment_id = NULL,
               status = 'PRODUCT_READY_FOR_SHIPMENT'::product_status,
@@ -199,23 +217,21 @@ export async function clearProductsFromShipment(shipmentId, keepProductIds = [])
     return;
   }
 
-  const { rows } = await query(
+  const { rows } = await exec(
     `SELECT id FROM product_registry WHERE shipment_id = $1::uuid`,
     [shipmentId]
   );
 
-  await Promise.all(
-    rows
-      .filter((row) => !keepSet.has(row.id.toLowerCase()))
-      .map((row) =>
-        query(
-          `UPDATE product_registry
-              SET shipment_id = NULL,
-                  status = 'PRODUCT_READY_FOR_SHIPMENT'::product_status,
-                  updated_at = NOW()
-            WHERE id = $1`,
-          [row.id]
-        )
-      )
-  );
+  for (const row of rows) {
+    if (!keepSet.has(row.id.toLowerCase())) {
+      await exec(
+        `UPDATE product_registry
+            SET shipment_id = NULL,
+                status = 'PRODUCT_READY_FOR_SHIPMENT'::product_status,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [row.id]
+      );
+    }
+  }
 }

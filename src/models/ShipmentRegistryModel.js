@@ -1,7 +1,15 @@
 import { query } from "../db.js";
 
-export async function createShipment(data) {
-  const { rows } = await query(
+function resolveExecutor(dbClient) {
+  if (dbClient && typeof dbClient.query === "function") {
+    return (text, params) => dbClient.query(text, params);
+  }
+  return query;
+}
+
+export async function createShipment(data, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `INSERT INTO shipment_registry
        (id, manufacturer_uuid, consumer_uuid,
         shipment_hash, tx_hash, created_by, pinata_cid, pinata_pinned_at, created_at)
@@ -21,8 +29,9 @@ export async function createShipment(data) {
   return rows[0];
 }
 
-export async function updateShipment(id, data) {
-  const { rows } = await query(
+export async function updateShipment(id, data, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `UPDATE shipment_registry SET
          manufacturer_uuid=$1,
          consumer_uuid=$2,
@@ -47,16 +56,18 @@ export async function updateShipment(id, data) {
   return rows[0];
 }
 
-export async function getShipmentById(id) {
-  const { rows } = await query(
+export async function getShipmentById(id, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `SELECT * FROM shipment_registry WHERE id=$1`,
     [id]
   );
   return rows[0];
 }
 
-export async function getAllShipments() {
-  const { rows } = await query(
+export async function getAllShipments(dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
     `SELECT * FROM shipment_registry ORDER BY created_at DESC`
   );
   return rows;

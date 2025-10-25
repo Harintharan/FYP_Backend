@@ -166,6 +166,10 @@ export function normalizeShipmentCheckpoints(rawCheckpoints = [], defaults = [])
       timeTolerance:
         pickValue(raw, "timeTolerance", "time_tolerance") ??
         pickValue(defaultsForIndex, "timeTolerance", "time_tolerance"),
+      segmentOrder:
+        pickValue(raw, "segmentOrder", "segment_order") ??
+        pickValue(defaultsForIndex, "segmentOrder", "segment_order") ??
+        index + 1,
     };
 
     const parsed = ShipmentCheckpointPayload.parse(candidate);
@@ -177,12 +181,19 @@ export function normalizeShipmentCheckpoints(rawCheckpoints = [], defaults = [])
       estimatedArrivalDate:
         toNullableString(parsed.estimatedArrivalDate) ?? EMPTY,
       timeTolerance: toNullableString(parsed.timeTolerance) ?? EMPTY,
+      segmentOrder:
+        typeof parsed.segmentOrder === "number"
+          ? parsed.segmentOrder
+          : index + 1,
     };
   });
 
   return normalized
     .map((entry, index) => ({ ...entry, _index: index }))
     .sort((a, b) => {
+      if (a.segmentOrder !== b.segmentOrder) {
+        return (a.segmentOrder ?? 0) - (b.segmentOrder ?? 0);
+      }
       let compare = a.startCheckpointId.localeCompare(b.startCheckpointId);
       if (compare !== 0) {
         return compare;
@@ -239,6 +250,7 @@ export function buildShipmentCanonicalPayload(
       expectedShipDate: valueOrEmpty(cp.expectedShipDate),
       estimatedArrivalDate: valueOrEmpty(cp.estimatedArrivalDate),
       timeTolerance: valueOrEmpty(cp.timeTolerance),
+      segmentOrder: valueOrEmpty(cp.segmentOrder),
     })),
   });
 }

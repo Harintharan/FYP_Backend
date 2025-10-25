@@ -32,12 +32,14 @@ export async function createShipmentSegment({
   expectedShipDate,
   estimatedArrivalDate,
   timeTolerance,
-  fromUserId,
-  toUserId,
+  supplierId = null,
+  segmentOrder,
   status = "PENDING",
   walletAddress = null,
+  dbClient = null,
 }) {
   const segmentId = randomUUID();
+  const effectiveOrder = segmentOrder ?? 1;
 
   const { normalized, canonical, payloadHash } =
     prepareShipmentSegmentPersistence(segmentId, {
@@ -47,8 +49,8 @@ export async function createShipmentSegment({
       expectedShipDate,
       estimatedArrivalDate,
       timeTolerance,
-      fromUserId,
-      toUserId,
+      supplierId,
+      segmentOrder: effectiveOrder,
       status,
     });
 
@@ -90,8 +92,8 @@ export async function createShipmentSegment({
     expectedShipDate: normalized.expectedShipDate,
     estimatedArrivalDate: normalized.estimatedArrivalDate,
     timeTolerance: normalized.timeTolerance ?? null,
-    fromUserId: normalized.fromUserId ?? null,
-    toUserId: normalized.toUserId ?? null,
+    supplierId: normalized.supplierId ?? null,
+    segmentOrder: normalized.segmentOrder ?? effectiveOrder,
     status: normalized.status,
     segmentHash: payloadHash,
     txHash,
@@ -99,13 +101,13 @@ export async function createShipmentSegment({
     pinataPinnedAt: pinataBackup?.Timestamp
       ? new Date(pinataBackup.Timestamp)
       : null,
-  });
+  }, dbClient);
 
   return formatShipmentSegmentRecord(record);
 }
 
-export async function listShipmentSegmentsForShipment(shipmentId) {
-  const rows = await listShipmentSegmentsByShipmentId(shipmentId);
+export async function listShipmentSegmentsForShipment(shipmentId, dbClient = null) {
+  const rows = await listShipmentSegmentsByShipmentId(shipmentId, dbClient);
 
   return Promise.all(
     rows.map(async (row) => {
@@ -122,10 +124,11 @@ export async function listShipmentSegmentsForShipment(shipmentId) {
 export async function updateShipmentSegmentStatus({
   segmentId,
   status,
-  toUserId,
+  supplierId,
   walletAddress = null,
+  dbClient = null,
 }) {
-  const existing = await findShipmentSegmentById(segmentId);
+  const existing = await findShipmentSegmentById(segmentId, dbClient);
   if (!existing) {
     throw shipmentSegmentNotFound();
   }
@@ -137,8 +140,8 @@ export async function updateShipmentSegmentStatus({
     expectedShipDate: existing.expected_ship_date ?? null,
     estimatedArrivalDate: existing.estimated_arrival_date ?? null,
     timeTolerance: existing.time_tolerance ?? null,
-    fromUserId: existing.from_user_id ?? null,
-    toUserId: toUserId ?? existing.to_user_id ?? null,
+    supplierId: supplierId ?? existing.supplier_id ?? null,
+    segmentOrder: existing.segment_order ?? null,
     status,
   };
 
@@ -181,14 +184,15 @@ export async function updateShipmentSegmentStatus({
   const updated = await updateShipmentSegmentRecord({
     segmentId,
     status: normalized.status,
-    toUserId: normalized.toUserId ?? null,
+    supplierId: normalized.supplierId ?? null,
+    segmentOrder: normalized.segmentOrder ?? null,
     segmentHash: payloadHash,
     txHash,
     pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
     pinataPinnedAt: pinataBackup?.Timestamp
       ? new Date(pinataBackup.Timestamp)
       : existing.pinata_pinned_at ?? null,
-  });
+  }, dbClient);
 
   return formatShipmentSegmentRecord(updated);
 }

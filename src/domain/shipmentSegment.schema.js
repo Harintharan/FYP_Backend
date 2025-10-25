@@ -27,6 +27,19 @@ const optionalString = z
     return trimmed.length === 0 ? undefined : trimmed;
   });
 
+const optionalOrder = z
+  .preprocess((value) => {
+    if (value === null || value === undefined || value === "") {
+      return undefined;
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : value;
+  }, z.number().int().min(1, "segmentOrder must be >= 1"))
+  .optional();
+
 export const SHIPMENT_SEGMENT_STATUS_VALUES = Object.freeze([
   "PENDING",
   "ACCEPTED",
@@ -50,7 +63,7 @@ export const ShipmentSegmentPayload = z.object({
   expectedShipDate: optionalString,
   estimatedArrivalDate: optionalString,
   timeTolerance: optionalString,
-  fromUserId: optionalString,
-  toUserId: optionalString,
+  supplierId: optionalString,
+  segmentOrder: optionalOrder,
   status: optionalStatus,
 });

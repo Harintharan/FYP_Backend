@@ -15,8 +15,8 @@ export async function insertShipmentSegment({
   expectedShipDate,
   estimatedArrivalDate,
   timeTolerance,
-  fromUserId,
-  toUserId,
+  supplierId,
+  segmentOrder,
   status,
   segmentHash,
   txHash,
@@ -33,8 +33,8 @@ export async function insertShipmentSegment({
         expected_ship_date,
         estimated_arrival_date,
         time_tolerance,
-        from_user_id,
-        to_user_id,
+        supplier_id,
+        segment_order,
         status,
         segment_hash,
         tx_hash,
@@ -52,8 +52,8 @@ export async function insertShipmentSegment({
       expectedShipDate,
       estimatedArrivalDate,
       timeTolerance ?? null,
-      fromUserId ?? null,
-      toUserId ?? null,
+      supplierId ?? null,
+      segmentOrder,
       status ?? "PENDING",
       segmentHash,
       txHash ?? null,
@@ -88,7 +88,7 @@ export async function listShipmentSegmentsByShipmentId(shipmentId, dbClient) {
        JOIN checkpoint_registry sc2
          ON ss.end_checkpoint_id = sc2.id
       WHERE ss.shipment_id = $1
-      ORDER BY ss.created_at ASC`,
+      ORDER BY ss.segment_order ASC, ss.created_at ASC`,
     [shipmentId]
   );
   return rows;
@@ -97,7 +97,8 @@ export async function listShipmentSegmentsByShipmentId(shipmentId, dbClient) {
 export async function updateShipmentSegmentRecord({
   segmentId,
   status,
-  toUserId,
+  supplierId,
+  segmentOrder,
   segmentHash,
   txHash,
   pinataCid,
@@ -107,18 +108,20 @@ export async function updateShipmentSegmentRecord({
   const { rows } = await exec(
     `UPDATE shipment_segment
         SET status = $2,
-            to_user_id = COALESCE($3, to_user_id),
-            segment_hash = $4,
-            tx_hash = $5,
-            pinata_cid = $6,
-            pinata_pinned_at = $7,
+            supplier_id = COALESCE($3, supplier_id),
+            segment_order = COALESCE($4, segment_order),
+            segment_hash = $5,
+            tx_hash = $6,
+            pinata_cid = $7,
+            pinata_pinned_at = $8,
             updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
     [
       segmentId,
       status,
-      toUserId ?? null,
+      supplierId ?? null,
+      segmentOrder ?? null,
       segmentHash,
       txHash ?? null,
       pinataCid ?? null,

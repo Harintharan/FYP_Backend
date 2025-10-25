@@ -15,7 +15,7 @@ const StatusUpdatePayload = z.object({
     "CLOSED",
     "CANCELLED",
   ]),
-  toUserId: z.string().uuid().optional(),
+  supplierId: z.string().uuid().optional(),
 });
 
 export async function listShipmentSegments(req, res) {
@@ -50,7 +50,7 @@ export async function updateShipmentSegmentStatusById(req, res) {
     const updated = await updateShipmentSegmentStatus({
       segmentId,
       status: parsed.status,
-      toUserId: parsed.toUserId ?? null,
+      supplierId: parsed.supplierId ?? null,
       walletAddress: req.wallet?.walletAddress ?? null,
     });
     return res.json(updated);

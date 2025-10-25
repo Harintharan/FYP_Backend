@@ -20,8 +20,8 @@ const SEGMENT_FIELDS = [
   "expectedShipDate",
   "estimatedArrivalDate",
   "timeTolerance",
-  "fromUserId",
-  "toUserId",
+  "supplierId",
+  "segmentOrder",
   "status",
 ];
 
@@ -107,13 +107,18 @@ function coerceShipmentSegmentPayload(rawPayload, defaults = {}) {
       "timeTolerance",
       "time_tolerance"
     ),
-    fromUserId: resolveField(
+    supplierId: resolveField(
       rawPayload,
       defaults,
-      "fromUserId",
-      "from_user_id"
+      "supplierId",
+      "supplier_id"
     ),
-    toUserId: resolveField(rawPayload, defaults, "toUserId", "to_user_id"),
+    segmentOrder: resolveField(
+      rawPayload,
+      defaults,
+      "segmentOrder",
+      "segment_order"
+    ),
     status: resolveField(rawPayload, defaults, "status", "segmentStatus"),
   };
 }
@@ -129,8 +134,9 @@ export function normalizeShipmentSegmentPayload(rawPayload, defaults = {}) {
     expectedShipDate: toNullableString(parsed.expectedShipDate),
     estimatedArrivalDate: toNullableString(parsed.estimatedArrivalDate),
     timeTolerance: toNullableString(parsed.timeTolerance),
-    fromUserId: toNullableString(parsed.fromUserId),
-    toUserId: toNullableString(parsed.toUserId),
+    supplierId: toNullableString(parsed.supplierId),
+    segmentOrder:
+      typeof parsed.segmentOrder === "number" ? parsed.segmentOrder : null,
     status: sanitizeStatus(parsed.status),
   };
 }
@@ -192,8 +198,8 @@ export function deriveShipmentSegmentPayloadFromRecord(record) {
     estimatedArrivalDate:
       record.estimated_arrival_date ?? record.estimatedArrivalDate ?? null,
     timeTolerance: record.time_tolerance ?? record.timeTolerance ?? null,
-    fromUserId: record.from_user_id ?? record.fromUserId ?? null,
-    toUserId: record.to_user_id ?? record.toUserId ?? null,
+    supplierId: record.supplier_id ?? record.supplierId ?? null,
+    segmentOrder: record.segment_order ?? record.segmentOrder ?? null,
     status: record.status ?? null,
   };
 }
@@ -296,10 +302,15 @@ export function formatShipmentSegmentRecord(record) {
     timeTolerance: toNullableString(
       record.time_tolerance ?? record.timeTolerance ?? null
     ),
-    fromUserId: toNullableString(
-      record.from_user_id ?? record.fromUserId ?? null
+    supplierId: toNullableString(
+      record.supplier_id ?? record.supplierId ?? null
     ),
-    toUserId: toNullableString(record.to_user_id ?? record.toUserId ?? null),
+    segmentOrder:
+      typeof record.segment_order === "number"
+        ? record.segment_order
+        : typeof record.segmentOrder === "number"
+          ? record.segmentOrder
+          : null,
     status: sanitizeStatus(record.status ?? null),
     segmentHash: normalizeHash(record.segment_hash ?? record.segmentHash ?? null),
     txHash: record.tx_hash ?? null,

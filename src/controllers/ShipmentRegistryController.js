@@ -30,6 +30,7 @@ import {
   shipmentOperatorAddress,
 } from "../eth/shipmentContract.js";
 import { normalizeHash } from "../utils/hash.js";
+import { runInTransaction } from "../utils/dbTransactions.js";
 import { hashMismatch, ShipmentErrorCodes } from "../errors/shipmentErrors.js";
 const PRODUCT_STATUS_READY_FOR_SHIPMENT = "PRODUCT_READY_FOR_SHIPMENT";
 function normalizeShipmentResponse(payload) {
@@ -60,6 +61,7 @@ function buildCheckpointsFromSegments(segments) {
     estimated_arrival_date: segment.estimatedArrivalDate ?? null,
     time_tolerance: segment.timeTolerance ?? null,
     expected_ship_date: segment.expectedShipDate ?? null,
+    segment_order: segment.segmentOrder ?? null,
   }));
 }
 function buildCanonicalCheckpointsFromSegments(segments) {
@@ -72,6 +74,7 @@ function buildCanonicalCheckpointsFromSegments(segments) {
     estimated_arrival_date: segment.estimatedArrivalDate ?? null,
     time_tolerance: segment.timeTolerance ?? null,
     expected_ship_date: segment.expectedShipDate ?? null,
+    segment_order: segment.segmentOrder ?? null,
   }));
 }
 async function assertCheckpointExists(checkpointId) {
@@ -232,6 +235,12 @@ export async function registerShipment(req, res) {
       }
     }
     for (const [index, checkpoint] of checkpoints.entries()) {
+      const segmentOrder =
+        typeof checkpoint.segment_order === "number"
+          ? checkpoint.segment_order
+          : typeof checkpoint.segmentOrder === "number"
+            ? checkpoint.segmentOrder
+            : index + 1;
       const startExists = await assertCheckpointExists(
         checkpoint.start_checkpoint_id
       );
@@ -311,36 +320,64 @@ export async function registerShipment(req, res) {
         backupErr
       );
     }
-    const savedShipment = await createShipment({
-      ...createPayload,
-      pinata_cid: pinataBackup?.IpfsHash ?? null,
-      pinata_pinned_at: pinataBackup?.Timestamp ?? null,
-    });
-    const formattedShipment = formatShipmentRecord(savedShipment);
-    await Promise.all(
-      normalizedItems.map((item) =>
-        assignProductToShipment(item.product_uuid, shipmentId, item.quantity)
-      )
-    );
-    for (const checkpoint of checkpoints) {
-      await createShipmentSegment({
-        shipmentId,
-        startCheckpointId: checkpoint.start_checkpoint_id,
-        endCheckpointId: checkpoint.end_checkpoint_id,
-        expectedShipDate: checkpoint.expected_ship_date,
-        estimatedArrivalDate: checkpoint.estimated_arrival_date,
-        timeTolerance: checkpoint.time_tolerance ?? null,
-        fromUserId: null,
-        toUserId: null,
-        status: "PENDING",
-        walletAddress: req.wallet?.walletAddress ?? null,
+    let savedShipment;
+    try {
+      savedShipment = await runInTransaction(async (client) => {
+        const persisted = await createShipment(
+          {
+            ...createPayload,
+            pinata_cid: pinataBackup?.IpfsHash ?? null,
+            pinata_pinned_at: pinataBackup?.Timestamp ?? null,
+          },
+          client
+        );
+
+        for (const item of normalizedItems) {
+          await assignProductToShipment(
+            item.product_uuid,
+            shipmentId,
+            item.quantity,
+            client
+          );
+        }
+
+        for (const [idx, checkpoint] of checkpoints.entries()) {
+          const segmentOrder =
+            typeof checkpoint.segment_order === "number"
+              ? checkpoint.segment_order
+              : typeof checkpoint.segmentOrder === "number"
+                ? checkpoint.segmentOrder
+                : idx + 1;
+          await createShipmentSegment({
+            shipmentId,
+            startCheckpointId: checkpoint.start_checkpoint_id,
+            endCheckpointId: checkpoint.end_checkpoint_id,
+            expectedShipDate: checkpoint.expected_ship_date,
+            estimatedArrivalDate: checkpoint.estimated_arrival_date,
+            timeTolerance: checkpoint.time_tolerance ?? null,
+            status: "PENDING",
+            segmentOrder,
+            walletAddress: req.wallet?.walletAddress ?? null,
+            dbClient: client,
+          });
+        }
+
+        return persisted;
       });
+    } catch (transactionErr) {
+      console.error(
+        "❌ Failed to persist shipment within transaction:",
+        transactionErr
+      );
+      throw transactionErr;
     }
-    const shipmentSegments = await listShipmentSegmentsForShipment(
-      shipmentId
-    );
+
+    const formattedShipment = formatShipmentRecord(savedShipment);
+    const [shipmentSegments, assignedProducts] = await Promise.all([
+      listShipmentSegmentsForShipment(shipmentId),
+      listProductsByShipmentUuid(shipmentId),
+    ]);
     const savedCheckpoints = buildCheckpointsFromSegments(shipmentSegments);
-    const assignedProducts = await listProductsByShipmentUuid(shipmentId);
     const shipmentItemsPayload = assignedProducts.map((product) => ({
       product_uuid: product.id,
       quantity:
@@ -551,7 +588,6 @@ export async function updateShipment(req, res) {
         checkpoints,
       }
     );
-    await deleteShipmentSegmentsByShipmentId(shipmentId);
     const { txHash, shipmentHash } = await updateShipmentOnChain(
       uuidToBytes16Hex(shipmentId),
       payloadHash
@@ -608,37 +644,72 @@ export async function updateShipment(req, res) {
       pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
     updatePayload.pinata_pinned_at =
       pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null;
-    const updatedShipment = await updateShipmentRecord(
-      shipmentId,
-      updatePayload
-    );
-    const formattedShipment = formatShipmentRecord(updatedShipment);
-    const keepProductIds = normalizedItems.map((item) => item.product_uuid);
-    await clearProductsFromShipment(shipmentId, keepProductIds);
-    await Promise.all(
-      normalizedItems.map((item) =>
-        assignProductToShipment(item.product_uuid, shipmentId, item.quantity)
-      )
-    );
-    for (const checkpoint of checkpoints) {
-      await createShipmentSegment({
-        shipmentId,
-        startCheckpointId: checkpoint.start_checkpoint_id,
-        endCheckpointId: checkpoint.end_checkpoint_id,
-        expectedShipDate: checkpoint.expected_ship_date,
-        estimatedArrivalDate: checkpoint.estimated_arrival_date,
-        timeTolerance: checkpoint.time_tolerance ?? null,
-        fromUserId: null,
-        toUserId: null,
-        status: "PENDING",
-        walletAddress: req.wallet?.walletAddress ?? null,
+    let updatedShipment;
+    try {
+      updatedShipment = await runInTransaction(async (client) => {
+        const persisted = await updateShipmentRecord(
+          shipmentId,
+          updatePayload,
+          client
+        );
+
+        const keepProductIds = normalizedItems.map(
+          (item) => item.product_uuid
+        );
+        await clearProductsFromShipment(
+          shipmentId,
+          keepProductIds,
+          client
+        );
+
+        for (const item of normalizedItems) {
+          await assignProductToShipment(
+            item.product_uuid,
+            shipmentId,
+            item.quantity,
+            client
+          );
+        }
+
+        await deleteShipmentSegmentsByShipmentId(shipmentId, client);
+
+        for (const [idx, checkpoint] of checkpoints.entries()) {
+          const segmentOrder =
+            typeof checkpoint.segment_order === "number"
+              ? checkpoint.segment_order
+              : typeof checkpoint.segmentOrder === "number"
+                ? checkpoint.segmentOrder
+                : idx + 1;
+          await createShipmentSegment({
+            shipmentId,
+            startCheckpointId: checkpoint.start_checkpoint_id,
+            endCheckpointId: checkpoint.end_checkpoint_id,
+            expectedShipDate: checkpoint.expected_ship_date,
+            estimatedArrivalDate: checkpoint.estimated_arrival_date,
+            timeTolerance: checkpoint.time_tolerance ?? null,
+            status: "PENDING",
+            segmentOrder,
+            walletAddress: req.wallet?.walletAddress ?? null,
+            dbClient: client,
+          });
+        }
+
+        return persisted;
       });
+    } catch (transactionErr) {
+      console.error(
+        "❌ Failed to persist shipment update within transaction:",
+        transactionErr
+      );
+      throw transactionErr;
     }
-    const shipmentSegments = await listShipmentSegmentsForShipment(
-      shipmentId
-    );
+
+    const formattedShipment = formatShipmentRecord(updatedShipment);
+    const [shipmentSegments, assignedProducts] = await Promise.all([
+      listShipmentSegmentsForShipment(shipmentId),
+      listProductsByShipmentUuid(shipmentId),
+    ]);
     const savedCheckpoints = buildCheckpointsFromSegments(shipmentSegments);
-    const assignedProducts = await listProductsByShipmentUuid(shipmentId);
     const shipmentItemsPayload = assignedProducts.map((product) => ({
       product_uuid: product.id,
       quantity:

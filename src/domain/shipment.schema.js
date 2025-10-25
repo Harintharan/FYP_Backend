@@ -36,6 +36,23 @@ const optionalQuantity = z
   }, z.number().int().min(0, "quantity must be a non-negative integer"))
   .optional();
 
+const optionalSegmentOrder = z
+  .preprocess((value) => {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    const trimmed = toTrimmedString(value);
+    if (trimmed === undefined) {
+      return undefined;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : value;
+  }, z.number().int().min(1, "segmentOrder must be a positive integer"))
+  .optional();
+
 export const ShipmentPayload = z.object({
   manufacturerUUID: requiredUuid,
   consumerUUID: requiredUuid,
@@ -52,4 +69,5 @@ export const ShipmentCheckpointPayload = z.object({
   expectedShipDate: requiredString,
   estimatedArrivalDate: requiredString,
   timeTolerance: requiredString,
+  segmentOrder: optionalSegmentOrder,
 });
