@@ -46,7 +46,6 @@ const optionalQuantity = z
   .optional();
 
 export const PRODUCT_STATUS_VALUES = Object.freeze([
-  "PRODUCT_CREATED",
   "PRODUCT_READY_FOR_SHIPMENT",
   "PRODUCT_ALLOCATED",
   "PRODUCT_IN_TRANSIT",

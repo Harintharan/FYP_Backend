@@ -111,8 +111,20 @@ export function computeProductHash(productId, payload) {
   return computeProductHashFromCanonical(canonical);
 }
 
-export function prepareProductPersistence(productId, rawPayload, defaults = {}) {
+export function prepareProductPersistence(
+  productId,
+  rawPayload,
+  defaults = {},
+  overrides = {}
+) {
   const normalized = normalizeProductPayload(rawPayload, defaults);
+  if (overrides && typeof overrides === "object") {
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value !== undefined) {
+        normalized[key] = value;
+      }
+    }
+  }
   if (normalized.shipmentId) {
     normalized.shipmentId = normalized.shipmentId.toLowerCase();
   }

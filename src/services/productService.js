@@ -44,9 +44,17 @@ function ensureManufacturerAccess(registration, manufacturerUUID) {
 
 export async function createProduct({ payload, registration, wallet }) {
   const productId = randomUUID();
+  const sanitizedPayload =
+    payload && typeof payload === "object" ? { ...payload } : {};
+  if ("status" in sanitizedPayload) {
+    delete sanitizedPayload.status;
+  }
+  const defaultStatus = "PRODUCT_READY_FOR_SHIPMENT";
   const { normalized, canonical, payloadHash } = prepareProductPersistence(
     productId,
-    payload
+    sanitizedPayload,
+    {},
+    { status: defaultStatus }
   );
 
   ensureManufacturerAccess(registration, normalized.manufacturerUUID);
@@ -114,7 +122,7 @@ export async function createProduct({ payload, registration, wallet }) {
     pinataPinnedAt: pinataBackup?.Timestamp
       ? new Date(pinataBackup.Timestamp)
       : null,
-    status: normalized.status ?? null,
+    status: normalized.status ?? defaultStatus,
   });
 
   const formatted = formatProductRecord(record);

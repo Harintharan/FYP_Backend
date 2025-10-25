@@ -5,6 +5,7 @@ import {
   getProductDetails,
   listManufacturerProducts,
 } from "../services/productService.js";
+import { PRODUCT_STATUS_VALUES } from "../domain/product.schema.js";
 import {
   respondWithZodError,
   handleControllerError,
@@ -92,4 +93,11 @@ export async function listProducts(req, res) {
       fallbackMessage: "Unable to list products",
     });
   }
+}
+
+export async function listProductStatuses(_req, res) {
+  return res.status(200).json({
+    statusCode: 200,
+    statuses: PRODUCT_STATUS_VALUES,
+  });
 }

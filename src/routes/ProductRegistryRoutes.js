@@ -6,6 +6,7 @@ import {
   getProduct,
   listProductsByManufacturer,
   listProducts,
+  listProductStatuses,
 } from "../controllers/productController.js";
 
 const router = Router();
@@ -16,6 +17,11 @@ router.get(
   "/manufacturer/:manufacturerUuid",
   requireRegistrationRole("MANUFACTURER"),
   listProductsByManufacturer
+);
+router.get(
+  "/statuses",
+  requireRegistrationRole("MANUFACTURER"),
+  listProductStatuses
 );
 router.get("/:id", requireRegistrationRole("MANUFACTURER"), getProduct);
 router.get("/", requireRegistrationRole("MANUFACTURER"), listProducts);

@@ -33,7 +33,6 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'product_status') THEN
     CREATE TYPE product_status AS ENUM (
-      'PRODUCT_CREATED',
       'PRODUCT_READY_FOR_SHIPMENT',
       'PRODUCT_ALLOCATED',
       'PRODUCT_IN_TRANSIT',
