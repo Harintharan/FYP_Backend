@@ -8,8 +8,12 @@ import {
   insertCheckpoint,
   updateCheckpointRecord,
   findCheckpointById,
+  findCheckpointByOwnerUuid,
   listCheckpointsByOwnerUuid,
   listAllCheckpoints,
+  listApprovedCheckpointsByOwner,
+  listApprovedCheckpointsByType as listApprovedCheckpointsByTypeModel,
+  findApprovedCheckpointById,
 } from "../models/CheckpointRegistryModel.js";
 import {
   registrationRequired,
@@ -52,6 +56,52 @@ function resolveCheckpointActor({ walletAddress, ownerUUID, existing }) {
   return "checkpoint_service";
 }
 
+function isValidUuid(value) {
+  return typeof value === "string"
+    ? /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value.trim()
+      )
+    : false;
+}
+
+const VALID_REG_TYPES = new Set([
+  "MANUFACTURER",
+  "SUPPLIER",
+  "WAREHOUSE",
+  "CONSUMER",
+]);
+
+function normalizeUuidQuery(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return isValidUuid(trimmed) ? trimmed : null;
+}
+
+function normalizeRegType(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const upper = value.trim().toUpperCase();
+  return VALID_REG_TYPES.has(upper) ? upper : null;
+}
+
+async function formatCheckpointWithIntegrity(row, { tolerateMissing = true } = {}) {
+  const integrity = await ensureCheckpointOnChainIntegrity(row, {
+    tolerateMissing,
+  });
+  const formattedRecord = formatCheckpointRecord(row);
+  formattedRecord.onChainStatus = integrity?.onChainMissing
+    ? "MISSING"
+    : "SYNCED";
+  formattedRecord.onChainHash = integrity?.onChainHash ?? null;
+  return formattedRecord;
+}
+
 export async function upsertCheckpointForRegistration({
   registrationId,
   checkpointPayload,
@@ -63,8 +113,8 @@ export async function upsertCheckpointForRegistration({
     return null;
   }
 
-  const checkpointId = registrationId;
-  const existing = await findCheckpointById(checkpointId, dbClient);
+  const existing = await findCheckpointByOwnerUuid(registrationId, dbClient);
+  const checkpointId = existing ? existing.id : randomUUID();
 
   const { normalized, canonical, payloadHash } = prepareCheckpointPersistence(
     checkpointId,
@@ -74,6 +124,38 @@ export async function upsertCheckpointForRegistration({
     }
   );
 
+  const checkpointIdBytes16 = uuidToBytes16Hex(checkpointId);
+  const normalizedComputedHash = normalizeHash(payloadHash);
+
+  let checkpointTxHash = txHash ?? null;
+  let normalizedOnChainHash = normalizedComputedHash;
+
+  if (existing) {
+    const { txHash: chainTxHash, checkpointHash } = await updateCheckpointOnChain(
+      checkpointIdBytes16,
+      canonical
+    );
+    checkpointTxHash = chainTxHash ?? checkpointTxHash;
+    normalizedOnChainHash = checkpointHash
+      ? normalizeHash(checkpointHash)
+      : normalizedComputedHash;
+  } else {
+    const { txHash: chainTxHash, checkpointHash } =
+      await registerCheckpointOnChain(checkpointIdBytes16, canonical);
+    checkpointTxHash = chainTxHash ?? checkpointTxHash;
+    normalizedOnChainHash = normalizeHash(checkpointHash);
+  }
+
+  if (normalizedOnChainHash !== normalizedComputedHash) {
+    throw hashMismatch({
+      reason: existing
+        ? "On-chain hash mismatch detected during checkpoint auto-update"
+        : "On-chain hash mismatch detected during checkpoint auto-registration",
+      onChain: normalizedOnChainHash,
+      computed: normalizedComputedHash,
+    });
+  }
+
   const pinataBackup = await backupRecordSafely({
     entity: "checkpoint",
     record: {
@@ -81,7 +163,7 @@ export async function upsertCheckpointForRegistration({
       payloadCanonical: canonical,
       payloadHash,
       payload: normalized,
-      txHash,
+      txHash: checkpointTxHash,
     },
     walletAddress,
     operation: existing ? "update" : "create",
@@ -113,7 +195,7 @@ export async function upsertCheckpointForRegistration({
         country: normalized.country ?? null,
         ownerUUID: normalized.ownerUUID,
         checkpointHash: payloadHash,
-        txHash,
+        txHash: checkpointTxHash,
         updatedBy: actor,
         pinataCid,
         pinataPinnedAt,
@@ -133,7 +215,7 @@ export async function upsertCheckpointForRegistration({
       country: normalized.country ?? null,
       ownerUUID: normalized.ownerUUID,
       checkpointHash: payloadHash,
-      txHash,
+      txHash: checkpointTxHash,
       createdBy: actor,
       pinataCid,
       pinataPinnedAt,
@@ -317,23 +399,21 @@ export async function getCheckpointDetails({ id, registration }) {
     throw checkpointNotFound();
   }
 
-  await ensureCheckpointOnChainIntegrity(existing);
-
+  const formatted = await formatCheckpointWithIntegrity(existing, {
+    tolerateMissing: false,
+  });
   return {
     statusCode: 200,
-    body: {
-      ...formatCheckpointRecord(existing),
-    },
+    body: formatted,
   };
 }
 
 export async function listCheckpointsByOwner({ ownerUuid, registration }) {
   const rows = await listCheckpointsByOwnerUuid(ownerUuid);
   const formatted = await Promise.all(
-    rows.map(async (row) => {
-      await ensureCheckpointOnChainIntegrity(row);
-      return formatCheckpointRecord(row);
-    })
+    rows.map((row) =>
+      formatCheckpointWithIntegrity(row, { tolerateMissing: true })
+    )
   );
 
   return {
@@ -345,11 +425,116 @@ export async function listCheckpointsByOwner({ ownerUuid, registration }) {
 export async function listAllCheckpointRecords() {
   const rows = await listAllCheckpoints();
   const formatted = await Promise.all(
-    rows.map(async (row) => {
-      await ensureCheckpointOnChainIntegrity(row);
-      return formatCheckpointRecord(row);
-    })
+    rows.map((row) =>
+      formatCheckpointWithIntegrity(row, { tolerateMissing: true })
+    )
   );
+  return {
+    statusCode: 200,
+    body: formatted,
+  };
+}
+
+export async function listApprovedCheckpointsForUser({ ownerUuid }) {
+  if (!ownerUuid) {
+    throw checkpointNotFound();
+  }
+
+  const rows = await listApprovedCheckpointsByOwner(ownerUuid);
+
+  if (!rows.length) {
+    throw checkpointNotFound();
+  }
+
+  const formatted = await Promise.all(
+    rows.map((row) =>
+      formatCheckpointWithIntegrity(row, { tolerateMissing: true })
+    )
+  );
+
+  return {
+    statusCode: 200,
+    body: formatted,
+  };
+}
+
+export async function searchCheckpointRecords({ userId, checkpointId }) {
+  const normalizedCheckpointId = normalizeUuidQuery(checkpointId);
+  const normalizedUserId = normalizeUuidQuery(userId);
+
+  if (checkpointId && !normalizedCheckpointId) {
+    throw checkpointNotFound();
+  }
+  if (userId && !normalizedUserId) {
+    throw checkpointNotFound();
+  }
+
+  if (normalizedCheckpointId) {
+    const row = await findApprovedCheckpointById(normalizedCheckpointId);
+    if (!row) {
+      throw checkpointNotFound();
+    }
+    if (
+      normalizedUserId &&
+      row.owner_uuid.toLowerCase() !== normalizedUserId.toLowerCase()
+    ) {
+      throw checkpointNotFound();
+    }
+    const formatted = await formatCheckpointWithIntegrity(row, {
+      tolerateMissing: true,
+    });
+    return {
+      statusCode: 200,
+      body: [formatted],
+    };
+  }
+
+  if (normalizedUserId) {
+    return listApprovedCheckpointsForUser({ ownerUuid: normalizedUserId });
+  }
+
+  return listAllCheckpointRecords();
+}
+
+export async function getApprovedCheckpointRecord({ checkpointId }) {
+  const normalizedCheckpointId = normalizeUuidQuery(checkpointId);
+  if (!normalizedCheckpointId) {
+    throw checkpointNotFound();
+  }
+
+  const row = await findApprovedCheckpointById(normalizedCheckpointId);
+  if (!row) {
+    throw checkpointNotFound();
+  }
+
+  const formatted = await formatCheckpointWithIntegrity(row, {
+    tolerateMissing: true,
+  });
+
+  return {
+    statusCode: 200,
+    body: formatted,
+  };
+}
+
+export async function listApprovedCheckpointsByType({ regType }) {
+  const normalizedRegType = normalizeRegType(regType);
+  if (!normalizedRegType) {
+    throw checkpointNotFound();
+  }
+
+  const rows = await listApprovedCheckpointsByTypeModel(normalizedRegType);
+
+  if (!rows.length) {
+    throw checkpointNotFound();
+  }
+
+  const formatted = await Promise.all(
+    rows.map((row) =>
+      formatCheckpointWithIntegrity(row, { tolerateMissing: true })
+    )
+  );
+
   return {
     statusCode: 200,
     body: formatted,

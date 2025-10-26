@@ -3,7 +3,11 @@ import { stableStringify } from "../utils/canonicalize.js";
 import { CheckpointPayload } from "../domain/checkpoint.schema.js";
 import { normalizeHash } from "../utils/hash.js";
 import { fetchCheckpointOnChain } from "../eth/checkpointContract.js";
-import { CheckpointErrorCodes, hashMismatch } from "../errors/checkpointErrors.js";
+import {
+  CheckpointErrorCodes,
+  checkpointNotFound,
+  hashMismatch,
+} from "../errors/checkpointErrors.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
 const CHECKPOINT_FIELDS = [
@@ -75,7 +79,10 @@ export function prepareCheckpointPersistence(checkpointId, rawPayload, defaults 
   };
 }
 
-export async function ensureCheckpointOnChainIntegrity(record) {
+export async function ensureCheckpointOnChainIntegrity(
+  record,
+  { tolerateMissing = false } = {}
+) {
   const id = record.id ?? record.checkpoint_uuid ?? record.checkpointUUID ?? null;
   const storedHash = record.checkpoint_hash ?? record.checkpointHash;
 
@@ -102,9 +109,22 @@ export async function ensureCheckpointOnChainIntegrity(record) {
   }
 
   const onChain = await fetchCheckpointOnChain(uuidToBytes16Hex(id));
-  if (!onChain.hash) {
+  if (onChain?.missing) {
+    if (tolerateMissing) {
+      return {
+        canonical,
+        normalizedPayload,
+        hash: normalizedComputed,
+        onChainHash: null,
+        onChainMissing: true,
+      };
+    }
+    throw checkpointNotFound();
+  }
+
+  if (!onChain?.hash) {
     throw hashMismatch({
-      reason: "Checkpoint not found on-chain",
+      reason: "Checkpoint returned empty hash from on-chain lookup",
       stored: normalizedStored,
       computed: normalizedComputed,
       code: CheckpointErrorCodes.HASH_MISMATCH,
@@ -117,10 +137,20 @@ export async function ensureCheckpointOnChainIntegrity(record) {
       reason: "On-chain checkpoint hash mismatch",
       onChain: normalizedOnChain,
       computed: normalizedComputed,
+      onChainHash: normalizedOnChain,
+      stored: normalizedStored,
+      computed: normalizedComputed,
+      code: CheckpointErrorCodes.HASH_MISMATCH,
     });
   }
 
-  return { canonical, normalizedPayload, hash: normalizedComputed };
+  return {
+    canonical,
+    normalizedPayload,
+    hash: normalizedComputed,
+    onChainHash: normalizedOnChain,
+    onChainMissing: false,
+  };
 }
 
 export function formatCheckpointRecord(record) {

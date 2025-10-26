@@ -135,6 +135,19 @@ export async function findCheckpointById(id, dbClient) {
   return rows[0] ?? null;
 }
 
+export async function findCheckpointByOwnerUuid(ownerUuid, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `SELECT *
+       FROM checkpoint_registry
+      WHERE owner_uuid = $1::uuid
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [ownerUuid]
+  );
+  return rows[0] ?? null;
+}
+
 export async function listCheckpointsByOwnerUuid(ownerUuid) {
   const { rows } = await query(
     `SELECT *
@@ -151,4 +164,58 @@ export async function listAllCheckpoints() {
     `SELECT * FROM checkpoint_registry ORDER BY created_at DESC`
   );
   return rows;
+}
+
+export async function listApprovedCheckpoints() {
+  const { rows } = await query(
+    `SELECT cr.*
+       FROM checkpoint_registry cr
+       JOIN users u
+         ON u.id = cr.owner_uuid
+      WHERE u.status = 'APPROVED'
+      ORDER BY cr.created_at DESC`
+  );
+  return rows;
+}
+
+export async function listApprovedCheckpointsByOwner(ownerUuid) {
+  const { rows } = await query(
+    `SELECT cr.*
+       FROM checkpoint_registry cr
+       JOIN users u
+         ON u.id = cr.owner_uuid
+      WHERE cr.owner_uuid = $1::uuid
+        AND u.status = 'APPROVED'
+      ORDER BY cr.created_at DESC`,
+    [ownerUuid]
+  );
+  return rows;
+}
+
+export async function listApprovedCheckpointsByType(regType) {
+  const { rows } = await query(
+    `SELECT cr.*
+       FROM checkpoint_registry cr
+       JOIN users u
+         ON u.id = cr.owner_uuid
+      WHERE u.status = 'APPROVED'
+        AND u.reg_type = $1::reg_type
+      ORDER BY cr.created_at DESC`,
+    [regType]
+  );
+  return rows;
+}
+
+export async function findApprovedCheckpointById(checkpointId) {
+  const { rows } = await query(
+    `SELECT cr.*
+       FROM checkpoint_registry cr
+       JOIN users u
+         ON u.id = cr.owner_uuid
+      WHERE cr.id = $1::uuid
+        AND u.status = 'APPROVED'
+      LIMIT 1`,
+    [checkpointId]
+  );
+  return rows[0] ?? null;
 }

@@ -102,9 +102,26 @@ export async function updateCheckpointOnChain(checkpointIdBytes16, canonicalPayl
 }
 
 export async function fetchCheckpointOnChain(checkpointIdBytes16) {
-  const meta = await checkpointRegistry.getCheckpoint(checkpointIdBytes16);
-  return {
-    hash: meta?.hash ?? null,
-    meta,
-  };
+  try {
+    const meta = await checkpointRegistry.getCheckpoint(checkpointIdBytes16);
+    return {
+      hash: meta?.hash ?? null,
+      meta,
+      missing: false,
+    };
+  } catch (error) {
+    const reasonText =
+      error?.reason?.toLowerCase?.() ?? error?.shortMessage?.toLowerCase?.() ?? "";
+    if (
+      error?.code === "CALL_EXCEPTION" &&
+      reasonText.includes("checkpoint does not exist")
+    ) {
+      return {
+        hash: null,
+        meta: null,
+        missing: true,
+      };
+    }
+    throw error;
+  }
 }

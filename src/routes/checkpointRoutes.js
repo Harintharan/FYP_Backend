@@ -6,6 +6,8 @@ import {
   getCheckpoint,
   listCheckpointsForOwner,
   listAllCheckpoints,
+  listCheckpointsByUserId,
+  getCheckpointByCheckpointId,
 } from "../controllers/CheckpointRegistryController.js";
 
 const router = Router();
@@ -20,12 +22,22 @@ router.put(
   requireRegistrationRole("WAREHOUSE"),
   updateCheckpoint
 );
-router.get("/checkpoints/:id", requireAuth, getCheckpoint);
+router.get(
+  "/checkpoints/userid/:userId",
+  requireAuth,
+  listCheckpointsByUserId
+);
+router.get(
+  "/checkpoints/checkpointid/:checkpointId",
+  requireAuth,
+  getCheckpointByCheckpointId
+);
 router.get(
   "/checkpoints/owner/:ownerUuid",
   requireAuth,
   listCheckpointsForOwner
 );
+router.get("/checkpoints/:id", requireAuth, getCheckpoint);
 router.get("/checkpoints", requireAuth, listAllCheckpoints);
 
 export default router;
