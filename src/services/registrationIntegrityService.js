@@ -5,13 +5,6 @@ import { registry } from "../eth/contract.js";
 import { IntegrityError } from "../errors/registrationErrors.js";
 import { normalizeHash } from "../utils/hash.js";
 
-export function formatZodError(err) {
-  return err.issues.map((issue) => ({
-    path: issue.path.join("."),
-    message: issue.message,
-  }));
-}
-
 export async function ensureOnChainIntegrity(row) {
   const {
     id: registrationId,

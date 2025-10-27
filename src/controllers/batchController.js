@@ -5,10 +5,8 @@ import {
   getBatchDetails,
   listManufacturerBatches,
 } from "../services/batchService.js";
-import {
-  respondWithZodError,
-  handleControllerError,
-} from "./helpers/errorResponse.js";
+import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
+import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
 
 export async function registerBatch(req, res) {
   try {

@@ -6,10 +6,8 @@ import {
   listManufacturerProducts,
 } from "../services/productService.js";
 import { PRODUCT_STATUS_VALUES } from "../domain/product.schema.js";
-import {
-  respondWithZodError,
-  handleControllerError,
-} from "./helpers/errorResponse.js";
+import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
+import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
 
 export async function registerProduct(req, res) {
   try {

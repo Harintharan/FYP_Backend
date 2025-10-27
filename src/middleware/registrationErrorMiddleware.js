@@ -3,7 +3,7 @@ import {
   ValidationError,
   mapErrorToResponse,
 } from "../errors/registrationErrors.js";
-import { formatZodError } from "../services/registrationIntegrityService.js";
+import { formatZodError } from "../errors/zodErrorFormatter.js";
 
 export function respondWithRegistrationError(res, err) {
   if (err instanceof ZodError) {

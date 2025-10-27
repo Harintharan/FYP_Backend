@@ -10,10 +10,8 @@ import {
   getApprovedCheckpointRecord,
   listApprovedCheckpointsByType,
 } from "../services/checkpointService.js";
-import {
-  respondWithZodError,
-  handleControllerError,
-} from "./helpers/errorResponse.js";
+import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
+import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
 
 export async function registerCheckpoint(req, res) {
   try {

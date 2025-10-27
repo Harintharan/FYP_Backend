@@ -67,3 +67,8 @@ export const ShipmentSegmentPayload = z.object({
   segmentOrder: optionalOrder,
   status: optionalStatus,
 });
+
+export const ShipmentSegmentStatusUpdatePayload = z.object({
+  status: z.enum(SHIPMENT_SEGMENT_STATUS_VALUES),
+  supplierId: z.string().uuid("supplierId must be a valid UUID").optional(),
+});

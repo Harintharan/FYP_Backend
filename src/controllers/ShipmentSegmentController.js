@@ -1,41 +1,30 @@
-import { ZodError, z } from "zod";
+import { ZodError } from "zod";
 import {
   listShipmentSegmentsForShipment,
   updateShipmentSegmentStatus,
 } from "../services/shipmentSegmentService.js";
-import { respondWithRegistrationError } from "../middleware/registrationErrorMiddleware.js";
-import { isHttpError } from "../utils/httpError.js";
-
-const StatusUpdatePayload = z.object({
-  status: z.enum([
-    "PENDING",
-    "ACCEPTED",
-    "IN_TRANSIT",
-    "DELIVERED",
-    "CLOSED",
-    "CANCELLED",
-  ]),
-  supplierId: z.string().uuid().optional(),
-});
+import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
+import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
+import { httpError } from "../utils/httpError.js";
+import { ErrorCodes } from "../errors/errorCodes.js";
+import { ShipmentSegmentStatusUpdatePayload } from "../domain/shipmentSegment.schema.js";
 
 export async function listShipmentSegments(req, res) {
   try {
     const shipmentId = req.params.id;
     if (!shipmentId) {
-      return res.status(400).json({ message: "Shipment id is required" });
+      throw httpError(400, "Shipment id is required", {
+        code: ErrorCodes.VALIDATION_ERROR,
+      });
     }
 
     const segments = await listShipmentSegmentsForShipment(shipmentId);
-    return res.json(segments);
+    return res.status(200).json(segments);
   } catch (err) {
-    if (isHttpError(err)) {
-      const body =
-        err.details !== undefined
-          ? { error: err.message, details: err.details }
-          : { error: err.message };
-      return res.status(err.statusCode).json(body);
-    }
-    return respondWithRegistrationError(res, err);
+    return handleControllerError(res, err, {
+      logMessage: "Error listing shipment segments",
+      fallbackMessage: "Unable to list shipment segments",
+    });
   }
 }
 
@@ -43,30 +32,26 @@ export async function updateShipmentSegmentStatusById(req, res) {
   try {
     const segmentId = req.params.id;
     if (!segmentId) {
-      return res.status(400).json({ message: "Segment id is required" });
+      throw httpError(400, "Segment id is required", {
+        code: ErrorCodes.VALIDATION_ERROR,
+      });
     }
 
-    const parsed = StatusUpdatePayload.parse(req.body ?? {});
+    const parsed = ShipmentSegmentStatusUpdatePayload.parse(req.body ?? {});
     const updated = await updateShipmentSegmentStatus({
       segmentId,
       status: parsed.status,
       supplierId: parsed.supplierId ?? null,
       walletAddress: req.wallet?.walletAddress ?? null,
     });
-    return res.json(updated);
+    return res.status(200).json(updated);
   } catch (err) {
     if (err instanceof ZodError) {
-      return res
-        .status(400)
-        .json({ message: "Invalid payload", details: err.errors });
+      return respondWithZodError(res, err);
     }
-    if (isHttpError(err)) {
-      const body =
-        err.details !== undefined
-          ? { error: err.message, details: err.details }
-          : { error: err.message };
-      return res.status(err.statusCode).json(body);
-    }
-    return respondWithRegistrationError(res, err);
+    return handleControllerError(res, err, {
+      logMessage: "Error updating shipment segment status",
+      fallbackMessage: "Unable to update shipment segment status",
+    });
   }
 }
