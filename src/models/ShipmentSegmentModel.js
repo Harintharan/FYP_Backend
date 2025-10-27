@@ -94,6 +94,34 @@ export async function listShipmentSegmentsByShipmentId(shipmentId, dbClient) {
   return rows;
 }
 
+export async function listShipmentSegmentsByStatusWithDetails(status) {
+  const { rows } = await query(
+    `SELECT
+        ss.*,
+        sr.manufacturer_uuid,
+        u.payload -> 'identification' ->> 'legalName' AS manufacturer_legal_name,
+        sc_start.name AS start_name,
+        sc_start.state AS start_state,
+        sc_start.country AS start_country,
+        sc_end.name AS end_name,
+        sc_end.state AS end_state,
+        sc_end.country AS end_country
+      FROM shipment_segment ss
+      JOIN shipment_registry sr
+        ON sr.id::text = ss.shipment_id::text
+      LEFT JOIN users u
+        ON u.id::text = sr.manufacturer_uuid::text
+      LEFT JOIN checkpoint_registry sc_start
+        ON sc_start.id::text = ss.start_checkpoint_id::text
+      LEFT JOIN checkpoint_registry sc_end
+        ON sc_end.id::text = ss.end_checkpoint_id::text
+     WHERE ss.status = $1
+     ORDER BY ss.segment_order ASC, ss.created_at ASC`,
+    [status]
+  );
+  return rows;
+}
+
 export async function updateShipmentSegmentRecord({
   segmentId,
   status,

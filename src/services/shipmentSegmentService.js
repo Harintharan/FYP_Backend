@@ -5,6 +5,7 @@ import { backupRecordSafely } from "./pinataBackupService.js";
 import {
   insertShipmentSegment,
   listShipmentSegmentsByShipmentId,
+  listShipmentSegmentsByStatusWithDetails,
   updateShipmentSegmentRecord,
   deleteShipmentSegmentsByShipmentId as modelDeleteSegments,
   findShipmentSegmentById,
@@ -199,4 +200,34 @@ export async function updateShipmentSegmentStatus({
 
 export async function deleteShipmentSegmentsByShipmentId(shipmentId, dbClient) {
   await modelDeleteSegments(shipmentId, dbClient);
+}
+
+export async function listPendingShipmentSegmentsWithDetails() {
+  const rows = await listShipmentSegmentsByStatusWithDetails("PENDING");
+
+  return Promise.all(
+    rows.map(async (row) => {
+      const { hash } = await ensureShipmentSegmentOnChainIntegrity(row);
+      const formatted = formatShipmentSegmentRecord(row);
+
+      return {
+        ...formatted,
+        segmentHash: hash,
+        expectedShipDate: formatted.expectedShipDate ?? null,
+        estimatedArrivalDate: formatted.estimatedArrivalDate ?? null,
+        expected_ship_date: formatted.expectedShipDate ?? null,
+        estimated_arrival_date: formatted.estimatedArrivalDate ?? null,
+        manufacturerUuid: row.manufacturer_uuid ?? null,
+        manufacturerLegalName: row.manufacturer_legal_name ?? null,
+        startLocation: {
+          state: row.start_state ?? null,
+          country: row.start_country ?? null,
+        },
+        endLocation: {
+          state: row.end_state ?? null,
+          country: row.end_country ?? null,
+        },
+      };
+    })
+  );
 }

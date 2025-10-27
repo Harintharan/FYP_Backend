@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import {
   listShipmentSegmentsForShipment,
+  listPendingShipmentSegmentsWithDetails,
   updateShipmentSegmentStatus,
 } from "../services/shipmentSegmentService.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
@@ -52,6 +53,18 @@ export async function updateShipmentSegmentStatusById(req, res) {
     return handleControllerError(res, err, {
       logMessage: "Error updating shipment segment status",
       fallbackMessage: "Unable to update shipment segment status",
+    });
+  }
+}
+
+export async function listPendingShipmentSegments(_req, res) {
+  try {
+    const segments = await listPendingShipmentSegmentsWithDetails();
+    return res.status(200).json(segments);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error listing pending shipment segments",
+      fallbackMessage: "Unable to list pending shipment segments",
     });
   }
 }
