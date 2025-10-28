@@ -6,6 +6,15 @@ const requiredString = (field) =>
     .trim()
     .min(1, `${field} is required`);
 
+const uuidString = (field) =>
+  z
+    .string({
+      required_error: `${field} is required`,
+      invalid_type_error: `${field} must be a string`,
+    })
+    .trim()
+    .uuid(`${field} must be a valid UUID`);
+
 const optionalString = (field) =>
   z
     .preprocess((value) => {
@@ -16,6 +25,24 @@ const optionalString = (field) =>
       const trimmed = str.trim();
       return trimmed === "" ? undefined : trimmed;
     }, z.string().min(1, `${field} cannot be empty`))
+    .optional();
+
+const optionalTimestamp = (field) =>
+  z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === "") {
+        return undefined;
+      }
+      const str = typeof value === "string" ? value.trim() : String(value).trim();
+      if (!str) {
+        return undefined;
+      }
+      const date = new Date(str);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error(`${field} must be a valid ISO 8601 timestamp`);
+      }
+      return date.toISOString();
+    }, z.string())
     .optional();
 
 const quantitySchema = z
@@ -47,20 +74,11 @@ const quantitySchema = z
   });
 
 export const BatchPayload = z.object({
-  productCategory: requiredString("productCategory"),
-  manufacturerUUID: z
-    .string({
-      required_error: "manufacturerUUID is required",
-      invalid_type_error: "manufacturerUUID must be a string",
-    })
-    .trim()
-    .uuid("manufacturerUUID must be a valid UUID"),
+  productId: uuidString("productId"),
+  manufacturerUUID: uuidString("manufacturerUUID"),
   facility: requiredString("facility"),
-  productionWindow: requiredString("productionWindow"),
+  productionStartTime: optionalTimestamp("productionStartTime"),
+  productionEndTime: optionalTimestamp("productionEndTime"),
   quantityProduced: quantitySchema,
-  releaseStatus: requiredString("releaseStatus"),
   expiryDate: optionalString("expiryDate"),
-  handlingInstructions: optionalString("handlingInstructions"),
-  requiredStartTemp: optionalString("requiredStartTemp"),
-  requiredEndTemp: optionalString("requiredEndTemp"),
 });

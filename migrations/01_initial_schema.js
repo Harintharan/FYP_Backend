@@ -163,16 +163,13 @@ export const migrate = async (pool) => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS batches (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        product_category TEXT NOT NULL,
-        manufacturer_uuid TEXT NOT NULL,
+        product_id UUID NOT NULL REFERENCES products(id),
+        manufacturer_uuid UUID NOT NULL REFERENCES users(id),
         facility TEXT NOT NULL,
-        production_window TEXT NOT NULL,
+        production_start_time TIMESTAMP,
+        production_end_time TIMESTAMP,
         quantity_produced TEXT NOT NULL,
-        release_status TEXT NOT NULL,
         expiry_date TEXT,
-        handling_instructions TEXT,
-        required_start_temp TEXT,
-        required_end_temp TEXT,
         batch_hash TEXT,
         tx_hash TEXT,
         created_by TEXT NOT NULL,
@@ -181,7 +178,11 @@ export const migrate = async (pool) => {
         updated_at TIMESTAMP,
         pinata_cid TEXT,
         pinata_pinned_at TIMESTAMPTZ
-      )
+      );
+      CREATE INDEX IF NOT EXISTS idx_batches_product
+        ON batches(product_id);
+      CREATE INDEX IF NOT EXISTS idx_batches_manufacturer
+        ON batches(manufacturer_uuid)
     `);
 
     await pool.query(`

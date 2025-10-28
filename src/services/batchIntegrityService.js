@@ -52,6 +52,9 @@ function normalizeQuantity(value) {
 
 function requiredFromRecord(value) {
   const resolved = value ?? "";
+  if (resolved instanceof Date) {
+    return resolved.toISOString();
+  }
   return typeof resolved === "string" ? resolved.trim() : String(resolved).trim();
 }
 
@@ -59,6 +62,9 @@ function optionalFromRecord(value) {
   const resolved = firstDefined(value, undefined);
   if (resolved === undefined || resolved === null) {
     return undefined;
+  }
+  if (resolved instanceof Date) {
+    return resolved.toISOString();
   }
   if (typeof resolved !== "string") {
     resolved = String(resolved);
@@ -69,32 +75,26 @@ function optionalFromRecord(value) {
 
 export function normalizeBatchPayload(payload) {
   return {
-    productCategory: assertString(payload.productCategory, "productCategory"),
-    manufacturerUUID: assertString(payload.manufacturerUUID, "manufacturerUUID"),
+    productId: assertString(payload.productId, "productId").toLowerCase(),
+    manufacturerUUID: assertString(payload.manufacturerUUID, "manufacturerUUID").toLowerCase(),
     facility: assertString(payload.facility, "facility"),
-    productionWindow: assertString(payload.productionWindow, "productionWindow"),
+    productionStartTime: normalizeOptionalString(payload.productionStartTime),
+    productionEndTime: normalizeOptionalString(payload.productionEndTime),
     quantityProduced: normalizeQuantity(payload.quantityProduced),
-    releaseStatus: assertString(payload.releaseStatus, "releaseStatus"),
     expiryDate: normalizeOptionalString(payload.expiryDate),
-    handlingInstructions: normalizeOptionalString(payload.handlingInstructions),
-    requiredStartTemp: normalizeOptionalString(payload.requiredStartTemp),
-    requiredEndTemp: normalizeOptionalString(payload.requiredEndTemp),
   };
 }
 
 export function buildBatchCanonicalPayload(batchId, payload) {
   return stableStringify({
     id: batchId,
-    productCategory: payload.productCategory,
+    productId: payload.productId,
     manufacturerUUID: payload.manufacturerUUID,
     facility: payload.facility,
-    productionWindow: payload.productionWindow,
+    productionStartTime: payload.productionStartTime,
+    productionEndTime: payload.productionEndTime,
     quantityProduced: payload.quantityProduced,
-    releaseStatus: payload.releaseStatus,
     expiryDate: payload.expiryDate,
-    handlingInstructions: payload.handlingInstructions,
-    requiredStartTemp: payload.requiredStartTemp,
-    requiredEndTemp: payload.requiredEndTemp,
   });
 }
 
@@ -119,39 +119,24 @@ export function prepareBatchPersistence(batchId, payload, defaults = {}) {
 
 export function deriveBatchPayloadFromRecord(record) {
   return {
-    productCategory: requiredFromRecord(
-      firstDefined(record.product_category, record.productCategory, "")
+    productId: requiredFromRecord(
+      firstDefined(record.product_id, record.productId, "")
     ),
     manufacturerUUID: requiredFromRecord(
       firstDefined(record.manufacturer_uuid, record.manufacturerUUID, "")
     ),
     facility: requiredFromRecord(firstDefined(record.facility, "")),
-    productionWindow: requiredFromRecord(
-      firstDefined(record.production_window, record.productionWindow, "")
+    productionStartTime: optionalFromRecord(
+      firstDefined(record.production_start_time, record.productionStartTime)
+    ),
+    productionEndTime: optionalFromRecord(
+      firstDefined(record.production_end_time, record.productionEndTime)
     ),
     quantityProduced: requiredFromRecord(
       firstDefined(record.quantity_produced, record.quantityProduced, "")
     ),
-    releaseStatus: requiredFromRecord(
-      firstDefined(record.release_status, record.releaseStatus, "")
-    ),
     expiryDate: optionalFromRecord(
       firstDefined(record.expiry_date, record.expiryDate)
-    ),
-    handlingInstructions: optionalFromRecord(
-      firstDefined(
-        record.handling_instructions,
-        record.handlingInstructions
-      )
-    ),
-    requiredStartTemp: optionalFromRecord(
-      firstDefined(
-        record.required_start_temp,
-        record.requiredStartTemp
-      )
-    ),
-    requiredEndTemp: optionalFromRecord(
-      firstDefined(record.required_end_temp, record.requiredEndTemp)
     ),
   };
 }

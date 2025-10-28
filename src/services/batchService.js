@@ -15,43 +15,77 @@ import {
   findBatchById,
   listBatchesByManufacturerUuid,
 } from "../models/batchModel.js";
+import { findProductById } from "../models/ProductModel.js";
 import { normalizeHash } from "../utils/hash.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { backupRecordSafely } from "./pinataBackupService.js";
 import * as batchErrors from "../errors/batchErrors.js";
+import { productNotFound } from "../errors/productErrors.js";
 
-function sanitizeOptional(value) {
+function sanitizeOptionalString(value) {
   if (value === undefined || value === null) {
     return null;
   }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length === 0 ? null : trimmed;
+  if (value instanceof Date) {
+    return value.toISOString();
   }
-  return value;
+  const trimmed =
+    typeof value === "string" ? value.trim() : String(value).trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function sanitizeOptionalTimestamp(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  const trimmed =
+    typeof value === "string" ? value.trim() : String(value).trim();
+  if (!trimmed) {
+    return null;
+  }
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function formatBatchRecord(record) {
+  const productionStart = record.production_start_time ?? null;
+  const productionEnd = record.production_end_time ?? null;
+
   return {
     id: record.id,
-    productCategory: record.product_category,
-    manufacturerUUID: record.manufacturer_uuid,
-    facility: record.facility,
-    productionWindow: record.production_window,
-    quantityProduced: record.quantity_produced,
-    releaseStatus: record.release_status,
-    expiryDate: sanitizeOptional(record.expiry_date),
-    handlingInstructions: sanitizeOptional(record.handling_instructions),
-    requiredStartTemp: sanitizeOptional(record.required_start_temp),
-    requiredEndTemp: sanitizeOptional(record.required_end_temp),
+    product: {
+      id: record.product_id ?? null,
+      name: record.product_name ?? null,
+    },
+    manufacturerUUID: record.manufacturer_uuid ?? null,
+    facility: record.facility ?? null,
+    productionStartTime:
+      productionStart instanceof Date
+        ? productionStart.toISOString()
+        : sanitizeOptionalString(productionStart),
+    productionEndTime:
+      productionEnd instanceof Date
+        ? productionEnd.toISOString()
+        : sanitizeOptionalString(productionEnd),
+    quantityProduced: record.quantity_produced ?? null,
+    expiryDate: sanitizeOptionalString(record.expiry_date),
     payloadHash: normalizeHash(record.batch_hash ?? null),
     txHash: record.tx_hash ?? null,
     createdBy: record.created_by ?? null,
     updatedBy: record.updated_by ?? null,
     pinataCid: record.pinata_cid ?? null,
     pinataPinnedAt: record.pinata_pinned_at ?? null,
-    createdAt: record.created_at ?? null,
-    updatedAt: record.updated_at ?? null,
+    createdAt:
+      record.created_at instanceof Date
+        ? record.created_at.toISOString()
+        : record.created_at ?? null,
+    updatedAt:
+      record.updated_at instanceof Date
+        ? record.updated_at.toISOString()
+        : record.updated_at ?? null,
   };
 }
 
@@ -72,8 +106,22 @@ export async function createBatch({ payload, registration, wallet }) {
     throw batchErrors.registrationRequired();
   }
 
-  if (registration.id.toLowerCase() !== parsed.manufacturerUUID.toLowerCase()) {
+  const manufacturerUuid = registration.id.trim().toLowerCase();
+
+  if (manufacturerUuid !== parsed.manufacturerUUID.toLowerCase()) {
     throw batchErrors.manufacturerMismatch();
+  }
+
+  const product = await findProductById(parsed.productId);
+  if (!product) {
+    throw productNotFound();
+  }
+
+  if (
+    product.manufacturer_uuid &&
+    product.manufacturer_uuid.toLowerCase() !== manufacturerUuid
+  ) {
+    throw batchErrors.manufacturerForbidden();
   }
 
   const batchId = randomUUID();
@@ -118,21 +166,22 @@ export async function createBatch({ payload, registration, wallet }) {
 
   const record = await insertBatch({
     id: batchId,
-    productCategory: normalized.productCategory,
     manufacturerUUID: normalized.manufacturerUUID,
     facility: normalized.facility,
-    productionWindow: normalized.productionWindow,
+    productId: normalized.productId,
+    productionStartTime: sanitizeOptionalTimestamp(
+      normalized.productionStartTime
+    ),
+    productionEndTime: sanitizeOptionalTimestamp(normalized.productionEndTime),
     quantityProduced: normalized.quantityProduced,
-    releaseStatus: normalized.releaseStatus,
-    expiryDate: sanitizeOptional(normalized.expiryDate),
-    handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
-    requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
-    requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
+    expiryDate: sanitizeOptionalString(normalized.expiryDate),
     batchHash: payloadHash,
     txHash,
-    createdBy: wallet?.walletAddress ?? null,
+    createdBy: wallet?.walletAddress ?? manufacturerUuid,
     pinataCid: pinataBackup?.IpfsHash ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp ?? null,
+    pinataPinnedAt: pinataBackup?.Timestamp
+      ? new Date(pinataBackup.Timestamp)
+      : null,
   });
 
   return {
@@ -165,6 +214,23 @@ export async function updateBatchDetails({
     parsed.manufacturerUUID.toLowerCase()
   ) {
     throw batchErrors.manufacturerImmutable();
+  }
+
+  if (
+    !existing.product_id ||
+    existing.product_id.toLowerCase() !== parsed.productId.toLowerCase()
+  ) {
+    const product = await findProductById(parsed.productId);
+    if (!product) {
+      throw productNotFound();
+    }
+    if (
+      product.manufacturer_uuid &&
+      product.manufacturer_uuid.toLowerCase() !==
+        registration.id.toLowerCase()
+    ) {
+      throw batchErrors.manufacturerForbidden();
+    }
   }
 
   const defaults = deriveBatchPayloadFromRecord(existing);
@@ -211,22 +277,25 @@ export async function updateBatchDetails({
 
   const record = await updateBatchRecord({
     id,
-    productCategory: normalized.productCategory,
+    productId: normalized.productId,
     manufacturerUUID: normalized.manufacturerUUID,
     facility: normalized.facility,
-    productionWindow: normalized.productionWindow,
+    productionStartTime: sanitizeOptionalTimestamp(
+      normalized.productionStartTime
+    ),
+    productionEndTime: sanitizeOptionalTimestamp(
+      normalized.productionEndTime
+    ),
     quantityProduced: normalized.quantityProduced,
-    releaseStatus: normalized.releaseStatus,
-    expiryDate: sanitizeOptional(normalized.expiryDate),
-    handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
-    requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
-    requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
+    expiryDate: sanitizeOptionalString(normalized.expiryDate),
     batchHash: payloadHash,
     txHash,
     updatedBy: wallet?.walletAddress ?? null,
     pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
     pinataPinnedAt:
-      pinataBackup?.Timestamp ?? existing.pinata_pinned_at ?? null,
+      pinataBackup?.Timestamp
+        ? new Date(pinataBackup.Timestamp)
+        : existing.pinata_pinned_at ?? null,
   });
 
   const formatted = formatBatchRecord(record);
