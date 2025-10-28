@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-contract ProductRegistry {
+contract PackageRegistry {
     address public owner;
 
-    struct ProductMeta {
+    struct PackageMeta {
         bytes32 hash;
         uint256 createdAt;
         uint256 updatedAt;
@@ -12,7 +12,7 @@ contract ProductRegistry {
         address updatedBy;
     }
 
-    mapping(bytes16 => ProductMeta) public products;
+    mapping(bytes16 => PackageMeta) public packages;
 
     event ProductRegistered(
         bytes16 indexed productId,
@@ -36,11 +36,11 @@ contract ProductRegistry {
         external
         returns (bytes16)
     {
-        require(products[productId].createdAt == 0, "Product already exists");
+        require(packages[productId].createdAt == 0, "Package already exists");
 
         bytes32 hash = keccak256(canonicalPayload);
 
-        products[productId] = ProductMeta({
+        packages[productId] = PackageMeta({
             hash: hash,
             createdAt: block.timestamp,
             updatedAt: 0,
@@ -55,14 +55,14 @@ contract ProductRegistry {
     function updateProduct(bytes16 productId, bytes calldata canonicalPayload)
         external
     {
-        require(products[productId].createdAt != 0, "Product does not exist");
+        require(packages[productId].createdAt != 0, "Package does not exist");
 
         bytes32 newHash = keccak256(canonicalPayload);
 
-        ProductMeta storage meta = products[productId];
-        meta.hash = newHash;
-        meta.updatedAt = block.timestamp;
-        meta.updatedBy = msg.sender;
+        PackageMeta storage prod = packages[productId];
+        prod.hash = newHash;
+        prod.updatedAt = block.timestamp;
+        prod.updatedBy = msg.sender;
 
         emit ProductUpdated(productId, newHash, msg.sender, block.timestamp);
     }
@@ -70,9 +70,9 @@ contract ProductRegistry {
     function getProduct(bytes16 productId)
         external
         view
-        returns (ProductMeta memory)
+        returns (PackageMeta memory)
     {
-        require(products[productId].createdAt != 0, "Product does not exist");
-        return products[productId];
+        require(packages[productId].createdAt != 0, "Package does not exist");
+        return packages[productId];
     }
 }

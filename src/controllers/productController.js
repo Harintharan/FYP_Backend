@@ -1,17 +1,17 @@
 import { ZodError } from "zod";
 import {
-  createProduct,
-  updateProductDetails,
+  createProductRecord,
+  updateProductRecord,
+  deleteProductRecord,
   getProductDetails,
-  listManufacturerProducts,
+  listProductsByOwner,
 } from "../services/productService.js";
-import { PRODUCT_STATUS_VALUES } from "../domain/product.schema.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
 import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
 
-export async function registerProduct(req, res) {
+export async function createProduct(req, res) {
   try {
-    const { statusCode, body } = await createProduct({
+    const { statusCode, body } = await createProductRecord({
       payload: req.body,
       registration: req.registration,
       wallet: req.wallet,
@@ -22,15 +22,15 @@ export async function registerProduct(req, res) {
       return respondWithZodError(res, err);
     }
     return handleControllerError(res, err, {
-      logMessage: "Error registering product",
-      fallbackMessage: "Unable to register product",
+      logMessage: "Error creating product",
+      fallbackMessage: "Unable to create product",
     });
   }
 }
 
 export async function updateProduct(req, res) {
   try {
-    const { statusCode, body } = await updateProductDetails({
+    const { statusCode, body } = await updateProductRecord({
       id: req.params.id,
       payload: req.body,
       registration: req.registration,
@@ -44,6 +44,21 @@ export async function updateProduct(req, res) {
     return handleControllerError(res, err, {
       logMessage: "Error updating product",
       fallbackMessage: "Unable to update product",
+    });
+  }
+}
+
+export async function deleteProduct(req, res) {
+  try {
+    const { statusCode } = await deleteProductRecord({
+      id: req.params.id,
+      registration: req.registration,
+    });
+    return res.sendStatus(statusCode);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error deleting product",
+      fallbackMessage: "Unable to delete product",
     });
   }
 }
@@ -63,26 +78,14 @@ export async function getProduct(req, res) {
   }
 }
 
-export async function listProductsByManufacturer(req, res) {
-  try {
-    const { statusCode, body } = await listManufacturerProducts({
-      manufacturerUuid: req.params.manufacturerUuid,
-      registration: req.registration,
-    });
-    return res.status(statusCode).json(body);
-  } catch (err) {
-    return handleControllerError(res, err, {
-      logMessage: "GET /api/products/manufacturer/:manufacturerUuid error",
-      fallbackMessage: "Unable to list products",
-    });
-  }
-}
-
 export async function listProducts(req, res) {
   try {
-    const { statusCode, body } = await listManufacturerProducts({
-      manufacturerUuid: req.registration?.id,
+    const categoryId =
+      typeof req.query.categoryId === "string" ? req.query.categoryId : undefined;
+
+    const { statusCode, body } = await listProductsByOwner({
       registration: req.registration,
+      categoryId,
     });
     return res.status(statusCode).json(body);
   } catch (err) {
@@ -91,11 +94,4 @@ export async function listProducts(req, res) {
       fallbackMessage: "Unable to list products",
     });
   }
-}
-
-export async function listProductStatuses(_req, res) {
-  return res.status(200).json({
-    statusCode: 200,
-    statuses: PRODUCT_STATUS_VALUES,
-  });
 }

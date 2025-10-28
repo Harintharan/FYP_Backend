@@ -1,71 +1,106 @@
 import { randomUUID } from "node:crypto";
+import { ProductPayload, ProductUpdatePayload } from "../domain/product.schema.js";
 import {
   prepareProductPersistence,
-  formatProductRecord,
   ensureProductOnChainIntegrity,
   deriveProductPayloadFromRecord,
 } from "./productIntegrityService.js";
 import {
-  insertProduct,
-  updateProductRecord,
+  createProduct,
+  updateProduct,
+  deleteProduct,
   findProductById,
-  listProductsByManufacturerUuid,
-} from "../models/ProductRegistryModel.js";
+  listProducts,
+} from "../models/ProductModel.js";
+import { findProductCategoryById } from "../models/ProductCategoryModel.js";
 import {
   registrationRequired,
-  manufacturerMismatch,
-  manufacturerForbidden,
-  manufacturerImmutable,
+  productCategoryNotFound,
+  productForbidden,
   productNotFound,
   hashMismatch,
 } from "../errors/productErrors.js";
 import {
-  registerProductOnChain,
-  updateProductOnChain,
+  registerProductOnChain as registerProductRegistryOnChain,
+  updateProductOnChain as updateProductRegistryOnChain,
 } from "../eth/productContract.js";
 import { normalizeHash } from "../utils/hash.js";
-import { encrypt } from "../utils/encryptionHelper.js";
 import { backupRecordSafely } from "./pinataBackupService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
-function ensureManufacturerAccess(registration, manufacturerUUID) {
-  const registrationId = registration?.id;
-  if (!registrationId) {
+function ensureRegistration(registration) {
+  if (!registration?.id) {
     throw registrationRequired();
-  }
-
-  if (
-    manufacturerUUID &&
-    registrationId.toLowerCase() !== manufacturerUUID.toLowerCase()
-  ) {
-    throw manufacturerForbidden();
   }
 }
 
-export async function createProduct({ payload, registration, wallet }) {
-  const productId = randomUUID();
-  const sanitizedPayload =
-    payload && typeof payload === "object" ? { ...payload } : {};
-  if ("status" in sanitizedPayload) {
-    delete sanitizedPayload.status;
+function ensureOwnership(registration, record) {
+  if (!registration?.id) {
+    throw registrationRequired();
   }
-  const defaultStatus = "PRODUCT_READY_FOR_SHIPMENT";
+
+  const manufacturer = record.manufacturer_uuid ?? "";
+  if (
+    typeof manufacturer !== "string" ||
+    manufacturer.trim().toLowerCase() !== registration.id.toLowerCase()
+  ) {
+    throw productForbidden();
+  }
+}
+
+function sanitizeOptional(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    value = String(value);
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function formatProductRecord(record) {
+  return {
+    id: record.id,
+    productName: record.name,
+    productCategory: {
+      id: record.product_category_id,
+      name: record.category_name ?? null,
+    },
+    manufacturer: {
+      id: record.manufacturer_uuid ?? null,
+    },
+    requiredStartTemp: sanitizeOptional(record.required_start_temp),
+    requiredEndTemp: sanitizeOptional(record.required_end_temp),
+    handlingInstructions: sanitizeOptional(record.handling_instructions),
+    productHash: normalizeHash(record.product_hash ?? null),
+    txHash: record.tx_hash ?? null,
+    createdBy: record.created_by ?? null,
+    updatedBy: record.updated_by ?? null,
+    pinataCid: record.pinata_cid ?? null,
+    pinataPinnedAt: record.pinata_pinned_at ?? null,
+    createdAt: record.created_at ?? null,
+    updatedAt: record.updated_at ?? null,
+  };
+}
+
+export async function createProductRecord({ payload, registration, wallet }) {
+  ensureRegistration(registration);
+
+  const parsed = ProductPayload.parse(payload);
+  const category = await findProductCategoryById(parsed.productCategoryId);
+  if (!category) {
+    throw productCategoryNotFound();
+  }
+
+  const manufacturerUuid = registration.id.trim().toLowerCase();
+  const productId = randomUUID();
   const { normalized, canonical, payloadHash } = prepareProductPersistence(
     productId,
-    sanitizedPayload,
-    {},
-    { status: defaultStatus }
+    { ...parsed, manufacturerUuid }
   );
 
-  ensureManufacturerAccess(registration, normalized.manufacturerUUID);
-
-  if (
-    normalized.manufacturerUUID.toLowerCase() !== registration.id.toLowerCase()
-  ) {
-    throw manufacturerMismatch();
-  }
-
-  const { txHash, productHash } = await registerProductOnChain(
+  const { txHash, productHash } = await registerProductRegistryOnChain(
     uuidToBytes16Hex(productId),
     canonical
   );
@@ -95,91 +130,74 @@ export async function createProduct({ payload, registration, wallet }) {
     errorMessage: "⚠️ Failed to back up product to Pinata:",
   });
 
-  const encryptedWifiPassword = normalized.wifiPassword
-    ? encrypt(normalized.wifiPassword)
-    : null;
-
-  const record = await insertProduct({
+  await createProduct({
     id: productId,
-    productName: normalized.productName,
-    productCategory: normalized.productCategory,
-    batchId: normalized.batchId ?? null,
-    shipmentId: normalized.shipmentId ?? null,
-    quantity: normalized.quantity ?? null,
-    microprocessorMac: normalized.microprocessorMac ?? null,
-    sensorTypes: normalized.sensorTypes ?? null,
-    wifiSSID: normalized.wifiSSID ?? null,
-    encryptedWifiPassword,
-    manufacturerUUID: normalized.manufacturerUUID,
+    name: normalized.productName,
+    productCategoryId: normalized.productCategoryId,
+    manufacturerUuid: normalized.manufacturerUuid,
+    requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
+    requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
+    handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
     productHash: payloadHash,
     txHash,
-    createdBy:
-      wallet?.walletAddress ??
-      registration?.id ??
-      normalized.manufacturerUUID ??
-      "unknown",
+    createdBy: manufacturerUuid,
     pinataCid: pinataBackup?.IpfsHash ?? null,
     pinataPinnedAt: pinataBackup?.Timestamp
       ? new Date(pinataBackup.Timestamp)
       : null,
-    status: normalized.status ?? defaultStatus,
   });
 
-  const formatted = formatProductRecord(record);
-
+  const record = await findProductById(productId);
   return {
     statusCode: 201,
     body: {
-      code: 201,
-      message: "Product registered successfully",
-      id: formatted.id,
-      txHash: formatted.txHash,
+      ...formatProductRecord(record),
     },
   };
 }
 
-export async function updateProductDetails({
+export async function updateProductRecord({
   id,
   payload,
   registration,
   wallet,
 }) {
+  ensureRegistration(registration);
+
   const existing = await findProductById(id);
   if (!existing) {
     throw productNotFound();
   }
 
-  const defaults = deriveProductPayloadFromRecord(existing);
-  ensureManufacturerAccess(registration, existing.manufacturer_uuid);
+  ensureOwnership(registration, existing);
 
+  const parsed = ProductUpdatePayload.parse(payload);
+  const category = await findProductCategoryById(parsed.productCategoryId);
+  if (!category) {
+    throw productCategoryNotFound();
+  }
+
+  const defaults = deriveProductPayloadFromRecord(existing);
   const { normalized, canonical, payloadHash } = prepareProductPersistence(
     id,
-    payload,
+    { ...parsed, manufacturerUuid: existing.manufacturer_uuid },
     defaults
   );
 
-  ensureManufacturerAccess(registration, normalized.manufacturerUUID);
-
-  if (
-    normalized.manufacturerUUID.toLowerCase() !==
-    existing.manufacturer_uuid.toLowerCase()
-  ) {
-    throw manufacturerImmutable();
-  }
-
-  const { txHash, productHash } = await updateProductOnChain(
+  const { txHash, productHash } = await updateProductRegistryOnChain(
     uuidToBytes16Hex(id),
     canonical
   );
 
-  const normalizedOnChain = productHash
+  const onChainHash = productHash
     ? normalizeHash(productHash)
     : normalizeHash(payloadHash);
   const normalizedComputed = normalizeHash(payloadHash);
-  if (normalizedOnChain !== normalizedComputed) {
+
+  if (onChainHash !== normalizedComputed) {
     throw hashMismatch({
       reason: "On-chain hash mismatch detected during product update",
-      onChain: normalizedOnChain,
+      onChain: onChainHash,
       computed: normalizedComputed,
     });
   }
@@ -199,75 +217,83 @@ export async function updateProductDetails({
     errorMessage: "⚠️ Failed to back up product update to Pinata:",
   });
 
-  const encryptedWifiPassword = normalized.wifiPassword
-    ? encrypt(normalized.wifiPassword)
-    : null;
+  await updateProduct(
+    id,
+    {
+      name: normalized.productName,
+      productCategoryId: normalized.productCategoryId,
+      manufacturerUuid: normalized.manufacturerUuid,
+      requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
+      requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
+      handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
+      productHash: payloadHash,
+      txHash,
+      updatedBy: registration.id,
+      pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
+      pinataPinnedAt: pinataBackup?.Timestamp
+        ? new Date(pinataBackup.Timestamp)
+        : existing.pinata_pinned_at ?? null,
+    }
+  );
 
-  const record = await updateProductRecord(id, {
-    productName: normalized.productName,
-    productCategory: normalized.productCategory,
-    batchId: normalized.batchId ?? null,
-    shipmentId: normalized.shipmentId ?? null,
-    quantity: normalized.quantity ?? null,
-    microprocessorMac: normalized.microprocessorMac ?? null,
-    sensorTypes: normalized.sensorTypes ?? null,
-    wifiSSID: normalized.wifiSSID ?? null,
-    encryptedWifiPassword,
-    manufacturerUUID: normalized.manufacturerUUID,
-    productHash: payloadHash,
-    txHash,
-    updatedBy:
-      wallet?.walletAddress ??
-      registration?.id ??
-      normalized.manufacturerUUID ??
-      existing.manufacturer_uuid ??
-      null,
-    pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : existing.pinata_pinned_at ?? null,
-    status: normalized.status ?? null,
-  });
-
-  const formatted = formatProductRecord(record);
-
+  const record = await findProductById(id);
   return {
     statusCode: 200,
     body: {
-      code: 200,
-      message: "Product updated successfully",
-      id: formatted.id,
-      txHash: formatted.txHash,
-      updatedAt: formatted.updatedAt,
-      status: formatted.status,
+      ...formatProductRecord(record),
     },
   };
 }
 
-export async function getProductDetails({ id, registration }) {
+export async function deleteProductRecord({ id, registration }) {
+  ensureRegistration(registration);
+
   const existing = await findProductById(id);
   if (!existing) {
     throw productNotFound();
   }
 
-  ensureManufacturerAccess(registration, existing.manufacturer_uuid);
-  const integrity = await ensureProductOnChainIntegrity(existing);
+  ensureOwnership(registration, existing);
+
+  const deleted = await deleteProduct(id);
+  if (!deleted) {
+    throw productNotFound();
+  }
+
+  return {
+    statusCode: 204,
+    body: null,
+  };
+}
+
+export async function getProductDetails({ id, registration }) {
+  ensureRegistration(registration);
+
+  const record = await findProductById(id);
+  if (!record) {
+    throw productNotFound();
+  }
+
+  ensureOwnership(registration, record);
+  await ensureProductOnChainIntegrity(record);
 
   return {
     statusCode: 200,
     body: {
-      ...formatProductRecord(existing),
+      ...formatProductRecord(record),
     },
   };
 }
 
-export async function listManufacturerProducts({
-  manufacturerUuid,
-  registration,
-}) {
-  ensureManufacturerAccess(registration, manufacturerUuid);
+export async function listProductsByOwner({ registration, categoryId }) {
+  ensureRegistration(registration);
 
-  const rows = await listProductsByManufacturerUuid(manufacturerUuid);
+  const manufacturerUuid = registration.id.trim().toLowerCase();
+  const rows = await listProducts({
+    manufacturerUuid,
+    categoryId: categoryId ?? undefined,
+  });
+
   await Promise.all(rows.map((row) => ensureProductOnChainIntegrity(row)));
 
   return {

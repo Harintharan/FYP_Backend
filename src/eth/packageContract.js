@@ -1,14 +1,13 @@
-
 import { ethers } from "ethers";
-import ProductRegistryArtifact from "../../blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json" with { type: "json" };
+import PackageRegistryArtifact from "../../blockchain/artifacts/contracts/PackageRegistry.sol/PackageRegistry.json" with { type: "json" };
 import { chain, operatorWallet, contracts } from "../config.js";
 
 const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
 
-export const productRegistry = new ethers.Contract(
-  contracts.productRegistry,
-  ProductRegistryArtifact.abi,
+export const packageRegistry = new ethers.Contract(
+  contracts.packageRegistry,
+  PackageRegistryArtifact.abi,
   wallet
 );
 
@@ -17,14 +16,14 @@ function withSafetyMargin(estimatedGas) {
 }
 
 function parseReceiptEvent(receipt, eventName) {
-  const targetAddress = contracts.productRegistry.toLowerCase();
+  const targetAddress = contracts.packageRegistry.toLowerCase();
 
   for (const log of receipt.logs) {
     if (!log.address || log.address.toLowerCase() !== targetAddress) {
       continue;
     }
     try {
-      const parsed = productRegistry.interface.parseLog(log);
+      const parsed = packageRegistry.interface.parseLog(log);
       if (parsed && parsed.name === eventName) {
         return parsed;
       }
@@ -49,15 +48,18 @@ function toBytes(canonicalPayload) {
   throw new TypeError("canonicalPayload must be a string or Uint8Array");
 }
 
-export async function registerProductOnChain(productIdBytes16, canonicalPayload) {
+export async function registerProductOnChain(
+  productIdBytes16,
+  canonicalPayload
+) {
   const payloadBytes = toBytes(canonicalPayload);
 
-  const estimatedGas = await productRegistry.registerProduct.estimateGas(
+  const estimatedGas = await packageRegistry.registerProduct.estimateGas(
     productIdBytes16,
     payloadBytes
   );
 
-  const tx = await productRegistry.registerProduct(
+  const tx = await packageRegistry.registerProduct(
     productIdBytes16,
     payloadBytes,
     {
@@ -78,15 +80,18 @@ export async function registerProductOnChain(productIdBytes16, canonicalPayload)
   };
 }
 
-export async function updateProductOnChain(productIdBytes16, canonicalPayload) {
+export async function updateProductOnChain(
+  productIdBytes16,
+  canonicalPayload
+) {
   const payloadBytes = toBytes(canonicalPayload);
 
-  const estimatedGas = await productRegistry.updateProduct.estimateGas(
+  const estimatedGas = await packageRegistry.updateProduct.estimateGas(
     productIdBytes16,
     payloadBytes
   );
 
-  const tx = await productRegistry.updateProduct(
+  const tx = await packageRegistry.updateProduct(
     productIdBytes16,
     payloadBytes,
     {
@@ -104,7 +109,7 @@ export async function updateProductOnChain(productIdBytes16, canonicalPayload) {
 }
 
 export async function fetchProductOnChain(productIdBytes16) {
-  const meta = await productRegistry.getProduct(productIdBytes16);
+  const meta = await packageRegistry.getProduct(productIdBytes16);
 
   return {
     hash: meta.hash ?? null,

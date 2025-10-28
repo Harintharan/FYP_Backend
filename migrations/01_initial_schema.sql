@@ -31,14 +31,14 @@ $$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'product_status') THEN
-    CREATE TYPE product_status AS ENUM (
-      'PRODUCT_READY_FOR_SHIPMENT',
-      'PRODUCT_ALLOCATED',
-      'PRODUCT_IN_TRANSIT',
-      'PRODUCT_DELIVERED',
-      'PRODUCT_RETURNED',
-      'PRODUCT_CANCELLED'
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'package_status') THEN
+    CREATE TYPE package_status AS ENUM (
+      'PACKAGE_READY_FOR_SHIPMENT',
+      'PACKAGE_ALLOCATED',
+      'PACKAGE_IN_TRANSIT',
+      'PACKAGE_DELIVERED',
+      'PACKAGE_RETURNED',
+      'PACKAGE_CANCELLED'
     );
   END IF;
 END
@@ -191,17 +191,44 @@ CREATE TABLE IF NOT EXISTS shipment_registry (
 
 CREATE INDEX IF NOT EXISTS idx_checkpoint_registry_owner_uuid ON checkpoint_registry (owner_uuid);
 
-CREATE TABLE IF NOT EXISTS product_registry (
+CREATE TABLE IF NOT EXISTS product_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-    product_name TEXT NOT NULL,
-    product_category TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    name TEXT NOT NULL,
+    product_category_id UUID NOT NULL REFERENCES product_categories (id),
+    manufacturer_uuid UUID NOT NULL REFERENCES users (id),
+    required_start_temp TEXT,
+    required_end_temp TEXT,
+    handling_instructions TEXT,
+    product_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    updated_by TEXT,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_category
+  ON products (product_category_id);
+
+CREATE INDEX IF NOT EXISTS idx_products_manufacturer
+  ON products (manufacturer_uuid);
+
+CREATE TABLE IF NOT EXISTS package_registry (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     batch_id UUID REFERENCES batches (id) ON DELETE SET NULL,
     shipment_id UUID REFERENCES shipment_registry (id) ON DELETE SET NULL,
     quantity INT,
     microprocessor_mac TEXT,
     sensor_types TEXT,
-    wifi_ssid TEXT,
-    wifi_password TEXT,
     manufacturer_uuid TEXT,
     product_hash TEXT NOT NULL,
     tx_hash TEXT NOT NULL,
@@ -211,7 +238,7 @@ CREATE TABLE IF NOT EXISTS product_registry (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_by TEXT,
     updated_at TIMESTAMP,
-    status product_status
+    status package_status
 );
 
 CREATE TABLE IF NOT EXISTS shipment_segment (

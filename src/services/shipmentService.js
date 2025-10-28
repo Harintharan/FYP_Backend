@@ -7,11 +7,11 @@ import {
   getAllShipments as getAllShipmentRecords,
 } from "../models/ShipmentRegistryModel.js";
 import {
-  findProductById,
-  listProductsByShipmentUuid,
-  assignProductToShipment,
-  clearProductsFromShipment,
-} from "../models/ProductRegistryModel.js";
+  findPackageById,
+  listPackagesByShipmentUuid,
+  assignPackageToShipment,
+  clearPackagesFromShipment,
+} from "../models/PackageRegistryModel.js";
 import {
   createShipmentSegment,
   listShipmentSegmentsForShipment,
@@ -41,7 +41,7 @@ import {
 } from "../errors/shipmentErrors.js";
 import { HttpError } from "../utils/httpError.js";
 
-const PRODUCT_STATUS_READY_FOR_SHIPMENT = "PRODUCT_READY_FOR_SHIPMENT";
+const PACKAGE_STATUS_READY_FOR_SHIPMENT = "PACKAGE_READY_FOR_SHIPMENT";
 const REQUIRED_CHECKPOINT_FIELDS = Object.freeze([
   "start_checkpoint_id",
   "end_checkpoint_id",
@@ -149,7 +149,7 @@ async function normalizeShipmentItemsInput(
     }
 
     const productId = productIdRaw.trim();
-    const product = await findProductById(productId);
+    const product = await findPackageById(productId);
     if (!product) {
       throw shipmentValidationError(
         `shipmentItems[${index}].product_uuid does not exist`,
@@ -183,9 +183,9 @@ async function normalizeShipmentItemsInput(
       product.shipment_id &&
       product.shipment_id.toLowerCase() === currentShipmentId.toLowerCase();
 
-    if (!isSameShipment && currentStatus !== PRODUCT_STATUS_READY_FOR_SHIPMENT) {
+    if (!isSameShipment && currentStatus !== PACKAGE_STATUS_READY_FOR_SHIPMENT) {
       throw shipmentConflictError(
-        `shipmentItems[${index}].product_uuid must be in status ${PRODUCT_STATUS_READY_FOR_SHIPMENT}`,
+        `shipmentItems[${index}].product_uuid must be in status ${PACKAGE_STATUS_READY_FOR_SHIPMENT}`,
       );
     }
 
@@ -408,7 +408,7 @@ export async function registerShipment({ payload, wallet }) {
         );
 
         for (const item of normalizedItems) {
-          await assignProductToShipment(
+          await assignPackageToShipment(
             item.product_uuid,
             shipmentId,
             item.quantity,
@@ -451,7 +451,7 @@ export async function registerShipment({ payload, wallet }) {
     const formattedShipment = formatShipmentRecord(persistedShipment);
     const [shipmentSegments, assignedProducts] = await Promise.all([
       listShipmentSegmentsForShipment(shipmentId),
-      listProductsByShipmentUuid(shipmentId),
+      listPackagesByShipmentUuid(shipmentId),
     ]);
 
     const savedCheckpoints = buildCheckpointsFromSegments(shipmentSegments);
@@ -507,7 +507,7 @@ export async function getShipmentDetails({ id }) {
     const checkpoints = buildCheckpointsFromSegments(shipmentSegments);
     const canonicalCheckpoints =
       buildCanonicalCheckpointsFromSegments(shipmentSegments);
-    const assignedProducts = await listProductsByShipmentUuid(id);
+    const assignedProducts = await listPackagesByShipmentUuid(id);
     const shipmentItems = mapAssignedProductsToShipmentItems(assignedProducts);
 
     let dbHash = null;
@@ -700,10 +700,10 @@ export async function updateShipment({ id, payload, wallet }) {
           client,
         );
 
-        await clearProductsFromShipment(id, client);
+        await clearPackagesFromShipment(id, [], client);
 
         for (const item of normalizedItems) {
-          await assignProductToShipment(
+          await assignPackageToShipment(
             item.product_uuid,
             id,
             item.quantity,
@@ -747,7 +747,7 @@ export async function updateShipment({ id, payload, wallet }) {
     const formattedShipment = formatShipmentRecord(updatedShipment);
     const [shipmentSegments, assignedProducts] = await Promise.all([
       listShipmentSegmentsForShipment(id),
-      listProductsByShipmentUuid(id),
+      listPackagesByShipmentUuid(id),
     ]);
 
     const savedCheckpoints = buildCheckpointsFromSegments(shipmentSegments);
@@ -799,7 +799,7 @@ export async function listShipments() {
         const checkpoints = buildCheckpointsFromSegments(shipmentSegments);
         const canonicalCheckpoints =
           buildCanonicalCheckpointsFromSegments(shipmentSegments);
-        const assignedProducts = await listProductsByShipmentUuid(
+        const assignedProducts = await listPackagesByShipmentUuid(
           shipmentId,
         );
         const shipmentItems =

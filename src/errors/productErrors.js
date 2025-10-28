@@ -2,9 +2,8 @@ import { HttpError } from "../utils/httpError.js";
 
 export const ProductErrorCodes = Object.freeze({
   REGISTRATION_REQUIRED: "PRODUCT_REGISTRATION_REQUIRED",
-  MANUFACTURER_FORBIDDEN: "PRODUCT_MANUFACTURER_FORBIDDEN",
-  MANUFACTURER_MISMATCH: "PRODUCT_MANUFACTURER_MISMATCH",
-  MANUFACTURER_IMMUTABLE: "PRODUCT_MANUFACTURER_IMMUTABLE",
+  CATEGORY_NOT_FOUND: "PRODUCT_CATEGORY_NOT_FOUND",
+  FORBIDDEN: "PRODUCT_FORBIDDEN",
   NOT_FOUND: "PRODUCT_NOT_FOUND",
   HASH_MISMATCH: "PRODUCT_HASH_MISMATCH",
 });
@@ -15,25 +14,15 @@ export function registrationRequired() {
   });
 }
 
-export function manufacturerMismatch() {
-  return new HttpError(
-    403,
-    "manufacturerUUID does not match authenticated manufacturer",
-    { code: ProductErrorCodes.MANUFACTURER_MISMATCH }
-  );
+export function productCategoryNotFound() {
+  return new HttpError(404, "Product category not found", {
+    code: ProductErrorCodes.CATEGORY_NOT_FOUND,
+  });
 }
 
-export function manufacturerForbidden() {
-  return new HttpError(
-    403,
-    "Cannot operate on products for other manufacturers",
-    { code: ProductErrorCodes.MANUFACTURER_FORBIDDEN }
-  );
-}
-
-export function manufacturerImmutable() {
-  return new HttpError(400, "manufacturerUUID cannot be changed", {
-    code: ProductErrorCodes.MANUFACTURER_IMMUTABLE,
+export function productForbidden() {
+  return new HttpError(403, "You do not have access to this product", {
+    code: ProductErrorCodes.FORBIDDEN,
   });
 }
 

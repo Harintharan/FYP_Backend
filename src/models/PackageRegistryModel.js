@@ -7,17 +7,13 @@ function resolveExecutor(dbClient) {
   return query;
 }
 
-export async function insertProduct({
+export async function insertPackage({
   id,
-  productName,
-  productCategory,
   batchId,
   shipmentId,
   quantity,
   microprocessorMac,
   sensorTypes,
-  wifiSSID,
-  encryptedWifiPassword,
   manufacturerUUID,
   productHash,
   txHash,
@@ -28,17 +24,13 @@ export async function insertProduct({
 }, dbClient) {
   const exec = resolveExecutor(dbClient);
   const { rows } = await exec(
-    `INSERT INTO product_registry (
+    `INSERT INTO package_registry (
        id,
-       product_name,
-       product_category,
         batch_id,
         shipment_id,
         quantity,
         microprocessor_mac,
         sensor_types,
-        wifi_ssid,
-       wifi_password,
        manufacturer_uuid,
        product_hash,
        tx_hash,
@@ -51,21 +43,16 @@ export async function insertProduct({
        VALUES (
        $1,$2,$3,$4,$5,
        $6,$7,$8,$9,$10,
-       $11,$12,$13,$14,$15,
-       $16,NOW(),$17
+       $11,$12,NOW(),$13
      )
      RETURNING *`,
        [
       id,
-      productName,
-      productCategory,
       batchId ?? null,
       shipmentId ?? null,
       quantity ?? null,
       microprocessorMac ?? null,
       sensorTypes ?? null,
-      wifiSSID ?? null,
-      encryptedWifiPassword ?? null,
       manufacturerUUID,
       productHash,
       txHash,
@@ -78,16 +65,12 @@ export async function insertProduct({
   return rows[0] ?? null;
 }
 
-export async function updateProductRecord(id, {
-  productName,
-  productCategory,
+export async function updatePackageRecord(id, {
   batchId,
   shipmentId,
   quantity,
   microprocessorMac,
   sensorTypes,
-  wifiSSID,
-  encryptedWifiPassword,
   manufacturerUUID,
   productHash,
   txHash,
@@ -98,37 +81,29 @@ export async function updateProductRecord(id, {
 }, dbClient) {
   const exec = resolveExecutor(dbClient);
   const { rows } = await exec(
-    `UPDATE product_registry
-        SET product_name = $2,
-            product_category = $3,
-            batch_id = $4,
-            shipment_id = $5,
-            quantity = $6,
-            microprocessor_mac = $7,
-            sensor_types = $8,
-            wifi_ssid = $9,
-            wifi_password = $10,
-            manufacturer_uuid = $11,
-            product_hash = $12,
-            tx_hash = $13,
-            updated_by = $14,
-            pinata_cid = $15,
-            pinata_pinned_at = $16,
+    `UPDATE package_registry
+        SET batch_id = $2,
+            shipment_id = $3,
+            quantity = $4,
+            microprocessor_mac = $5,
+            sensor_types = $6,
+            manufacturer_uuid = $7,
+            product_hash = $8,
+            tx_hash = $9,
+            updated_by = $10,
+            pinata_cid = $11,
+            pinata_pinned_at = $12,
             updated_at = NOW(),
-            status = $17
+            status = $13
       WHERE id = $1
       RETURNING *`,
     [
       id,
-      productName,
-      productCategory,
       batchId ?? null,
       shipmentId ?? null,
       quantity ?? null,
       microprocessorMac ?? null,
       sensorTypes ?? null,
-      wifiSSID ?? null,
-      encryptedWifiPassword ?? null,
       manufacturerUUID,
       productHash,
       txHash,
@@ -141,20 +116,20 @@ export async function updateProductRecord(id, {
   return rows[0] ?? null;
 }
 
-export async function findProductById(id, dbClient) {
+export async function findPackageById(id, dbClient) {
   const exec = resolveExecutor(dbClient);
   const { rows } = await exec(
-    `SELECT * FROM product_registry WHERE id = $1 LIMIT 1`,
+    `SELECT * FROM package_registry WHERE id = $1 LIMIT 1`,
     [id]
   );
   return rows[0] ?? null;
 }
 
-export async function listProductsByManufacturerUuid(manufacturerUuid, dbClient) {
+export async function listPackagesByManufacturerUuid(manufacturerUuid, dbClient) {
   const exec = resolveExecutor(dbClient);
   const { rows } = await exec(
     `SELECT *
-       FROM product_registry
+       FROM package_registry
       WHERE LOWER(manufacturer_uuid) = LOWER($1)
       ORDER BY created_at DESC`,
     [manufacturerUuid]
@@ -162,36 +137,36 @@ export async function listProductsByManufacturerUuid(manufacturerUuid, dbClient)
   return rows;
 }
 
-export async function listProductsByShipmentUuid(shipmentId, dbClient) {
+export async function listPackagesByShipmentUuid(shipmentId, dbClient) {
   const exec = resolveExecutor(dbClient);
   const { rows } = await exec(
     `SELECT id, shipment_id, quantity
-       FROM product_registry
+       FROM package_registry
       WHERE shipment_id = $1`,
     [shipmentId]
   );
   return rows;
 }
 
-export async function assignProductToShipment(productId, shipmentId, quantity, dbClient) {
+export async function assignPackageToShipment(packageId, shipmentId, quantity, dbClient) {
   const exec = resolveExecutor(dbClient);
   await exec(
-    `UPDATE product_registry
+    `UPDATE package_registry
         SET shipment_id = $2::uuid,
             quantity = COALESCE($3::int, quantity),
             status = CASE
-              WHEN $2::uuid IS NOT NULL THEN 'PRODUCT_ALLOCATED'::product_status
+              WHEN $2::uuid IS NOT NULL THEN 'PACKAGE_ALLOCATED'::package_status
               ELSE status
             END,
             updated_at = NOW()
       WHERE id = $1`,
-    [productId, shipmentId ?? null, quantity]
+    [packageId, shipmentId ?? null, quantity]
   );
 }
 
-export async function clearProductsFromShipment(
+export async function clearPackagesFromShipment(
   shipmentId,
-  keepProductIds = [],
+  keepPackageIds = [],
   dbClient
 ) {
   if (!shipmentId) {
@@ -200,16 +175,16 @@ export async function clearProductsFromShipment(
 
   const exec = resolveExecutor(dbClient);
   const keepSet = new Set(
-    Array.isArray(keepProductIds)
-      ? keepProductIds.map((id) => id.toLowerCase())
+    Array.isArray(keepPackageIds)
+      ? keepPackageIds.map((id) => id.toLowerCase())
       : []
   );
 
   if (keepSet.size === 0) {
     await exec(
-      `UPDATE product_registry
+      `UPDATE package_registry
           SET shipment_id = NULL,
-              status = 'PRODUCT_READY_FOR_SHIPMENT'::product_status,
+              status = 'PACKAGE_READY_FOR_SHIPMENT'::package_status,
               updated_at = NOW()
         WHERE shipment_id = $1::uuid`,
       [shipmentId]
@@ -218,16 +193,16 @@ export async function clearProductsFromShipment(
   }
 
   const { rows } = await exec(
-    `SELECT id FROM product_registry WHERE shipment_id = $1::uuid`,
+    `SELECT id FROM package_registry WHERE shipment_id = $1::uuid`,
     [shipmentId]
   );
 
   for (const row of rows) {
     if (!keepSet.has(row.id.toLowerCase())) {
       await exec(
-        `UPDATE product_registry
+        `UPDATE package_registry
             SET shipment_id = NULL,
-                status = 'PRODUCT_READY_FOR_SHIPMENT'::product_status,
+                status = 'PACKAGE_READY_FOR_SHIPMENT'::package_status,
                 updated_at = NOW()
           WHERE id = $1`,
         [row.id]
