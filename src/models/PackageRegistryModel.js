@@ -94,7 +94,7 @@ export async function updatePackageRecord(id, {
             pinata_cid = $11,
             pinata_pinned_at = $12,
             updated_at = NOW(),
-            status = $13
+            status = COALESCE($13, status)
       WHERE id = $1
       RETURNING *`,
     [
@@ -146,6 +146,15 @@ export async function listPackagesByShipmentUuid(shipmentId, dbClient) {
     [shipmentId]
   );
   return rows;
+}
+
+export async function deletePackageById(id, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rowCount } = await exec(
+    `DELETE FROM package_registry WHERE id = $1`,
+    [id]
+  );
+  return rowCount > 0;
 }
 
 export async function assignPackageToShipment(packageId, shipmentId, quantity, dbClient) {

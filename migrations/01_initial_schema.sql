@@ -244,6 +244,12 @@ CREATE TABLE IF NOT EXISTS package_registry (
     status package_status
 );
 
+ALTER TABLE package_registry
+  DROP COLUMN IF EXISTS product_name,
+  DROP COLUMN IF EXISTS product_category,
+  DROP COLUMN IF EXISTS wifi_ssid,
+  DROP COLUMN IF EXISTS wifi_password;
+
 CREATE TABLE IF NOT EXISTS shipment_segment (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     shipment_id UUID NOT NULL REFERENCES shipment_registry (id) ON DELETE CASCADE,

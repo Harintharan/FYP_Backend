@@ -10,6 +10,7 @@ import {
   updatePackageRecord,
   findPackageById,
   listPackagesByManufacturerUuid,
+  deletePackageById,
 } from "../models/PackageRegistryModel.js";
 import {
   registrationRequired,
@@ -256,5 +257,24 @@ export async function listManufacturerPackages({
   return {
     statusCode: 200,
     body: rows.map((row) => formatPackageRecord(row)),
+  };
+}
+
+export async function deletePackageRecord({ id, registration }) {
+  const existing = await findPackageById(id);
+  if (!existing) {
+    throw packageNotFound();
+  }
+
+  ensureManufacturerAccess(registration, existing.manufacturer_uuid);
+
+  const deleted = await deletePackageById(id);
+  if (!deleted) {
+    throw packageNotFound();
+  }
+
+  return {
+    statusCode: 204,
+    body: null,
   };
 }

@@ -30,7 +30,7 @@ app.use("/api/test", testRoutes);
 app.use("/api/batches", batchRoutes);
 app.use("/api/product-categories", productCategoryRoutes);
 app.use("/api/products", productRoutes);
-app.use("/api/product-registry", packageRegistryRoutes);
+app.use("/api/package-registry", packageRegistryRoutes);
 app.use("/api", checkpointRoutes);
 app.use("/api", shipmentRoutes);
 app.use("/api", shipmentSegmentRoutes);

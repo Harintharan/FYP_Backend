@@ -4,6 +4,7 @@ import {
   updatePackageDetails,
   getPackageDetails,
   listManufacturerPackages,
+  deletePackageRecord,
 } from "../services/packageRegistryService.js";
 import { PACKAGE_STATUS_VALUES } from "../domain/package.schema.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
@@ -72,7 +73,7 @@ export async function listPackagesByManufacturer(req, res) {
     return res.status(statusCode).json(body);
   } catch (err) {
     return handleControllerError(res, err, {
-      logMessage: "GET /api/product-registry/manufacturer/:manufacturerUuid error",
+      logMessage: "GET /api/package-registry/manufacturer/:manufacturerUuid error",
       fallbackMessage: "Unable to list packages",
     });
   }
@@ -98,4 +99,19 @@ export async function listPackageStatuses(_req, res) {
     statusCode: 200,
     statuses: PACKAGE_STATUS_VALUES,
   });
+}
+
+export async function deletePackage(req, res) {
+  try {
+    const { statusCode } = await deletePackageRecord({
+      id: req.params.id,
+      registration: req.registration,
+    });
+    return res.sendStatus(statusCode);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error deleting package",
+      fallbackMessage: "Unable to delete package",
+    });
+  }
 }

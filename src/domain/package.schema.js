@@ -20,6 +20,27 @@ const optionalString = z
   }, z.string().min(1))
   .optional();
 
+const optionalSensorTypes = z
+  .preprocess((value) => {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    if (Array.isArray(value)) {
+      const cleaned = value
+        .map((entry) => toTrimmedString(entry))
+        .filter((entry) => entry && entry.length > 0);
+      if (cleaned.length === 0) {
+        return undefined;
+      }
+      return cleaned.join(",");
+    }
+
+    const trimmed = toTrimmedString(value);
+    return trimmed === "" ? undefined : trimmed;
+  }, z.string().min(1))
+  .optional();
+
 const optionalUuid = z.preprocess((value) => {
   const trimmed = toTrimmedString(value);
   if (!trimmed) {
@@ -63,15 +84,11 @@ const optionalStatus = z
 
 export const PackagePayload = z.object({
   manufacturerUUID: requiredString,
-  productName: requiredString,
-  productCategory: requiredString,
   batchId: optionalString,
   shipmentId: optionalUuid,
   quantity: optionalQuantity,
   microprocessorMac: optionalString,
-  sensorTypes: optionalString,
-  wifiSSID: optionalString,
-  wifiPassword: optionalString,
+  sensorTypes: optionalSensorTypes,
   status: optionalStatus,
 });
 

@@ -6,7 +6,6 @@ import {
 } from "../domain/package.schema.js";
 import { normalizeHash } from "../utils/hash.js";
 import { fetchProductOnChain } from "../eth/packageContract.js";
-import { decrypt } from "../utils/encryptionHelper.js";
 import { PackageErrorCodes, hashMismatch } from "../errors/packageErrors.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
@@ -48,23 +47,29 @@ function coercePayload(raw) {
     return {};
   }
 
-  return {
-    manufacturerUUID: pickValue(raw, "manufacturerUUID", "manufacturer_uuid"),
-    productName: pickValue(raw, "productName", "product_name"),
-    productCategory: pickValue(raw, "productCategory", "product_category"),
-    batchId: pickValue(raw, "batchId", "batch_id", "batch_lot_id", "batchLotId"),
-    shipmentId: pickValue(raw, "shipmentId", "shipment_id"),
-    quantity: pickValue(raw, "quantity"),
-    microprocessorMac: pickValue(
-      raw,
-      "microprocessorMac",
-      "microprocessor_mac"
-    ),
-    sensorTypes: pickValue(raw, "sensorTypes", "sensor_types"),
-    wifiSSID: pickValue(raw, "wifiSSID", "wifi_ssid"),
-    wifiPassword: pickValue(raw, "wifiPassword", "wifi_password"),
-    status: pickValue(raw, "status"),
+  const coerced = {};
+
+  const upsert = (key, value) => {
+    if (value !== undefined) {
+      coerced[key] = value;
+    }
   };
+
+  upsert(
+    "manufacturerUUID",
+    pickValue(raw, "manufacturerUUID", "manufacturer_uuid")
+  );
+  upsert("batchId", pickValue(raw, "batchId", "batch_id"));
+  upsert("shipmentId", pickValue(raw, "shipmentId", "shipment_id"));
+  upsert("quantity", pickValue(raw, "quantity"));
+  upsert(
+    "microprocessorMac",
+    pickValue(raw, "microprocessorMac", "microprocessor_mac")
+  );
+  upsert("sensorTypes", pickValue(raw, "sensorTypes", "sensor_types"));
+  upsert("status", pickValue(raw, "status"));
+
+  return coerced;
 }
 
 export function normalizePackagePayload(rawPayload, defaults = {}) {
@@ -73,16 +78,12 @@ export function normalizePackagePayload(rawPayload, defaults = {}) {
 }
 
 const PACKAGE_FIELDS = [
-  "productName",
-  "productCategory",
   "manufacturerUUID",
   "batchId",
   "shipmentId",
   "quantity",
   "microprocessorMac",
   "sensorTypes",
-  "wifiSSID",
-  "wifiPassword",
   "status",
 ];
 
@@ -140,29 +141,10 @@ export function preparePackagePersistence(
   };
 }
 
-function decryptIfEncrypted(value) {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    if (/^[0-9a-fA-F]+$/.test(value) && value.length % 2 === 0) {
-      return decrypt(value);
-    }
-  } catch (err) {
-    console.warn("⚠️ Failed to decrypt value, using raw:", err);
-  }
-  return value;
-}
-
 export function derivePackagePayloadFromRecord(record) {
   return {
     manufacturerUUID: toNullableString(
       record.manufacturer_uuid ?? record.manufacturerUUID
-    ),
-    productName: toNullableString(record.product_name ?? record.productName),
-    productCategory: toNullableString(
-      record.product_category ?? record.productCategory
     ),
     batchId: toNullableString(record.batch_id ?? record.batchId),
     shipmentId: toNullableString(record.shipment_id ?? record.shipmentId),
@@ -174,10 +156,6 @@ export function derivePackagePayloadFromRecord(record) {
       record.microprocessor_mac ?? record.microprocessorMac
     ),
     sensorTypes: toNullableString(record.sensor_types ?? record.sensorTypes),
-    wifiSSID: toNullableString(record.wifi_ssid ?? record.wifiSSID),
-    wifiPassword: toNullableString(
-      decryptIfEncrypted(record.wifi_password ?? record.wifiPassword)
-    ),
     status: sanitizeStatus(record.status),
   };
 }
@@ -235,8 +213,6 @@ export async function ensurePackageOnChainIntegrity(record) {
 export function formatPackageRecord(record) {
   return {
     id: record.id ?? record.product_uuid ?? record.productUUID ?? null,
-    productName: record.product_name ?? null,
-    productCategory: record.product_category ?? null,
     manufacturerUUID: record.manufacturer_uuid ?? null,
     batchId: record.batch_id ?? null,
     shipmentId: toNullableString(record.shipment_id ?? record.shipmentId),
@@ -246,10 +222,6 @@ export function formatPackageRecord(record) {
         : null,
     microprocessorMac: record.microprocessor_mac ?? null,
     sensorTypes: record.sensor_types ?? null,
-    wifiSSID: record.wifi_ssid ?? null,
-    wifiPassword: toNullableString(
-      decryptIfEncrypted(record.wifi_password ?? record.wifiPassword ?? null)
-    ),
     status: sanitizeStatus(record.status),
     productHash: normalizeHash(record.product_hash ?? null),
     txHash: record.tx_hash ?? null,

@@ -7,6 +7,7 @@ import {
   listPackagesByManufacturer,
   listPackages,
   listPackageStatuses,
+  deletePackage,
 } from "../controllers/PackageRegistryController.js";
 
 const router = Router();
@@ -25,5 +26,6 @@ router.get(
 );
 router.get("/:id", requireRegistrationRole("MANUFACTURER"), getPackage);
 router.get("/", requireRegistrationRole("MANUFACTURER"), listPackages);
+router.delete("/:id", requireRegistrationRole("MANUFACTURER"), deletePackage);
 
 export default router;
