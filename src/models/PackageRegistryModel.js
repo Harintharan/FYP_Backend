@@ -157,6 +157,36 @@ export async function deletePackageById(id, dbClient) {
   return rowCount > 0;
 }
 
+export async function summarizePackagesByShipmentId(shipmentId, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `SELECT
+        pc.name AS product_category_name,
+        p.name AS product_name,
+        p.required_start_temp,
+        p.required_end_temp,
+        COALESCE(SUM(COALESCE(pr.quantity, 0)), 0)::int AS total_quantity
+      FROM package_registry pr
+      LEFT JOIN batches b
+        ON pr.batch_id = b.id
+      LEFT JOIN products p
+        ON b.product_id = p.id
+      LEFT JOIN product_categories pc
+        ON p.product_category_id = pc.id
+     WHERE pr.shipment_id = $1
+     GROUP BY
+        pc.name,
+        p.name,
+        p.required_start_temp,
+        p.required_end_temp
+     ORDER BY
+        p.name NULLS LAST,
+        pc.name NULLS LAST`,
+    [shipmentId]
+  );
+  return rows;
+}
+
 export async function assignPackageToShipment(packageId, shipmentId, quantity, dbClient) {
   const exec = resolveExecutor(dbClient);
   await exec(

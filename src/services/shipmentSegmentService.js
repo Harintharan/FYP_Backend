@@ -10,6 +10,8 @@ import {
   deleteShipmentSegmentsByShipmentId as modelDeleteSegments,
   findShipmentSegmentById,
 } from "../models/ShipmentSegmentModel.js";
+import { summarizePackagesByShipmentId } from "../models/PackageRegistryModel.js";
+import { getShipmentById } from "../models/ShipmentRegistryModel.js";
 import {
   prepareShipmentSegmentPersistence,
   formatShipmentSegmentRecord,
@@ -23,6 +25,11 @@ import {
   shipmentSegmentNotFound,
   hashMismatch,
 } from "../errors/shipmentSegmentErrors.js";
+import { shipmentNotFound } from "../errors/shipmentErrors.js";
+import {
+  registrationRequired,
+  manufacturerForbidden,
+} from "../errors/packageErrors.js";
 
 const PINATA_ENTITY = "shipment_segment";
 
@@ -230,4 +237,48 @@ export async function listPendingShipmentSegmentsWithDetails() {
       };
     })
   );
+}
+
+export async function getShipmentSegmentPackageDetails({
+  segmentId,
+  registration,
+}) {
+  if (!registration?.id) {
+    throw registrationRequired();
+  }
+
+  const segment = await findShipmentSegmentById(segmentId);
+  if (!segment) {
+    throw shipmentSegmentNotFound();
+  }
+
+  const shipmentId = segment.shipment_id;
+  if (!shipmentId) {
+    throw shipmentNotFound();
+  }
+
+  const shipment = await getShipmentById(shipmentId);
+  if (!shipment) {
+    throw shipmentNotFound();
+  }
+
+  const normalizeUuid = (value) =>
+    typeof value === "string" ? value.trim().toLowerCase() : null;
+
+  const manufacturerUuid = normalizeUuid(shipment.manufacturer_uuid);
+  const registrationUuid = normalizeUuid(registration.id);
+
+  if (!manufacturerUuid || !registrationUuid || manufacturerUuid !== registrationUuid) {
+    throw manufacturerForbidden();
+  }
+
+  const rows = await summarizePackagesByShipmentId(shipmentId);
+
+  return rows.map((row) => ({
+    productCategory: row.product_category_name ?? null,
+    productName: row.product_name ?? null,
+    requiredStartTemp: row.required_start_temp ?? null,
+    requiredEndTemp: row.required_end_temp ?? null,
+    quantity: row.total_quantity ?? 0,
+  }));
 }

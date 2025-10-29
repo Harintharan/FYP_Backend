@@ -83,21 +83,21 @@ export function normalizeShipmentItems(rawItems = [], defaults = []) {
   const normalized = input.map((item, index) => {
     const defaultsForIndex = fallback[index] ?? {};
     const candidate = {
-      productUUID:
+      packageUUID:
         pickValue(
           item,
-          "productUUID",
-          "product_uuid",
-          "productId",
-          "product_id",
+          "packageUUID",
+          "package_uuid",
+          "packageId",
+          "package_id",
           "id"
         ) ??
         pickValue(
           defaultsForIndex,
-          "productUUID",
-          "product_uuid",
-          "productId",
-          "product_id",
+          "packageUUID",
+          "package_uuid",
+          "packageId",
+          "package_id",
           "id"
         ),
       quantity:
@@ -106,8 +106,9 @@ export function normalizeShipmentItems(rawItems = [], defaults = []) {
     };
 
     const parsed = ShipmentItemPayload.parse(candidate);
+    const normalizedUuid = normalizeUuid(parsed.packageUUID);
     return {
-      productUUID: normalizeUuid(parsed.productUUID),
+      packageUUID: normalizedUuid,
       quantity:
         parsed.quantity === undefined || parsed.quantity === null
           ? null
@@ -118,7 +119,9 @@ export function normalizeShipmentItems(rawItems = [], defaults = []) {
   return normalized
     .map((entry, index) => ({ ...entry, _index: index }))
     .sort((a, b) => {
-      const idCompare = a.productUUID.localeCompare(b.productUUID);
+      const idA = a.packageUUID ?? EMPTY;
+      const idB = b.packageUUID ?? EMPTY;
+      const idCompare = idA.localeCompare(idB);
       if (idCompare !== 0) {
         return idCompare;
       }
@@ -241,7 +244,7 @@ export function buildShipmentCanonicalPayload(
     manufacturerUUID: payload.manufacturerUUID ?? EMPTY,
     consumerUUID: payload.consumerUUID ?? EMPTY,
     shipmentItems: items.map((item) => ({
-      productUUID: item.productUUID ?? EMPTY,
+      packageUUID: item.packageUUID ?? EMPTY,
       quantity: valueOrEmpty(item.quantity),
     })),
     checkpoints: checkpoints.map((cp) => ({

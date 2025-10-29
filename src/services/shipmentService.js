@@ -62,10 +62,29 @@ function normalizeShipmentResponse(payload) {
     payload.destinationPartyUUID ??
     null;
 
+  const normalizedItems = Array.isArray(payload.shipmentItems)
+    ? payload.shipmentItems.map((item) => {
+        const packageId =
+          item?.package_uuid ??
+          item?.packageUUID ??
+          null;
+        const quantityValue =
+          item && Object.prototype.hasOwnProperty.call(item, "quantity")
+            ? item.quantity
+            : null;
+        return {
+          package_uuid: packageId,
+          packageUUID: packageId,
+          quantity: quantityValue,
+        };
+      })
+    : payload.shipmentItems ?? [];
+
   return {
     ...payload,
     consumerUUID: consumerValue,
     destinationPartyUUID: consumerValue,
+    shipmentItems: normalizedItems,
   };
 }
 
@@ -139,20 +158,25 @@ async function normalizeShipmentItemsInput(
 
   const normalized = [];
   for (const [index, item] of shipmentItems.entries()) {
-    const productIdRaw =
-      item?.product_uuid ?? item?.productUUID ?? item?.productId ?? null;
+    const packageIdRaw =
+      item?.package_uuid ??
+      item?.packageUUID ??
+      item?.packageId ??
+      item?.package_id ??
+      item?.id ??
+      null;
 
-    if (!productIdRaw || typeof productIdRaw !== "string") {
+    if (!packageIdRaw || typeof packageIdRaw !== "string") {
       throw shipmentValidationError(
-        `shipmentItems[${index}].product_uuid is required`,
+        `shipmentItems[${index}].packageUUID is required`,
       );
     }
 
-    const productId = productIdRaw.trim();
-    const product = await findPackageById(productId);
+    const packageId = packageIdRaw.trim();
+    const product = await findPackageById(packageId);
     if (!product) {
       throw shipmentValidationError(
-        `shipmentItems[${index}].product_uuid does not exist`,
+        `shipmentItems[${index}].packageUUID does not exist`,
       );
     }
 
@@ -163,7 +187,7 @@ async function normalizeShipmentItemsInput(
         manufacturerUUID.toLowerCase()
     ) {
       throw shipmentValidationError(
-        `shipmentItems[${index}].product_uuid belongs to a different manufacturer`,
+        `shipmentItems[${index}].packageUUID belongs to a different manufacturer`,
       );
     }
 
@@ -173,7 +197,7 @@ async function normalizeShipmentItemsInput(
         product.shipment_id.toLowerCase() !== currentShipmentId.toLowerCase())
     ) {
       throw shipmentConflictError(
-        `shipmentItems[${index}].product_uuid is already assigned to another shipment`,
+        `shipmentItems[${index}].packageUUID is already assigned to another shipment`,
       );
     }
 
@@ -185,7 +209,7 @@ async function normalizeShipmentItemsInput(
 
     if (!isSameShipment && currentStatus !== PACKAGE_STATUS_READY_FOR_SHIPMENT) {
       throw shipmentConflictError(
-        `shipmentItems[${index}].product_uuid must be in status ${PACKAGE_STATUS_READY_FOR_SHIPMENT}`,
+        `shipmentItems[${index}].packageUUID must be in status ${PACKAGE_STATUS_READY_FOR_SHIPMENT}`,
       );
     }
 
@@ -204,7 +228,8 @@ async function normalizeShipmentItemsInput(
     }
 
     normalized.push({
-      product_uuid: product.id,
+      package_uuid: product.id,
+      packageUUID: product.id,
       quantity: quantityValue,
     });
   }
@@ -267,7 +292,8 @@ async function validateCheckpoints(checkpoints) {
 
 function mapAssignedProductsToShipmentItems(assignedProducts) {
   return assignedProducts.map((product) => ({
-    product_uuid: product.id,
+    package_uuid: product.id,
+    packageUUID: product.id,
     quantity:
       product.quantity !== undefined && product.quantity !== null
         ? Number(product.quantity)
@@ -408,8 +434,12 @@ export async function registerShipment({ payload, wallet }) {
         );
 
         for (const item of normalizedItems) {
+          const packageId = item.packageUUID ?? item.package_uuid ?? null;
+          if (!packageId) {
+            continue;
+          }
           await assignPackageToShipment(
-            item.product_uuid,
+            packageId,
             shipmentId,
             item.quantity,
             client,
@@ -703,8 +733,12 @@ export async function updateShipment({ id, payload, wallet }) {
         await clearPackagesFromShipment(id, [], client);
 
         for (const item of normalizedItems) {
+          const packageId = item.packageUUID ?? item.package_uuid ?? null;
+          if (!packageId) {
+            continue;
+          }
           await assignPackageToShipment(
-            item.product_uuid,
+            packageId,
             id,
             item.quantity,
             client,

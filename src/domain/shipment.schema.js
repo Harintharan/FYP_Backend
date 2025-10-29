@@ -59,7 +59,7 @@ export const ShipmentPayload = z.object({
 });
 
 export const ShipmentItemPayload = z.object({
-  productUUID: requiredUuid,
+  packageUUID: requiredUuid,
   quantity: optionalQuantity,
 });
 

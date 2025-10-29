@@ -3,8 +3,9 @@ import {
   listShipmentSegments,
   listPendingShipmentSegments,
   updateShipmentSegmentStatusById,
+  getShipmentSegmentPackages,
 } from "../controllers/ShipmentSegmentController.js";
-import { requireAuth } from "../middleware/roles.js";
+import { requireAuth, requireRegistrationRole } from "../middleware/roles.js";
 
 const router = Router();
 
@@ -19,6 +20,11 @@ router.patch(
   "/shipment-segments/:id/status",
   requireAuth,
   updateShipmentSegmentStatusById
+);
+router.get(
+  "/shipment-segments/:id",
+  requireRegistrationRole("MANUFACTURER"),
+  getShipmentSegmentPackages
 );
 
 export default router;
