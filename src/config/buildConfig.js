@@ -11,6 +11,7 @@ const REQUIRED_KEYS = [
   "CONTRACT_ADDRESS_SHIPMENT",
   "CONTRACT_ADDRESS_PRODUCT",
   "CONTRACT_ADDRESS_PACKAGE",
+  "CONTRACT_ADDRESS_SENSOR_DATA",
 ];
 
 const SUPPORTED_KEYS = [
@@ -231,6 +232,12 @@ export function buildConfig(env) {
       "CONTRACT_ADDRESS_PACKAGE",
       ADDRESS_40_REGEX,
       "CONTRACT_ADDRESS_PACKAGE must be a valid 0x-prefixed address"
+    ),
+    sensorDataRegistry: assertHex(
+      baseEnvVars.CONTRACT_ADDRESS_SENSOR_DATA,
+      "CONTRACT_ADDRESS_SENSOR_DATA",
+      ADDRESS_40_REGEX,
+      "CONTRACT_ADDRESS_SENSOR_DATA must be a valid 0x-prefixed address"
     ),
   };
 

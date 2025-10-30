@@ -250,6 +250,26 @@ ALTER TABLE package_registry
   DROP COLUMN IF EXISTS wifi_ssid,
   DROP COLUMN IF EXISTS wifi_password;
 
+CREATE TABLE IF NOT EXISTS sensor_data (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    package_id UUID NOT NULL REFERENCES package_registry (id) ON DELETE CASCADE,
+    mac_address TEXT,
+    ip_address TEXT,
+    sensor_data JSONB NOT NULL,
+    payload_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    created_by TEXT,
+    request_send_timestamp TIMESTAMPTZ,
+    request_received_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_sensor_data_package_id
+  ON sensor_data (package_id);
+
 CREATE TABLE IF NOT EXISTS shipment_segment (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     shipment_id UUID NOT NULL REFERENCES shipment_registry (id) ON DELETE CASCADE,
