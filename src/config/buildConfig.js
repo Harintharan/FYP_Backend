@@ -12,6 +12,7 @@ const REQUIRED_KEYS = [
   "CONTRACT_ADDRESS_PRODUCT",
   "CONTRACT_ADDRESS_PACKAGE",
   "CONTRACT_ADDRESS_SENSOR_DATA",
+  "CONTRACT_ADDRESS_SENSOR_DATA_BREACH",
 ];
 
 const SUPPORTED_KEYS = [
@@ -196,7 +197,7 @@ export function buildConfig(env) {
     "PRIVATE_KEY_OTHER must be a 0x-prefixed 32-byte hex string"
   );
 
-  const contractAddresses = {
+    const contractAddresses = {
     batchRegistry: assertHex(
       baseEnvVars.CONTRACT_ADDRESS_BATCH,
       "CONTRACT_ADDRESS_BATCH",
@@ -239,6 +240,12 @@ export function buildConfig(env) {
       ADDRESS_40_REGEX,
       "CONTRACT_ADDRESS_SENSOR_DATA must be a valid 0x-prefixed address"
     ),
+    sensorDataBreachRegistry: assertHex(
+      baseEnvVars.CONTRACT_ADDRESS_SENSOR_DATA_BREACH,
+      "CONTRACT_ADDRESS_SENSOR_DATA_BREACH",
+      ADDRESS_40_REGEX,
+      "CONTRACT_ADDRESS_SENSOR_DATA_BREACH must be a valid 0x-prefixed address"
+    ),
   };
 
   return {
@@ -259,3 +266,5 @@ export function buildConfig(env) {
     registrationPayloadMaxBytes: resolveRegistrationPayloadLimit(baseEnvVars),
   };
 }
+
+

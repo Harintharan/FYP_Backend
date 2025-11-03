@@ -235,3 +235,4 @@ export async function getSensorDataEntry({ id }) {
     body: formatSensorDataRecord(record),
   };
 }
+

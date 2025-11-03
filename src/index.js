@@ -13,6 +13,7 @@ import checkpointRoutes from "./routes/checkpointRoutes.js";
 import shipmentRoutes from "./routes/shipmentRoutes.js";
 import shipmentSegmentRoutes from "./routes/shipmentSegmentRoutes.js";
 import sensorDataRoutes from "./routes/sensorDataRoutes.js";
+import sensorDataBreachRoutes from "./routes/sensorDataBreachRoutes.js";
 import { runMigrations } from "../migrations/index.js";
 
 const app = express();
@@ -33,6 +34,7 @@ app.use("/api/product-categories", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/package-registry", packageRegistryRoutes);
 app.use("/api/sensor-data", sensorDataRoutes);
+app.use("/api/sensor-data-breaches", sensorDataBreachRoutes);
 app.use("/api", checkpointRoutes);
 app.use("/api", shipmentRoutes);
 app.use("/api", shipmentSegmentRoutes);
@@ -51,3 +53,5 @@ app.listen(port, async () => {
     console.error("❌ Error setting up database:", err);
   }
 });
+
+

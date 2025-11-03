@@ -313,6 +313,10 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS sensor_data_breach (\n        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n        sensor_data_id UUID NOT NULL REFERENCES sensor_data(id) ON DELETE CASCADE,\n        sensor_type TEXT NOT NULL,\n        reading TEXT,\n        note TEXT,\n        detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n        payload_hash TEXT NOT NULL,\n        tx_hash TEXT NOT NULL,\n        created_by TEXT,\n        created_at TIMESTAMP NOT NULL DEFAULT NOW(),\n        updated_at TIMESTAMP,\n        pinata_cid TEXT,\n        pinata_pinned_at TIMESTAMPTZ\n      );\n      CREATE INDEX IF NOT EXISTS idx_sensor_data_breach_sensor_data_id\n        ON sensor_data_breach(sensor_data_id)
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS shipment_segment (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         shipment_id UUID NOT NULL REFERENCES shipment_registry(id) ON DELETE CASCADE,
@@ -352,3 +356,5 @@ export const migrate = async (pool) => {
     return false;
   }
 };
+
+

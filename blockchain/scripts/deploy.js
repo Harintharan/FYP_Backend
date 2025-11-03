@@ -9,6 +9,7 @@ const CONTRACTS = [
   "ShipmentRegistry",
   "ShipmentSegmentRegistry",
   "SensorDataRegistry",
+  "SensorDataBreachRegistry",
 ];
 
 const ENV_OUTPUT_ORDER = [
@@ -20,6 +21,7 @@ const ENV_OUTPUT_ORDER = [
   ["ShipmentRegistry", "CONTRACT_ADDRESS_SHIPMENT"],
   ["ShipmentSegmentRegistry", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT"],
   ["SensorDataRegistry", "CONTRACT_ADDRESS_SENSOR_DATA"],
+  ["SensorDataBreachRegistry", "CONTRACT_ADDRESS_SENSOR_DATA_BREACH"],
 ];
 
 async function deployContract(name) {
@@ -27,14 +29,14 @@ async function deployContract(name) {
   const contract = await factory.deploy();
   await contract.waitForDeployment();
   const address = await contract.getAddress();
-  console.log(`${name} deployed to: ${address}`);
+  console.log(${name} deployed to: );
   return { name, address };
 }
 
 async function main() {
   const deployments = [];
   for (const name of CONTRACTS) {
-    console.log(`\n🚀 Deploying ${name}...`);
+    console.log(\n🚀 Deploying ...);
     const details = await deployContract(name);
     deployments.push(details);
   }
@@ -48,7 +50,7 @@ async function main() {
   for (const [contractName, envKey] of ENV_OUTPUT_ORDER) {
     const address = addressByName[contractName];
     if (address) {
-      console.log(`${envKey}=${address}`);
+      console.log(${envKey}=);
     }
   }
 }
