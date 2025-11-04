@@ -2,10 +2,13 @@
 pragma solidity ^0.8.24;
 
 contract RegistrationRegistry {
+    uint256 public constant MAX_PAYLOAD_BYTES = 8192;
+
     enum RegistrationType {
         MANUFACTURER,
         SUPPLIER,
-        WAREHOUSE
+        WAREHOUSE,
+        CONSUMER
     }
 
     struct Registration {
@@ -13,7 +16,6 @@ contract RegistrationRegistry {
         uint8 regType;
         address submitter;
         uint256 updatedAt;
-        string payloadCanonicalJson;
     }
 
     mapping(bytes16 => Registration) private registrations;
@@ -31,6 +33,7 @@ contract RegistrationRegistry {
     error InvalidRegistrationType(uint8 regType);
     error RegistrationAlreadyExists(bytes16 uuid);
     error RegistrationDoesNotExist(bytes16 uuid);
+    error PayloadTooLarge(uint256 size, uint256 max);
 
     function submit(
         bytes16 uuid,
@@ -38,8 +41,13 @@ contract RegistrationRegistry {
         string calldata payloadCanonicalJson,
         bool isUpdate
     ) external {
-        if (regType > uint8(RegistrationType.WAREHOUSE)) {
+        if (regType > uint8(RegistrationType.CONSUMER)) {
             revert InvalidRegistrationType(regType);
+        }
+
+        uint256 payloadSize = bytes(payloadCanonicalJson).length;
+        if (payloadSize > MAX_PAYLOAD_BYTES) {
+            revert PayloadTooLarge(payloadSize, MAX_PAYLOAD_BYTES);
         }
 
         bool hasExisting = registrationExists[uuid];
@@ -57,8 +65,7 @@ contract RegistrationRegistry {
             payloadHash: payloadHash,
             regType: regType,
             submitter: msg.sender,
-            updatedAt: timestamp,
-            payloadCanonicalJson: payloadCanonicalJson
+            updatedAt: timestamp
         });
 
         if (!hasExisting) {
@@ -75,8 +82,7 @@ contract RegistrationRegistry {
             bytes32 payloadHash,
             uint8 regType,
             address submitter,
-            uint256 updatedAt,
-            string memory payloadCanonicalJson
+            uint256 updatedAt
         )
     {
         if (!registrationExists[uuid]) {
@@ -87,8 +93,7 @@ contract RegistrationRegistry {
             info.payloadHash,
             info.regType,
             info.submitter,
-            info.updatedAt,
-            info.payloadCanonicalJson
+            info.updatedAt
         );
     }
 

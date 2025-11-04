@@ -1,130 +1,167 @@
 import { query } from "../db.js";
 
-export async function createBatch(data) {
-  const {
+function resolveExecutor(dbClient) {
+  if (dbClient && typeof dbClient.query === "function") {
+    return (text, params) => dbClient.query(text, params);
+  }
+  return query;
+}
+
+export async function insertBatch(
+  {
     id,
-    product_category,
-    manufacturer_uuid,
+    productId,
+    manufacturerUUID,
     facility,
-    production_window,
-    quantity_produced,
-    release_status,
-    batch_hash = null,
-    tx_hash = null,
-    created_by = null,
-    pinata_cid = null,
-    pinata_pinned_at = null,
-  } = data;
-
-  const { rows } = await query(
-    `INSERT INTO batches
-       (id, product_category, manufacturer_uuid, facility, production_window, quantity_produced,
-        release_status, batch_hash, tx_hash, created_by, pinata_cid, pinata_pinned_at)
-     VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-     RETURNING *`,
-    [
-      id,
-      product_category,
-      manufacturer_uuid,
-      facility,
-      production_window,
-      quantity_produced,
-      release_status,
-      batch_hash,
-      tx_hash,
-      created_by,
-      pinata_cid,
-      pinata_pinned_at,
-    ]
-  );
-  return rows[0];
-}
-
-export async function updateBatch(id, data) {
-  const {
-    product_category,
-    manufacturer_uuid,
-    facility,
-    production_window,
-    quantity_produced,
-    release_status,
-    batch_hash,
-    tx_hash,
-    updated_by,
-    pinata_cid = null,
-    pinata_pinned_at = null,
-  } = data;
-
-  const { rows } = await query(
-    `UPDATE batches SET
-        product_category=$2,
-        manufacturer_uuid=$3,
-        facility=$4,
-        production_window=$5,
-        quantity_produced=$6,
-        release_status=$7,
-        batch_hash=$8,
-        tx_hash=$9,
-        updated_by=$10,
-        pinata_cid=$11,
-        pinata_pinned_at=$12,
-        updated_at=NOW()
-      WHERE id=$1::uuid
-      RETURNING *`,
-    [
-      id,
-      product_category,
-      manufacturer_uuid,
-      facility,
-      production_window,
-      quantity_produced,
-      release_status,
-      batch_hash,
-      tx_hash,
-      updated_by,
-      pinata_cid,
-      pinata_pinned_at,
-    ]
-  );
-  return rows[0];
-}
-
-export async function updateBatchOnChainMetadata(
-  id,
-  { batch_hash, tx_hash, created_by, pinata_cid = null, pinata_pinned_at = null }
+    productionStartTime = null,
+    productionEndTime = null,
+    quantityProduced,
+    expiryDate = null,
+    batchHash,
+    txHash = null,
+    createdBy = null,
+    pinataCid = null,
+    pinataPinnedAt = null,
+  },
+  dbClient
 ) {
-  const { rows } = await query(
-    `UPDATE batches
-        SET batch_hash = $2,
-            tx_hash = $3,
-            created_by = COALESCE($4, created_by),
-            pinata_cid = $5,
-            pinata_pinned_at = $6
-      WHERE id = $1::uuid
-      RETURNING *`,
-    [id, batch_hash, tx_hash, created_by, pinata_cid, pinata_pinned_at]
+  const exec = resolveExecutor(dbClient);
+  await exec(
+    `INSERT INTO batches (
+        id,
+        product_id,
+        manufacturer_uuid,
+        facility,
+        production_start_time,
+        production_end_time,
+        quantity_produced,
+        expiry_date,
+        batch_hash,
+        tx_hash,
+        created_by,
+        pinata_cid,
+        pinata_pinned_at
+      )
+      VALUES (
+        $1::uuid,
+        $2::uuid,
+        $3::uuid,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13
+      )`,
+    [
+      id,
+      productId,
+      manufacturerUUID,
+      facility,
+      productionStartTime,
+      productionEndTime,
+      quantityProduced,
+      expiryDate,
+      batchHash,
+      txHash,
+      createdBy,
+      pinataCid,
+      pinataPinnedAt,
+    ]
   );
-  return rows[0];
+
+  return findBatchById(id, dbClient);
 }
 
-export async function deleteBatchById(id) {
-  await query(`DELETE FROM batches WHERE id = $1::uuid`, [id]);
+export async function updateBatch(
+  {
+    id,
+    productId,
+    manufacturerUUID,
+    facility,
+    productionStartTime = null,
+    productionEndTime = null,
+    quantityProduced,
+    expiryDate = null,
+    batchHash,
+    txHash,
+    updatedBy = null,
+    pinataCid = null,
+    pinataPinnedAt = null,
+  },
+  dbClient
+) {
+  const exec = resolveExecutor(dbClient);
+  await exec(
+    `UPDATE batches
+        SET product_id = $2::uuid,
+            manufacturer_uuid = $3::uuid,
+            facility = $4,
+            production_start_time = $5,
+            production_end_time = $6,
+            quantity_produced = $7,
+            expiry_date = $8,
+            batch_hash = $9,
+            tx_hash = $10,
+            updated_by = $11,
+            pinata_cid = $12,
+            pinata_pinned_at = $13,
+            updated_at = NOW()
+      WHERE id = $1::uuid`,
+    [
+      id,
+      productId,
+      manufacturerUUID,
+      facility,
+      productionStartTime,
+      productionEndTime,
+      quantityProduced,
+      expiryDate,
+      batchHash,
+      txHash,
+      updatedBy,
+      pinataCid,
+      pinataPinnedAt,
+    ]
+  );
+
+  return findBatchById(id, dbClient);
 }
 
-export async function getBatchById(id) {
-  const { rows } = await query(`SELECT * FROM batches WHERE id=$1::uuid`, [id]);
-  return rows[0];
+export async function deleteBatchById(id, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  await exec(`DELETE FROM batches WHERE id = $1::uuid`, [id]);
 }
 
-export async function getBatchesByManufacturerUuid(manufacturerUuid) {
-  const { rows } = await query(
-    `SELECT id, product_category, manufacturer_uuid, facility,
-            production_window, quantity_produced, release_status, batch_hash,
-            tx_hash, created_by, updated_by, pinata_cid, pinata_pinned_at,
-            created_at, updated_at
-       FROM batches
-      WHERE manufacturer_uuid = $1
-      ORDER BY created_at DESC`,
+export async function findBatchById(id, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `SELECT b.*,
+            p.name AS product_name
+       FROM batches b
+       LEFT JOIN products p
+         ON p.id = b.product_id
+      WHERE b.id = $1::uuid
+      LIMIT 1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+export async function listBatchesByManufacturerUuid(manufacturerUuid, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `SELECT b.*,
+            p.name AS product_name
+       FROM batches b
+       LEFT JOIN products p
+         ON p.id = b.product_id
+      WHERE b.manufacturer_uuid = $1::uuid
+      ORDER BY b.created_at DESC`,
     [manufacturerUuid]
   );
   return rows;

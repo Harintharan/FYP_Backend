@@ -1,15 +1,20 @@
-// const express = require("express");
-// const router = express.Router();
+import { Router } from "express";
+import { requireRegistrationRole } from "../middleware/roles.js";
+import {
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getProduct,
+  listProducts,
+} from "../controllers/productController.js";
 
-// // Import the functions correctly
-// const productController = require("../controllers/productController");
+const router = Router();
+const requireManufacturer = requireRegistrationRole("MANUFACTURER");
 
+router.post("/", requireManufacturer, createProduct);
+router.put("/:id", requireManufacturer, updateProduct);
+router.delete("/:id", requireManufacturer, deleteProduct);
+router.get("/", requireManufacturer, listProducts);
+router.get("/:id", requireManufacturer, getProduct);
 
-
-// // Define routes
-// router.post("/", productController.createProduct);
-// router.get("/:id", productController.getProduct);
-
-// module.exports = router;  // ✅ Must export router
-
-
+export default router;

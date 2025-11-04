@@ -3,27 +3,26 @@ pragma solidity ^0.8.20;
 
 contract CheckpointRegistry {
     address public owner;
-    uint256 public nextCheckpointId = 1;
 
     struct CheckpointMeta {
-        bytes32 hash;        // integrity hash from DB
+        bytes32 hash;
         uint256 createdAt;
         uint256 updatedAt;
         address createdBy;
         address updatedBy;
     }
 
-    mapping(uint256 => CheckpointMeta) public checkpoints;
+    mapping(bytes16 => CheckpointMeta) public checkpoints;
 
     event CheckpointRegistered(
-        uint256 indexed checkpointId,
+        bytes16 indexed checkpointId,
         bytes32 hash,
         address createdBy,
         uint256 createdAt
     );
 
     event CheckpointUpdated(
-        uint256 indexed checkpointId,
+        bytes16 indexed checkpointId,
         bytes32 newHash,
         address updatedBy,
         uint256 updatedAt
@@ -33,25 +32,30 @@ contract CheckpointRegistry {
         owner = msg.sender;
     }
 
-    // 🔹 Register a new checkpoint
-    function registerCheckpoint(bytes32 dbHash) external returns (uint256) {
-        uint256 checkpointId = nextCheckpointId++;
+    function registerCheckpoint(bytes16 checkpointId, bytes calldata canonicalPayload)
+        external
+        returns (bytes16)
+    {
+        require(checkpoints[checkpointId].createdAt == 0, "Checkpoint already exists");
+
+        bytes32 hash = keccak256(canonicalPayload);
 
         checkpoints[checkpointId] = CheckpointMeta({
-            hash: dbHash,
+            hash: hash,
             createdAt: block.timestamp,
             updatedAt: 0,
             createdBy: msg.sender,
             updatedBy: address(0)
         });
 
-        emit CheckpointRegistered(checkpointId, dbHash, msg.sender, block.timestamp);
+        emit CheckpointRegistered(checkpointId, hash, msg.sender, block.timestamp);
         return checkpointId;
     }
 
-    // 🔹 Update existing checkpoint
-    function updateCheckpoint(uint256 checkpointId, bytes32 newHash) external {
+    function updateCheckpoint(bytes16 checkpointId, bytes calldata canonicalPayload) external {
         require(checkpoints[checkpointId].createdAt != 0, "Checkpoint does not exist");
+
+        bytes32 newHash = keccak256(canonicalPayload);
 
         CheckpointMeta storage cp = checkpoints[checkpointId];
         cp.hash = newHash;
@@ -61,8 +65,12 @@ contract CheckpointRegistry {
         emit CheckpointUpdated(checkpointId, newHash, msg.sender, block.timestamp);
     }
 
-    // 🔹 Get checkpoint
-    function getCheckpoint(uint256 checkpointId) external view returns (CheckpointMeta memory) {
+    function getCheckpoint(bytes16 checkpointId)
+        external
+        view
+        returns (CheckpointMeta memory)
+    {
+        require(checkpoints[checkpointId].createdAt != 0, "Checkpoint does not exist");
         return checkpoints[checkpointId];
     }
 }

@@ -5,9 +5,9 @@
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS migrations (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  run_at TIMESTAMP NOT NULL DEFAULT NOW()
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    run_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -15,15 +15,46 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reg_type') THEN
-    CREATE TYPE reg_type AS ENUM ('MANUFACTURER', 'SUPPLIER', 'WAREHOUSE');
+    CREATE TYPE reg_type AS ENUM ('MANUFACTURER', 'SUPPLIER', 'WAREHOUSE', 'CONSUMER');
+
+END IF;
+
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reg_status') THEN
+    CREATE TYPE reg_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
   END IF;
 END
 $$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reg_status') THEN
-    CREATE TYPE reg_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'package_status') THEN
+    CREATE TYPE package_status AS ENUM (
+      'PACKAGE_READY_FOR_SHIPMENT',
+      'PACKAGE_ALLOCATED',
+      'PACKAGE_IN_TRANSIT',
+      'PACKAGE_DELIVERED',
+      'PACKAGE_RETURNED',
+      'PACKAGE_CANCELLED'
+    );
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'shipment_segment_status') THEN
+    CREATE TYPE shipment_segment_status AS ENUM (
+      'PENDING',
+      'ACCEPTED',
+      'IN_TRANSIT',
+      'DELIVERED',
+      'CLOSED',
+      'CANCELLED'
+    );
   END IF;
 END
 $$;
@@ -37,45 +68,55 @@ END
 $$;
 
 CREATE TABLE IF NOT EXISTS accounts (
-  address TEXT PRIMARY KEY,
-  role user_role NOT NULL DEFAULT 'USER',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    address TEXT NOT NULL UNIQUE,
+    role user_role NOT NULL DEFAULT 'USER',
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO accounts (address, role)
-VALUES (LOWER('0xAdminAddressHere'), 'ADMIN')
+INSERT INTO
+    accounts (address, role)
+VALUES (
+        LOWER('0xAdminAddressHere'),
+        'ADMIN'
+    )
 ON CONFLICT (address) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS auth_nonces (
-  address TEXT PRIMARY KEY,
-  nonce TEXT NOT NULL,
-  issued_at TIMESTAMPTZ DEFAULT NOW(),
-  expires_at TIMESTAMPTZ NOT NULL
+    address TEXT PRIMARY KEY,
+    nonce TEXT NOT NULL,
+    issued_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  reg_type reg_type NOT NULL,
-  public_key TEXT,
-  payload JSONB NOT NULL,
-  payload_canonical TEXT NOT NULL,
-  payload_hash TEXT NOT NULL,
-  tx_hash TEXT NOT NULL,
-  pinata_cid TEXT,
-  pinata_pinned_at TIMESTAMPTZ,
-  status reg_status NOT NULL DEFAULT 'PENDING',
-  submitter_address TEXT,
-  approved_by_address TEXT,
-  approved_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    reg_type reg_type NOT NULL,
+    public_key TEXT,
+    payload JSONB NOT NULL,
+    payload_canonical TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    status reg_status NOT NULL DEFAULT 'PENDING',
+    submitter_address TEXT,
+    approved_by UUID REFERENCES accounts (id),
+    approved_by_address TEXT,
+    approved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pinata_cid TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS pinata_pinned_at TIMESTAMPTZ;
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS pinata_pinned_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_registrations_status ON users (status);
+
 CREATE INDEX IF NOT EXISTS idx_registrations_tx_hash ON users (tx_hash);
+
 CREATE INDEX IF NOT EXISTS idx_registrations_payload ON users USING GIN (payload);
 
 CREATE OR REPLACE FUNCTION set_updated_at()
@@ -87,147 +128,195 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS registrations_set_updated_at ON users;
+
 CREATE TRIGGER registrations_set_updated_at
 BEFORE UPDATE ON users
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS batches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_category TEXT NOT NULL,
-  manufacturer_uuid TEXT NOT NULL,
-  facility TEXT NOT NULL,
-  production_window TEXT NOT NULL,
-  quantity_produced TEXT NOT NULL,
-  release_status TEXT NOT NULL,
-  batch_hash TEXT,
-  tx_hash TEXT,
-  created_by TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_by TEXT,
-  updated_at TIMESTAMP,
-  pinata_cid TEXT,
-  pinata_pinned_at TIMESTAMPTZ
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    product_id UUID NOT NULL REFERENCES products (id),
+    manufacturer_uuid UUID NOT NULL REFERENCES users (id),
+    facility TEXT NOT NULL,
+    production_start_time TIMESTAMP,
+    production_end_time TIMESTAMP,
+    quantity_produced TEXT NOT NULL,
+    expiry_date TEXT,
+    batch_hash TEXT,
+    tx_hash TEXT,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_by TEXT,
+    updated_at TIMESTAMP,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS product_registry (
-  id SERIAL PRIMARY KEY,
-  product_id INT UNIQUE NOT NULL,
-  product_uuid TEXT NOT NULL,
-  product_name TEXT NOT NULL,
-  product_category TEXT NOT NULL,
-  batch_id UUID REFERENCES batches(id) ON DELETE SET NULL,
-  required_storage_temp TEXT,
-  transport_route_plan_id TEXT,
-  handling_instructions TEXT,
-  expiry_date TEXT NOT NULL,
-  sensor_device_uuid TEXT,
-  microprocessor_mac TEXT,
-  sensor_types TEXT,
-  qr_id TEXT,
-  wifi_ssid TEXT,
-  wifi_password TEXT,
-  manufacturer_uuid TEXT,
-  origin_facility_addr TEXT,
-  product_hash TEXT NOT NULL,
-  tx_hash TEXT NOT NULL,
-  created_by TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_by TEXT,
-  updated_at TIMESTAMP,
-  status TEXT NOT NULL
-);
+CREATE INDEX IF NOT EXISTS idx_batches_product
+  ON batches (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_batches_manufacturer
+  ON batches (manufacturer_uuid);
 
 CREATE TABLE IF NOT EXISTS checkpoint_registry (
-  id SERIAL PRIMARY KEY,
-  checkpoint_id INT UNIQUE NOT NULL,
-  checkpoint_uuid TEXT NOT NULL,
-  name TEXT NOT NULL,
-  address TEXT,
-  latitude TEXT,
-  longitude TEXT,
-  owner_uuid TEXT NOT NULL,
-  owner_type TEXT NOT NULL,
-  checkpoint_type TEXT NOT NULL,
-  checkpoint_hash TEXT NOT NULL,
-  tx_hash TEXT NOT NULL,
-  created_by TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_by TEXT,
-  updated_at TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    name TEXT NOT NULL,
+    address TEXT,
+    latitude TEXT,
+    longitude TEXT,
+    state TEXT,
+    country TEXT,
+    owner_uuid UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    checkpoint_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_by TEXT,
+    updated_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS shipment_registry (
-  id SERIAL PRIMARY KEY,
-  shipment_id INT UNIQUE NOT NULL,
-  manufacturer_uuid TEXT NOT NULL,
-  destination_party_uuid TEXT NOT NULL,
-  shipment_items JSONB,
-  shipment_hash TEXT,
-  tx_hash TEXT,
-  created_by TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_by TEXT,
-  updated_at TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    manufacturer_uuid TEXT NOT NULL,
+    consumer_uuid TEXT NOT NULL,
+    shipment_hash TEXT,
+    tx_hash TEXT,
+    created_by TEXT,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_by TEXT,
+    updated_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS shipment_handover_checkpoints (
-  id SERIAL PRIMARY KEY,
-  shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
-  start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-  end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-  estimated_arrival_date TEXT NOT NULL,
-  time_tolerance TEXT NOT NULL,
-  expected_ship_date TEXT NOT NULL,
-  required_action TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
+CREATE INDEX IF NOT EXISTS idx_checkpoint_registry_owner_uuid ON checkpoint_registry (owner_uuid);
+
+CREATE TABLE IF NOT EXISTS product_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS shipment_segment_acceptance (
-  id SERIAL PRIMARY KEY,
-  acceptance_id INT NOT NULL UNIQUE,
-  shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
-  segment_start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-  segment_end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-  assigned_role VARCHAR(100) NOT NULL,
-  assigned_party_uuid VARCHAR(100) NOT NULL,
-  estimated_pickup_time TEXT NOT NULL,
-  estimated_delivery_time TEXT NOT NULL,
-  shipment_items JSONB NOT NULL,
-  acceptance_timestamp TEXT NOT NULL,
-  digital_signature TEXT,
-  acceptance_hash TEXT NOT NULL,
-  tx_hash TEXT NOT NULL,
-  created_by VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_by VARCHAR(100),
-  updated_at TIMESTAMP
+CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    name TEXT NOT NULL,
+    product_category_id UUID NOT NULL REFERENCES product_categories (id),
+    manufacturer_uuid UUID NOT NULL REFERENCES users (id),
+    required_start_temp TEXT,
+    required_end_temp TEXT,
+    handling_instructions TEXT,
+    product_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    updated_by TEXT,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS shipment_segment_handover (
-  id SERIAL PRIMARY KEY,
-  handover_id INT NOT NULL UNIQUE,
-  shipment_id INT NOT NULL REFERENCES shipment_registry(shipment_id) ON DELETE CASCADE,
-  acceptance_id INT NOT NULL REFERENCES shipment_segment_acceptance(acceptance_id) ON DELETE CASCADE,
-  segment_start_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-  segment_end_checkpoint_id INT NOT NULL REFERENCES checkpoint_registry(checkpoint_id),
-  from_party_uuid VARCHAR(100) NOT NULL,
-  to_party_uuid VARCHAR(100) NOT NULL,
-  handover_timestamp TEXT NOT NULL,
-  gps_lat NUMERIC(10, 6),
-  gps_lon NUMERIC(10, 6),
-  quantity_transferred INT NOT NULL,
-  from_party_signature TEXT NOT NULL,
-  to_party_signature TEXT NOT NULL,
-  handover_hash TEXT NOT NULL,
-  tx_hash TEXT NOT NULL,
-  created_by VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_by VARCHAR(100),
-  updated_at TIMESTAMP
+CREATE INDEX IF NOT EXISTS idx_products_category
+  ON products (product_category_id);
+
+CREATE INDEX IF NOT EXISTS idx_products_manufacturer
+  ON products (manufacturer_uuid);
+
+CREATE TABLE IF NOT EXISTS package_registry (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    batch_id UUID REFERENCES batches (id) ON DELETE SET NULL,
+    shipment_id UUID REFERENCES shipment_registry (id) ON DELETE SET NULL,
+    quantity INT,
+    microprocessor_mac TEXT,
+    sensor_types TEXT,
+    manufacturer_uuid TEXT,
+    product_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_by TEXT,
+    updated_at TIMESTAMP,
+    status package_status
 );
 
-INSERT INTO migrations (name) VALUES ('01_initial_schema')
+ALTER TABLE package_registry
+  DROP COLUMN IF EXISTS product_name,
+  DROP COLUMN IF EXISTS product_category,
+  DROP COLUMN IF EXISTS wifi_ssid,
+  DROP COLUMN IF EXISTS wifi_password;
+
+CREATE TABLE IF NOT EXISTS sensor_data (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    package_id UUID NOT NULL REFERENCES package_registry (id) ON DELETE CASCADE,
+    mac_address TEXT,
+    ip_address TEXT,
+    sensor_data JSONB NOT NULL,
+    payload_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    created_by TEXT,
+    request_send_timestamp TIMESTAMPTZ,
+    request_received_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_sensor_data_package_id
+  ON sensor_data (package_id);
+
+CREATE TABLE IF NOT EXISTS sensor_data_breach (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    sensor_data_id UUID NOT NULL REFERENCES sensor_data (id) ON DELETE CASCADE,
+    sensor_type TEXT NOT NULL,
+    reading TEXT,
+    note TEXT,
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    payload_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    created_by TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_sensor_data_breach_sensor_data_id
+  ON sensor_data_breach (sensor_data_id);
+
+
+CREATE TABLE IF NOT EXISTS shipment_segment (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    shipment_id UUID NOT NULL REFERENCES shipment_registry (id) ON DELETE CASCADE,
+    start_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry (id),
+    end_checkpoint_id UUID NOT NULL REFERENCES checkpoint_registry (id),
+    expected_ship_date TEXT NOT NULL,
+    estimated_arrival_date TEXT NOT NULL,
+    time_tolerance TEXT,
+    supplier_id UUID REFERENCES users (id) ON DELETE SET NULL,
+    segment_order INT NOT NULL,
+    status shipment_segment_status NOT NULL DEFAULT 'PENDING',
+    segment_hash TEXT NOT NULL,
+    tx_hash TEXT,
+    pinata_cid TEXT,
+    pinata_pinned_at TIMESTAMPTZ,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shipment_segment_shipment
+  ON shipment_segment (shipment_id);
+
+INSERT INTO
+    migrations (name)
+VALUES ('01_initial_schema')
 ON CONFLICT (name) DO NOTHING;
 
 COMMIT;
+
+

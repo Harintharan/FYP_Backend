@@ -1,14 +1,27 @@
 const hre = require("hardhat");
 
 const CONTRACTS = [
-  "BatchRegistry",
-  "CheckpointRegistry",
-  "ProductRegistry",
   "RegistrationRegistry",
+  "BatchRegistry",
+  "ProductRegistry",
+  "PackageRegistry",
+  "CheckpointRegistry",
   "ShipmentRegistry",
-  "ShipmentSegmentAcceptance",
-  "ShipmentSegmentHandover",
-  "SupplyChain",
+  "ShipmentSegmentRegistry",
+  "SensorDataRegistry",
+  "SensorDataBreachRegistry",
+];
+
+const ENV_OUTPUT_ORDER = [
+  ["RegistrationRegistry", "CONTRACT_ADDRESS_REGISTRY"],
+  ["BatchRegistry", "CONTRACT_ADDRESS_BATCH"],
+  ["ProductRegistry", "CONTRACT_ADDRESS_PRODUCT"],
+  ["PackageRegistry", "CONTRACT_ADDRESS_PACKAGE"],
+  ["CheckpointRegistry", "CONTRACT_ADDRESS_CHECKPOINT"],
+  ["ShipmentRegistry", "CONTRACT_ADDRESS_SHIPMENT"],
+  ["ShipmentSegmentRegistry", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT"],
+  ["SensorDataRegistry", "CONTRACT_ADDRESS_SENSOR_DATA"],
+  ["SensorDataBreachRegistry", "CONTRACT_ADDRESS_SENSOR_DATA_BREACH"],
 ];
 
 async function deployContract(name) {
@@ -16,21 +29,29 @@ async function deployContract(name) {
   const contract = await factory.deploy();
   await contract.waitForDeployment();
   const address = await contract.getAddress();
-  console.log(`${name} deployed to: ${address}`);
+  console.log(${name} deployed to: );
   return { name, address };
 }
 
 async function main() {
   const deployments = [];
   for (const name of CONTRACTS) {
-    console.log(`\n🚀 Deploying ${name}...`);
+    console.log(\n🚀 Deploying ...);
     const details = await deployContract(name);
     deployments.push(details);
   }
 
-  console.log("\n✅ Deployment summary:");
-  for (const { name, address } of deployments) {
-    console.log(`  • ${name}: ${address}`);
+  const addressByName = deployments.reduce((acc, { name, address }) => {
+    acc[name] = address;
+    return acc;
+  }, {});
+
+  console.log("\n🔑 Environment configuration:");
+  for (const [contractName, envKey] of ENV_OUTPUT_ORDER) {
+    const address = addressByName[contractName];
+    if (address) {
+      console.log(${envKey}=);
+    }
   }
 }
 
