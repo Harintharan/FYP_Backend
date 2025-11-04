@@ -3,6 +3,7 @@ import { HttpError } from "../utils/httpError.js";
 export const ShipmentSegmentErrorCodes = Object.freeze({
   NOT_FOUND: "SHIPMENT_SEGMENT_NOT_FOUND",
   HASH_MISMATCH: "SHIPMENT_SEGMENT_HASH_MISMATCH",
+  CONFLICT: "SHIPMENT_SEGMENT_CONFLICT",
 });
 
 export function shipmentSegmentNotFound() {
@@ -20,4 +21,10 @@ export function hashMismatch(details) {
       details,
     }
   );
+}
+
+export function shipmentSegmentConflict(message) {
+  return new HttpError(409, message ?? "Shipment segment conflict", {
+    code: ShipmentSegmentErrorCodes.CONFLICT,
+  });
 }

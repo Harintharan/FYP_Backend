@@ -24,6 +24,7 @@ import {
 import {
   shipmentSegmentNotFound,
   hashMismatch,
+  shipmentSegmentConflict,
 } from "../errors/shipmentSegmentErrors.js";
 import { shipmentNotFound } from "../errors/shipmentErrors.js";
 import {
@@ -203,6 +204,53 @@ export async function updateShipmentSegmentStatus({
   }, dbClient);
 
   return formatShipmentSegmentRecord(updated);
+}
+
+export async function acceptShipmentSegment({
+  segmentId,
+  registration,
+  walletAddress = null,
+  dbClient = null,
+}) {
+  if (!registration?.id) {
+    throw registrationRequired();
+  }
+
+  const existing = await findShipmentSegmentById(segmentId, dbClient);
+  if (!existing) {
+    throw shipmentSegmentNotFound();
+  }
+
+  const currentStatus =
+    typeof existing.status === "string"
+      ? existing.status.toUpperCase()
+      : null;
+
+  if (currentStatus && currentStatus !== "PENDING" && currentStatus !== "ACCEPTED") {
+    throw shipmentSegmentConflict(
+      `Cannot accept shipment segment in status ${currentStatus}`
+    );
+  }
+
+  const existingSupplier =
+    typeof existing.supplier_id === "string"
+      ? existing.supplier_id.toLowerCase()
+      : null;
+  const requestingSupplier = registration.id.toLowerCase();
+
+  if (existingSupplier && existingSupplier !== requestingSupplier) {
+    throw shipmentSegmentConflict(
+      "Shipment segment is already assigned to another supplier"
+    );
+  }
+
+  return updateShipmentSegmentStatus({
+    segmentId,
+    status: "ACCEPTED",
+    supplierId: registration.id,
+    walletAddress,
+    dbClient,
+  });
 }
 
 export async function deleteShipmentSegmentsByShipmentId(shipmentId, dbClient) {

@@ -4,6 +4,7 @@ import {
   listPendingShipmentSegmentsWithDetails,
   updateShipmentSegmentStatus,
   getShipmentSegmentPackageDetails,
+  acceptShipmentSegment,
 } from "../services/shipmentSegmentService.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
 import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
@@ -66,6 +67,30 @@ export async function listPendingShipmentSegments(_req, res) {
     return handleControllerError(res, err, {
       logMessage: "Error listing pending shipment segments",
       fallbackMessage: "Unable to list pending shipment segments",
+    });
+  }
+}
+
+export async function acceptShipmentSegmentBySupplier(req, res) {
+  try {
+    const segmentId = req.params.id;
+    if (!segmentId) {
+      throw httpError(400, "Segment id is required", {
+        code: ErrorCodes.VALIDATION_ERROR,
+      });
+    }
+
+    const updated = await acceptShipmentSegment({
+      segmentId,
+      registration: req.registration,
+      walletAddress: req.wallet?.walletAddress ?? null,
+    });
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error accepting shipment segment",
+      fallbackMessage: "Unable to accept shipment segment",
     });
   }
 }
