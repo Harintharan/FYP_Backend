@@ -388,6 +388,9 @@ export async function registerBatch(req, res) {
   try {
     await createBatch(draftPayload);
 
+    console.log("privatekey", operatorWallet.privateKey);
+    console.log("wallet address", wallet.address);
+
     const tx = await contract.registerBatch(
       uuidToBytes16Hex(batchId),
       productCategory,

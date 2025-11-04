@@ -63,7 +63,11 @@ if (connectionString && connectionString.includes("${")) {
     if (!value || value.trim() === "") {
       throw new Error(`DATABASE_URL references ${key}, but it is not set`);
     }
-    return value.trim();
+    const trimmed = value.trim();
+    if (key === "DB_USER" || key === "DB_PASSWORD") {
+      return encodeURIComponent(trimmed);
+    }
+    return trimmed;
   });
 }
 
