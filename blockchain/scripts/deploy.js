@@ -29,14 +29,14 @@ async function deployContract(name) {
   const contract = await factory.deploy();
   await contract.waitForDeployment();
   const address = await contract.getAddress();
-  console.log(${name} deployed to: );
+  console.log(`${name} deployed to: ${address}`);
   return { name, address };
 }
 
 async function main() {
   const deployments = [];
   for (const name of CONTRACTS) {
-    console.log(\n🚀 Deploying ...);
+    console.log(`\n🚀 Deploying ${name}...`);
     const details = await deployContract(name);
     deployments.push(details);
   }
@@ -50,7 +50,7 @@ async function main() {
   for (const [contractName, envKey] of ENV_OUTPUT_ORDER) {
     const address = addressByName[contractName];
     if (address) {
-      console.log(${envKey}=);
+      console.log(`${envKey}=${address}`);
     }
   }
 }

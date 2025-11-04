@@ -161,31 +161,6 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS batches (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        product_id UUID NOT NULL REFERENCES products(id),
-        manufacturer_uuid UUID NOT NULL REFERENCES users(id),
-        facility TEXT NOT NULL,
-        production_start_time TIMESTAMP,
-        production_end_time TIMESTAMP,
-        quantity_produced TEXT NOT NULL,
-        expiry_date TEXT,
-        batch_hash TEXT,
-        tx_hash TEXT,
-        created_by TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_by TEXT,
-        updated_at TIMESTAMP,
-        pinata_cid TEXT,
-        pinata_pinned_at TIMESTAMPTZ
-      );
-      CREATE INDEX IF NOT EXISTS idx_batches_product
-        ON batches(product_id);
-      CREATE INDEX IF NOT EXISTS idx_batches_manufacturer
-        ON batches(manufacturer_uuid)
-    `);
-
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS checkpoint_registry (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
@@ -260,6 +235,31 @@ export const migrate = async (pool) => {
         ON products(product_category_id);
       CREATE INDEX IF NOT EXISTS idx_products_manufacturer
         ON products(manufacturer_uuid)
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS batches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID NOT NULL REFERENCES products(id),
+        manufacturer_uuid UUID NOT NULL REFERENCES users(id),
+        facility TEXT NOT NULL,
+        production_start_time TIMESTAMP,
+        production_end_time TIMESTAMP,
+        quantity_produced TEXT NOT NULL,
+        expiry_date TEXT,
+        batch_hash TEXT,
+        tx_hash TEXT,
+        created_by TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_by TEXT,
+        updated_at TIMESTAMP,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_batches_product
+        ON batches(product_id);
+      CREATE INDEX IF NOT EXISTS idx_batches_manufacturer
+        ON batches(manufacturer_uuid)
     `);
 
     await pool.query(`

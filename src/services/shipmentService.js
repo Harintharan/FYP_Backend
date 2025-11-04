@@ -9,8 +9,6 @@ import {
 import {
   findPackageById,
   listPackagesByShipmentUuid,
-  assignPackageToShipment,
-  clearPackagesFromShipment,
 } from "../models/PackageRegistryModel.js";
 import {
   createShipmentSegment,
@@ -31,6 +29,7 @@ import {
   updateShipmentOnChain,
   shipmentOperatorAddress,
 } from "../eth/shipmentContract.js";
+import { syncPackageShipmentState } from "./packageRegistryService.js";
 import { ErrorCodes } from "../errors/errorCodes.js";
 import {
   hashMismatch,
@@ -49,6 +48,12 @@ const REQUIRED_CHECKPOINT_FIELDS = Object.freeze([
   "time_tolerance",
   "expected_ship_date",
 ]);
+
+function buildPackageMissingError(packageId) {
+  return shipmentValidationError(
+    `Package ${packageId} not found for shipment allocation`,
+  );
+}
 
 function normalizeShipmentResponse(payload) {
   if (!payload || typeof payload !== "object") {
@@ -438,12 +443,14 @@ export async function registerShipment({ payload, wallet }) {
           if (!packageId) {
             continue;
           }
-          await assignPackageToShipment(
+          await syncPackageShipmentState({
             packageId,
             shipmentId,
-            item.quantity,
-            client,
-          );
+            quantity: item.quantity ?? null,
+            wallet,
+            dbClient: client,
+            onMissingPackage: buildPackageMissingError,
+          });
         }
 
         for (const [idx, checkpoint] of checkpoints.entries()) {
@@ -730,19 +737,30 @@ export async function updateShipment({ id, payload, wallet }) {
           client,
         );
 
-        await clearPackagesFromShipment(id, [], client);
+        const existingAssignments = await listPackagesByShipmentUuid(id, client);
+        for (const existingPackage of existingAssignments) {
+          await syncPackageShipmentState({
+            packageId: existingPackage.id,
+            shipmentId: null,
+            wallet,
+            dbClient: client,
+            onMissingPackage: buildPackageMissingError,
+          });
+        }
 
         for (const item of normalizedItems) {
           const packageId = item.packageUUID ?? item.package_uuid ?? null;
           if (!packageId) {
             continue;
           }
-          await assignPackageToShipment(
+          await syncPackageShipmentState({
             packageId,
-            id,
-            item.quantity,
-            client,
-          );
+            shipmentId: id,
+            quantity: item.quantity ?? null,
+            wallet,
+            dbClient: client,
+            onMissingPackage: buildPackageMissingError,
+          });
         }
 
         await deleteShipmentSegmentsByShipmentId(id, client);
