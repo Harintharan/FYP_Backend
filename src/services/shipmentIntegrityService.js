@@ -11,6 +11,7 @@ import { hashMismatch, ShipmentErrorCodes } from "../errors/shipmentErrors.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
 const EMPTY = "";
+const DEFAULT_SHIPMENT_STATUS = "PENDING";
 
 function pickValue(source, ...keys) {
   if (!source || typeof source !== "object") {
@@ -41,6 +42,15 @@ function normalizeUuid(value) {
   return str ? str.toLowerCase() : null;
 }
 
+function normalizeShipmentStatus(value) {
+  const str = toNullableString(value);
+  if (!str) {
+    return DEFAULT_SHIPMENT_STATUS;
+  }
+  const upper = str.toUpperCase();
+  return upper;
+}
+
 export function normalizeShipmentPayload(rawPayload, defaults = {}) {
   const candidate = {
     manufacturerUUID:
@@ -67,12 +77,17 @@ export function normalizeShipmentPayload(rawPayload, defaults = {}) {
       defaults.destinationPartyUUID ??
       defaults.destination_party_uuid ??
       defaults.consumerUuid,
+    status:
+      pickValue(rawPayload, "status", "shipmentStatus") ??
+      defaults.status ??
+      defaults.shipmentStatus,
   };
 
   const parsed = ShipmentPayload.parse(candidate);
   return {
     manufacturerUUID: normalizeUuid(parsed.manufacturerUUID),
     consumerUUID: normalizeUuid(parsed.consumerUUID),
+    status: normalizeShipmentStatus(parsed.status ?? DEFAULT_SHIPMENT_STATUS),
   };
 }
 
@@ -243,6 +258,7 @@ export function buildShipmentCanonicalPayload(
     id: shipmentId,
     manufacturerUUID: payload.manufacturerUUID ?? EMPTY,
     consumerUUID: payload.consumerUUID ?? EMPTY,
+    status: payload.status ?? DEFAULT_SHIPMENT_STATUS,
     shipmentItems: items.map((item) => ({
       packageUUID: item.packageUUID ?? EMPTY,
       quantity: valueOrEmpty(item.quantity),
@@ -336,6 +352,11 @@ export async function ensureShipmentOnChainIntegrity({
       shipmentRecord.destination_party_uuid ??
       shipmentRecord.consumerUUID ??
       shipmentRecord.destinationPartyUUID,
+    status:
+      shipmentRecord.status ??
+      shipmentRecord.shipment_status ??
+      shipmentRecord.shipmentStatus ??
+      DEFAULT_SHIPMENT_STATUS,
   };
 
   const normalized = normalizeShipmentPayload(payloadRaw);
@@ -407,6 +428,11 @@ export function formatShipmentRecord(record) {
     id: record.id ?? record.shipment_id ?? record.shipmentId ?? null,
     manufacturerUUID: record.manufacturer_uuid ?? record.manufacturerUUID ?? null,
     consumerUUID: consumer,
+    status:
+      record.status ??
+      record.shipment_status ??
+      record.shipmentStatus ??
+      DEFAULT_SHIPMENT_STATUS,
     shipmentHash: normalizeHash(record.shipment_hash ?? record.shipmentHash ?? null),
     txHash: record.tx_hash ?? record.transaction_hash ?? null,
     createdBy: record.created_by ?? null,

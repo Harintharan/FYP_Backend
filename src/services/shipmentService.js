@@ -89,6 +89,12 @@ function normalizeShipmentResponse(payload) {
     ...payload,
     consumerUUID: consumerValue,
     destinationPartyUUID: consumerValue,
+    status:
+      (typeof payload.status === "string"
+        ? payload.status.toUpperCase()
+        : typeof payload.shipmentStatus === "string"
+          ? payload.shipmentStatus.toUpperCase()
+          : "PENDING"),
     shipmentItems: normalizedItems,
   };
 }
@@ -251,6 +257,8 @@ function requireShipmentEndpoints(payload) {
     payload?.destinationPartyUUID ??
     payload?.destination_party_uuid ??
     null;
+  const statusCandidate =
+    payload?.status ?? payload?.shipmentStatus ?? null;
 
   if (!manufacturerUUID || !consumerUUID) {
     throw shipmentValidationError(
@@ -258,7 +266,11 @@ function requireShipmentEndpoints(payload) {
     );
   }
 
-  return { manufacturerUUID, consumerUUID };
+  return {
+    manufacturerUUID,
+    consumerUUID,
+    status: typeof statusCandidate === "string" ? statusCandidate : null,
+  };
 }
 
 async function validateCheckpoints(checkpoints) {
@@ -339,9 +351,18 @@ function toHttpError(error) {
 
 export async function registerShipment({ payload, wallet }) {
   try {
-    const { manufacturerUUID, consumerUUID } = requireShipmentEndpoints(
+    const {
+      manufacturerUUID,
+      consumerUUID,
+      status: statusCandidate,
+    } = requireShipmentEndpoints(
       payload ?? {},
     );
+
+    const statusRaw =
+      typeof statusCandidate === "string" && statusCandidate.trim()
+        ? statusCandidate
+        : "PENDING";
 
     const shipmentItems = Array.isArray(payload?.shipmentItems)
       ? payload.shipmentItems
@@ -372,7 +393,7 @@ export async function registerShipment({ payload, wallet }) {
       payloadHash,
     } = prepareShipmentPersistence(
       shipmentId,
-      { manufacturerUUID, consumerUUID },
+      { manufacturerUUID, consumerUUID, status: statusRaw },
       {
         shipmentItems: normalizedItems,
         checkpoints,
@@ -398,6 +419,7 @@ export async function registerShipment({ payload, wallet }) {
       id: shipmentId,
       manufacturerUUID: normalized.manufacturerUUID,
       consumerUUID: normalized.consumerUUID,
+      status: normalized.status,
       shipment_hash: payloadHash,
       tx_hash: txHash,
       created_by: normalizeRegistrationWallet(wallet),
@@ -572,6 +594,7 @@ export async function getShipmentDetails({ id }) {
             {
               manufacturerUUID: formattedShipment.manufacturerUUID,
               consumerUUID: formattedShipment.consumerUUID,
+              status: formattedShipment.status ?? "PENDING",
             },
             {
               shipmentItems,
@@ -625,9 +648,18 @@ export async function updateShipment({ id, payload, wallet }) {
       throw shipmentNotFound();
     }
 
-    const { manufacturerUUID, consumerUUID } = requireShipmentEndpoints(
+    const {
+      manufacturerUUID,
+      consumerUUID,
+      status: statusCandidate,
+    } = requireShipmentEndpoints(
       payload ?? {},
     );
+
+    const statusRaw =
+      typeof statusCandidate === "string" && statusCandidate.trim()
+        ? statusCandidate
+        : existing.status ?? "PENDING";
 
     const shipmentItems = Array.isArray(payload?.shipmentItems)
       ? payload.shipmentItems
@@ -668,7 +700,7 @@ export async function updateShipment({ id, payload, wallet }) {
       payloadHash,
     } = prepareShipmentPersistence(
       id,
-      { manufacturerUUID, consumerUUID },
+      { manufacturerUUID, consumerUUID, status: statusRaw },
       { shipmentItems: normalizedItems, checkpoints },
     );
 
@@ -726,6 +758,7 @@ export async function updateShipment({ id, payload, wallet }) {
             id,
             manufacturerUUID: normalized.manufacturerUUID,
             consumerUUID: normalized.consumerUUID,
+            status: normalized.status,
             shipment_hash: payloadHash,
             tx_hash: txHash,
             updated_by: normalizeRegistrationWallet(wallet),
@@ -887,6 +920,11 @@ export async function listShipments() {
                     shipment.destination_party_uuid ??
                     shipment.consumerUUID ??
                     shipment.destinationPartyUUID,
+                  status:
+                    shipment.status ??
+                    shipment.shipment_status ??
+                    shipment.shipmentStatus ??
+                    "PENDING",
                 },
                 {
                   shipmentItems,

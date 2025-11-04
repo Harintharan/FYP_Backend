@@ -19,6 +19,15 @@ const requiredString = z.preprocess((value) => {
   return trimmed ?? value;
 }, z.string().min(1, "Value is required"));
 
+export const SHIPMENT_STATUS_VALUES = Object.freeze([
+  "PENDING",
+  "ACCEPTED",
+  "IN_TRANSIT",
+  "DELIVERED",
+  "CLOSED",
+  "CANCELLED",
+]);
+
 const optionalQuantity = z
   .preprocess((value) => {
     if (value === undefined || value === null || value === "") {
@@ -56,6 +65,12 @@ const optionalSegmentOrder = z
 export const ShipmentPayload = z.object({
   manufacturerUUID: requiredUuid,
   consumerUUID: requiredUuid,
+  status: z
+    .preprocess((value) => {
+      const trimmed = toTrimmedString(value);
+      return trimmed ? trimmed.toUpperCase() : undefined;
+    }, z.enum(SHIPMENT_STATUS_VALUES))
+    .optional(),
 });
 
 export const ShipmentItemPayload = z.object({
