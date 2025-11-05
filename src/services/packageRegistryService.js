@@ -396,3 +396,62 @@ export async function syncPackageShipmentState({
     pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
   };
 }
+
+export async function updatePackageStatusForShipment({
+  packageId,
+  status,
+  wallet,
+  dbClient,
+}) {
+  if (!packageId) {
+    return null;
+  }
+
+  const statusValue =
+    typeof status === "string" && status.trim().length > 0
+      ? status.trim().toUpperCase()
+      : null;
+  if (!statusValue) {
+    throw new Error("status is required to update package state");
+  }
+
+  const existing = await findPackageById(packageId, dbClient);
+  if (!existing) {
+    throw packageNotFound();
+  }
+
+  const currentStatus =
+    typeof existing.status === "string"
+      ? existing.status.trim().toUpperCase()
+      : null;
+
+  if (currentStatus === statusValue) {
+    return {
+      updated: false,
+      record: formatPackageRecord(existing),
+      txHash: existing.tx_hash ?? null,
+      hash: normalizeHash(existing.product_hash ?? null),
+    };
+  }
+
+  const { record, normalizedHash, txHash, pinataBackup } =
+    await applyPackageUpdate({
+      existing,
+      payload: {},
+      overrides: { status: statusValue },
+      wallet,
+      dbClient,
+      enforceAccess: false,
+      hashMismatchReason: `On-chain hash mismatch detected while updating package status to ${statusValue}`,
+      pinataErrorMessage:
+        "?? Failed to back up package status update to Pinata:",
+    });
+
+  return {
+    updated: true,
+    record: formatPackageRecord(record),
+    txHash,
+    hash: normalizedHash,
+    pinataCid: pinataBackup?.IpfsHash ?? record.pinata_cid ?? null,
+  };
+}

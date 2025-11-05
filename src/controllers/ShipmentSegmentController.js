@@ -5,6 +5,7 @@ import {
   updateShipmentSegmentStatus,
   getShipmentSegmentPackageDetails,
   acceptShipmentSegment,
+  takeoverShipmentSegment,
 } from "../services/shipmentSegmentService.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
 import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
@@ -91,6 +92,37 @@ export async function acceptShipmentSegmentBySupplier(req, res) {
     return handleControllerError(res, err, {
       logMessage: "Error accepting shipment segment",
       fallbackMessage: "Unable to accept shipment segment",
+    });
+  }
+}
+
+export async function takeoverShipmentSegmentBySupplier(req, res) {
+  try {
+    const segmentId = req.params.id;
+    if (!segmentId) {
+      throw httpError(400, "Segment id is required", {
+        code: ErrorCodes.VALIDATION_ERROR,
+      });
+    }
+
+    const registration = req.registration ?? null;
+    if (!registration?.id) {
+      throw httpError(403, "Supplier registration is required", {
+        code: ErrorCodes.FORBIDDEN,
+      });
+    }
+
+    const updated = await takeoverShipmentSegment({
+      segmentId,
+      registration,
+      walletAddress: req.wallet?.walletAddress ?? null,
+    });
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error taking over shipment segment",
+      fallbackMessage: "Unable to take over shipment segment",
     });
   }
 }
