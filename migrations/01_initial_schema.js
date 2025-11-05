@@ -160,6 +160,39 @@ export const migrate = async (pool) => {
       EXECUTE FUNCTION set_updated_at()
     `);
 
+      await pool.query(`
+      CREATE TABLE IF NOT EXISTS product_categories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP
+      )
+    `);
+
+     await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        product_category_id UUID NOT NULL REFERENCES product_categories(id),
+        manufacturer_uuid UUID NOT NULL REFERENCES users(id),
+        required_start_temp TEXT,
+        required_end_temp TEXT,
+        handling_instructions TEXT,
+        product_hash TEXT NOT NULL,
+        tx_hash TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        updated_by TEXT,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_products_category
+        ON products(product_category_id);
+      CREATE INDEX IF NOT EXISTS idx_products_manufacturer
+        ON products(manufacturer_uuid)
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS batches (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -229,38 +262,9 @@ export const migrate = async (pool) => {
         ON checkpoint_registry(owner_uuid)
     `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS product_categories (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP
-      )
-    `);
+  
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS products (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL,
-        product_category_id UUID NOT NULL REFERENCES product_categories(id),
-        manufacturer_uuid UUID NOT NULL REFERENCES users(id),
-        required_start_temp TEXT,
-        required_end_temp TEXT,
-        handling_instructions TEXT,
-        product_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        created_by TEXT NOT NULL,
-        updated_by TEXT,
-        pinata_cid TEXT,
-        pinata_pinned_at TIMESTAMPTZ,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_products_category
-        ON products(product_category_id);
-      CREATE INDEX IF NOT EXISTS idx_products_manufacturer
-        ON products(manufacturer_uuid)
-    `);
+   
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS package_registry (
