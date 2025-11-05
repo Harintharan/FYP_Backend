@@ -5,16 +5,19 @@ import {
   updateShipment as updateShipmentRecord,
   getShipmentById,
   getAllShipments as getAllShipmentRecords,
+  listShipmentsByManufacturerId,
 } from "../models/ShipmentRegistryModel.js";
 import {
   findPackageById,
   listPackagesByShipmentUuid,
+  summarizeManufacturerPackagesForShipments,
 } from "../models/PackageRegistryModel.js";
 import {
   createShipmentSegment,
   listShipmentSegmentsForShipment,
   deleteShipmentSegmentsByShipmentId,
 } from "./shipmentSegmentService.js";
+import { listShipmentSegmentsByShipmentId as listShipmentSegmentsRawByShipmentId } from "../models/ShipmentSegmentModel.js";
 import { backupRecord } from "./pinataBackupService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { runInTransaction } from "../utils/dbTransactions.js";
@@ -39,6 +42,7 @@ import {
   ShipmentErrorCodes,
 } from "../errors/shipmentErrors.js";
 import { HttpError } from "../utils/httpError.js";
+import { ManufacturerShipmentsQuery } from "../domain/shipment.schema.js";
 
 const PACKAGE_STATUS_READY_FOR_SHIPMENT = "PACKAGE_READY_FOR_SHIPMENT";
 const REQUIRED_CHECKPOINT_FIELDS = Object.freeze([
@@ -97,6 +101,23 @@ function normalizeShipmentResponse(payload) {
           : "PENDING"),
     shipmentItems: normalizedItems,
   };
+}
+
+function toNullableTrimmed(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function normalizeStatusValue(value) {
+  const trimmed =
+    typeof value === "string" ? value.trim() : null;
+  return trimmed && trimmed.length > 0 ? trimmed.toUpperCase() : null;
 }
 
 function buildCheckpointsFromSegments(segments) {
@@ -870,6 +891,157 @@ export async function updateShipment({ id, payload, wallet }) {
   } catch (error) {
     throw toHttpError(error);
   }
+}
+
+export async function listManufacturerShipments({ manufacturerId, status }) {
+  const parsed = ManufacturerShipmentsQuery.safeParse({
+    manufacturerId,
+    status,
+  });
+  if (!parsed.success) {
+    const message =
+      parsed.error.issues?.[0]?.message ??
+      "manufacturerId must be a valid UUID";
+    throw shipmentValidationError(message);
+  }
+
+  const {
+    manufacturerId: normalizedManufacturerId,
+    status: statusValue,
+  } = parsed.data;
+  const statusFilter =
+    typeof statusValue === "string" && statusValue.length > 0
+      ? statusValue
+      : null;
+  const shipments = await listShipmentsByManufacturerId(
+    normalizedManufacturerId,
+    { status: statusFilter },
+  );
+
+  const result = await Promise.all(
+    shipments.map(async (shipment) => {
+      const shipmentId =
+        shipment.id ??
+        shipment.shipment_id ??
+        shipment.shipmentId ??
+        null;
+
+      const segments = shipmentId
+        ? await listShipmentSegmentsRawByShipmentId(shipmentId)
+        : [];
+
+      const mappedSegments = segments.map((segment) => ({
+        segmentId:
+          segment.id ??
+          segment.segment_id ??
+          segment.segmentId ??
+          null,
+        status: normalizeStatusValue(segment.status),
+        startCheckpoint: {
+          id: segment.start_checkpoint_id ?? null,
+          state: toNullableTrimmed(segment.start_state ?? null),
+          country: toNullableTrimmed(segment.start_country ?? null),
+        },
+        endCheckpoint: {
+          id: segment.end_checkpoint_id ?? null,
+          state: toNullableTrimmed(segment.end_state ?? null),
+          country: toNullableTrimmed(segment.end_country ?? null),
+        },
+      }));
+
+      const consumerId =
+        shipment.consumer_uuid ??
+        shipment.consumerUUID ??
+        shipment.destination_party_uuid ??
+        shipment.destinationPartyUUID ??
+        null;
+
+      return {
+        shipmentId,
+        manufacturerId:
+          shipment.manufacturer_uuid ??
+          shipment.manufacturerUUID ??
+          normalizedManufacturerId,
+        status: normalizeStatusValue(
+          shipment.status ??
+            shipment.shipment_status ??
+            shipment.shipmentStatus,
+        ),
+        consumer: {
+          id: consumerId,
+          legalName: toNullableTrimmed(
+            shipment.consumer_legal_name ?? null,
+          ),
+        },
+        segments: mappedSegments,
+      };
+    }),
+  );
+
+  return {
+    statusCode: 200,
+    body: result,
+  };
+}
+
+export async function listManufacturerShipmentProductSummary({
+  manufacturerId,
+  status,
+}) {
+  const parsed = ManufacturerShipmentsQuery.safeParse({
+    manufacturerId,
+    status,
+  });
+
+  if (!parsed.success) {
+    const message =
+      parsed.error.issues?.[0]?.message ??
+      "manufacturerId must be a valid UUID";
+    throw shipmentValidationError(message);
+  }
+
+  const {
+    manufacturerId: normalizedManufacturerId,
+    status: statusValue,
+  } = parsed.data;
+
+  const rows = await summarizeManufacturerPackagesForShipments(
+    {
+      manufacturerId: normalizedManufacturerId,
+      status: statusValue ?? null,
+    },
+  );
+
+  const grouped = rows.reduce((acc, row) => {
+    const category =
+      (typeof row.product_category_name === "string" &&
+        row.product_category_name.trim().length > 0)
+        ? row.product_category_name.trim()
+        : "Uncategorized";
+    const product =
+      (typeof row.product_name === "string" &&
+        row.product_name.trim().length > 0)
+        ? row.product_name.trim()
+        : "Unknown Product";
+    const quantity =
+      typeof row.total_quantity === "number"
+        ? row.total_quantity
+        : Number(row.total_quantity ?? 0) || 0;
+
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push({
+      product,
+      quantity,
+    });
+    return acc;
+  }, {});
+
+  return {
+    statusCode: 200,
+    body: grouped,
+  };
 }
 
 export async function listShipments() {

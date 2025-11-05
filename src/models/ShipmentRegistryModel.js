@@ -75,3 +75,26 @@ export async function getAllShipments(dbClient) {
   );
   return rows;
 }
+
+export async function listShipmentsByManufacturerId(
+  manufacturerId,
+  { status } = {},
+  dbClient
+) {
+  const exec = resolveExecutor(dbClient);
+  const hasStatus = typeof status === "string" && status.length > 0;
+  const params = hasStatus ? [manufacturerId, status] : [manufacturerId];
+  const statusClause = hasStatus ? "AND sr.status = $2" : "";
+  const { rows } = await exec(
+    `SELECT sr.*,
+            u.payload -> 'identification' ->> 'legalName' AS consumer_legal_name
+       FROM shipment_registry sr
+       LEFT JOIN users u
+         ON u.id::text = sr.consumer_uuid::text
+      WHERE sr.manufacturer_uuid = $1
+        ${statusClause}
+      ORDER BY sr.created_at DESC`,
+    params
+  );
+  return rows;
+}

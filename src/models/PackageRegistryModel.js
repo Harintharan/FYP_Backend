@@ -249,3 +249,42 @@ export async function clearPackagesFromShipment(
     }
   }
 }
+
+export async function summarizeManufacturerPackagesForShipments({
+  manufacturerId,
+  status = null,
+}, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const params = [manufacturerId];
+  let statusClause = "";
+
+  if (status && typeof status === "string") {
+    params.push(status);
+    statusClause = "AND sr.status = $" + params.length;
+  }
+
+  const { rows } = await exec(
+    `SELECT
+        pc.name AS product_category_name,
+        p.name AS product_name,
+        COALESCE(SUM(COALESCE(pr.quantity, 0)), 0)::int AS total_quantity
+      FROM shipment_registry sr
+      JOIN package_registry pr
+        ON pr.shipment_id = sr.id
+      LEFT JOIN batches b
+        ON pr.batch_id = b.id
+      LEFT JOIN products p
+        ON b.product_id = p.id
+      LEFT JOIN product_categories pc
+        ON p.product_category_id = pc.id
+     WHERE sr.manufacturer_uuid = $1
+       ${statusClause}
+     GROUP BY pc.name, p.name
+     ORDER BY
+       pc.name NULLS LAST,
+       p.name NULLS LAST`,
+    params
+  );
+
+  return rows;
+}

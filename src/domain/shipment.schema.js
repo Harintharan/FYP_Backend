@@ -86,3 +86,13 @@ export const ShipmentCheckpointPayload = z.object({
   timeTolerance: requiredString,
   segmentOrder: optionalSegmentOrder,
 });
+
+export const ManufacturerShipmentsQuery = z.object({
+  manufacturerId: requiredUuid,
+  status: z
+    .preprocess((value) => {
+      const trimmed = toTrimmedString(value);
+      return trimmed ? trimmed.toUpperCase() : undefined;
+    }, z.enum(SHIPMENT_STATUS_VALUES))
+    .optional(),
+});
