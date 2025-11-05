@@ -6,12 +6,16 @@ import {
   getShipmentSegmentPackageDetails,
   acceptShipmentSegment,
   takeoverShipmentSegment,
+  handoverShipmentSegment,
 } from "../services/shipmentSegmentService.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
 import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
 import { httpError } from "../utils/httpError.js";
 import { ErrorCodes } from "../errors/errorCodes.js";
-import { ShipmentSegmentStatusUpdatePayload } from "../domain/shipmentSegment.schema.js";
+import {
+  ShipmentSegmentStatusUpdatePayload,
+  ShipmentSegmentHandoverPayload,
+} from "../domain/shipmentSegment.schema.js";
 
 export async function listShipmentSegments(req, res) {
   try {
@@ -123,6 +127,44 @@ export async function takeoverShipmentSegmentBySupplier(req, res) {
     return handleControllerError(res, err, {
       logMessage: "Error taking over shipment segment",
       fallbackMessage: "Unable to take over shipment segment",
+    });
+  }
+}
+
+export async function handoverShipmentSegmentBySupplier(req, res) {
+  try {
+    const segmentId = req.params.id;
+    if (!segmentId) {
+      throw httpError(400, "Segment id is required", {
+        code: ErrorCodes.VALIDATION_ERROR,
+      });
+    }
+
+    const registration = req.registration ?? null;
+    if (!registration?.id) {
+      throw httpError(403, "Supplier registration is required", {
+        code: ErrorCodes.FORBIDDEN,
+      });
+    }
+
+    const parsed = ShipmentSegmentHandoverPayload.parse(req.body ?? {});
+
+    const updated = await handoverShipmentSegment({
+      segmentId,
+      registration,
+      walletAddress: req.wallet?.walletAddress ?? null,
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
+    });
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return respondWithZodError(res, err);
+    }
+    return handleControllerError(res, err, {
+      logMessage: "Error handing over shipment segment",
+      fallbackMessage: "Unable to hand over shipment segment",
     });
   }
 }

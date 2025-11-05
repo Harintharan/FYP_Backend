@@ -6,6 +6,7 @@ import {
   getShipmentSegmentPackages,
   acceptShipmentSegmentBySupplier,
   takeoverShipmentSegmentBySupplier,
+  handoverShipmentSegmentBySupplier,
 } from "../controllers/ShipmentSegmentController.js";
 import { requireAuth, requireRegistrationRole } from "../middleware/roles.js";
 
@@ -32,6 +33,11 @@ router.post(
   "/shipment-segments/takeover/:id",
   requireRegistrationRole("SUPPLIER"),
   takeoverShipmentSegmentBySupplier
+);
+router.post(
+  "/shipment-segments/handover/:id",
+  requireRegistrationRole("SUPPLIER"),
+  handoverShipmentSegmentBySupplier
 );
 router.get(
   "/shipment-segments/:id",

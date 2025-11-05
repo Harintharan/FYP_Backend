@@ -72,3 +72,29 @@ export const ShipmentSegmentStatusUpdatePayload = z.object({
   status: z.enum(SHIPMENT_SEGMENT_STATUS_VALUES),
   supplierId: z.string().uuid("supplierId must be a valid UUID").optional(),
 });
+
+const toNumber = (value) => {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return value;
+};
+
+const coordinateSchema = (fieldName) =>
+  z.preprocess(
+    (value) => toNumber(value),
+    z
+      .number()
+      .refine((val) => Number.isFinite(val), `${fieldName} must be a valid number`)
+  );
+
+export const ShipmentSegmentHandoverPayload = z.object({
+  latitude: coordinateSchema("latitude"),
+  longitude: coordinateSchema("longitude"),
+});

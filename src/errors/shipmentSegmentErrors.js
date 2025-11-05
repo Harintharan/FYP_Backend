@@ -4,6 +4,7 @@ export const ShipmentSegmentErrorCodes = Object.freeze({
   NOT_FOUND: "SHIPMENT_SEGMENT_NOT_FOUND",
   HASH_MISMATCH: "SHIPMENT_SEGMENT_HASH_MISMATCH",
   CONFLICT: "SHIPMENT_SEGMENT_CONFLICT",
+  ACCESS_DENIED: "SHIPMENT_SEGMENT_ACCESS_DENIED",
 });
 
 export function shipmentSegmentNotFound() {
@@ -26,5 +27,11 @@ export function hashMismatch(details) {
 export function shipmentSegmentConflict(message) {
   return new HttpError(409, message ?? "Shipment segment conflict", {
     code: ShipmentSegmentErrorCodes.CONFLICT,
+  });
+}
+
+export function shipmentSegmentAccessDenied(message) {
+  return new HttpError(403, message ?? "Access denied", {
+    code: ShipmentSegmentErrorCodes.ACCESS_DENIED,
   });
 }
