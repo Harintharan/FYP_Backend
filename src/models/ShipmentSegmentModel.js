@@ -81,7 +81,11 @@ export async function listShipmentSegmentsByShipmentId(shipmentId, dbClient) {
   const { rows } = await exec(
     `SELECT ss.*,
             sc1.name AS start_name,
-            sc2.name AS end_name
+            sc1.state AS start_state,
+            sc1.country AS start_country,
+            sc2.name AS end_name,
+            sc2.state AS end_state,
+            sc2.country AS end_country
        FROM shipment_segment ss
        JOIN checkpoint_registry sc1
          ON ss.start_checkpoint_id = sc1.id

@@ -25,24 +25,12 @@ const ENV_OUTPUT_ORDER = [
 ];
 
 async function deployContract(name) {
-  try {
-    console.log(`📋 Getting contract factory for ${name}...`);
-    const factory = await hre.ethers.getContractFactory(name);
-    
-    console.log(`🚀 Deploying ${name}...`);
-    const contract = await factory.deploy();
-    
-    console.log(`⏳ Waiting for deployment confirmation...`);
-    await contract.waitForDeployment();
-    
-    const address = await contract.getAddress();
-    console.log(`✅ ${name} deployed to: ${address}`);
-    
-    return { name, address };
-  } catch (error) {
-    console.error(`❌ Failed to deploy ${name}:`, error.message);
-    throw error;
-  }
+  const factory = await hre.ethers.getContractFactory(name);
+  const contract = await factory.deploy();
+  await contract.waitForDeployment();
+  const address = await contract.getAddress();
+  console.log(`${name} deployed to: ${address}`);
+  return { name, address };
 }
 
 async function main() {
@@ -58,14 +46,9 @@ async function main() {
   const deployments = [];
   
   for (const name of CONTRACTS) {
-    console.log(`\n� Deploying ${name}...`);
-    try {
-      const details = await deployContract(name);
-      deployments.push(details);
-    } catch (error) {
-      console.error(`❌ Failed to deploy ${name}:`, error.message);
-      process.exit(1);
-    }
+    console.log(`\n🚀 Deploying ${name}...`);
+    const details = await deployContract(name);
+    deployments.push(details);
   }
 
   const addressByName = deployments.reduce((acc, { name, address }) => {
@@ -87,8 +70,6 @@ async function main() {
     const address = addressByName[contractName];
     if (address) {
       console.log(`${envKey}=${address}`);
-    } else {
-      console.warn(`⚠️  Warning: ${contractName} was not deployed`);
     }
   }
   

@@ -5,18 +5,19 @@ import {
   updateShipment as updateShipmentRecord,
   getShipmentById,
   getAllShipments as getAllShipmentRecords,
+  listShipmentsByManufacturerId,
 } from "../models/ShipmentRegistryModel.js";
 import {
   findPackageById,
   listPackagesByShipmentUuid,
-  assignPackageToShipment,
-  clearPackagesFromShipment,
+  summarizeManufacturerPackagesForShipments,
 } from "../models/PackageRegistryModel.js";
 import {
   createShipmentSegment,
   listShipmentSegmentsForShipment,
   deleteShipmentSegmentsByShipmentId,
 } from "./shipmentSegmentService.js";
+import { listShipmentSegmentsByShipmentId as listShipmentSegmentsRawByShipmentId } from "../models/ShipmentSegmentModel.js";
 import { backupRecord } from "./pinataBackupService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { runInTransaction } from "../utils/dbTransactions.js";
@@ -31,6 +32,7 @@ import {
   updateShipmentOnChain,
   shipmentOperatorAddress,
 } from "../eth/shipmentContract.js";
+import { syncPackageShipmentState } from "./packageRegistryService.js";
 import { ErrorCodes } from "../errors/errorCodes.js";
 import {
   hashMismatch,
@@ -40,6 +42,7 @@ import {
   ShipmentErrorCodes,
 } from "../errors/shipmentErrors.js";
 import { HttpError } from "../utils/httpError.js";
+import { ManufacturerShipmentsQuery } from "../domain/shipment.schema.js";
 
 const PACKAGE_STATUS_READY_FOR_SHIPMENT = "PACKAGE_READY_FOR_SHIPMENT";
 const REQUIRED_CHECKPOINT_FIELDS = Object.freeze([
@@ -49,6 +52,12 @@ const REQUIRED_CHECKPOINT_FIELDS = Object.freeze([
   "time_tolerance",
   "expected_ship_date",
 ]);
+
+function buildPackageMissingError(packageId) {
+  return shipmentValidationError(
+    `Package ${packageId} not found for shipment allocation`,
+  );
+}
 
 function normalizeShipmentResponse(payload) {
   if (!payload || typeof payload !== "object") {
@@ -84,8 +93,31 @@ function normalizeShipmentResponse(payload) {
     ...payload,
     consumerUUID: consumerValue,
     destinationPartyUUID: consumerValue,
+    status:
+      (typeof payload.status === "string"
+        ? payload.status.toUpperCase()
+        : typeof payload.shipmentStatus === "string"
+          ? payload.shipmentStatus.toUpperCase()
+          : "PENDING"),
     shipmentItems: normalizedItems,
   };
+}
+
+function toNullableTrimmed(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function normalizeStatusValue(value) {
+  const trimmed =
+    typeof value === "string" ? value.trim() : null;
+  return trimmed && trimmed.length > 0 ? trimmed.toUpperCase() : null;
 }
 
 function buildCheckpointsFromSegments(segments) {
@@ -246,6 +278,8 @@ function requireShipmentEndpoints(payload) {
     payload?.destinationPartyUUID ??
     payload?.destination_party_uuid ??
     null;
+  const statusCandidate =
+    payload?.status ?? payload?.shipmentStatus ?? null;
 
   if (!manufacturerUUID || !consumerUUID) {
     throw shipmentValidationError(
@@ -253,7 +287,11 @@ function requireShipmentEndpoints(payload) {
     );
   }
 
-  return { manufacturerUUID, consumerUUID };
+  return {
+    manufacturerUUID,
+    consumerUUID,
+    status: typeof statusCandidate === "string" ? statusCandidate : null,
+  };
 }
 
 async function validateCheckpoints(checkpoints) {
@@ -334,9 +372,18 @@ function toHttpError(error) {
 
 export async function registerShipment({ payload, wallet }) {
   try {
-    const { manufacturerUUID, consumerUUID } = requireShipmentEndpoints(
+    const {
+      manufacturerUUID,
+      consumerUUID,
+      status: statusCandidate,
+    } = requireShipmentEndpoints(
       payload ?? {},
     );
+
+    const statusRaw =
+      typeof statusCandidate === "string" && statusCandidate.trim()
+        ? statusCandidate
+        : "PENDING";
 
     const shipmentItems = Array.isArray(payload?.shipmentItems)
       ? payload.shipmentItems
@@ -367,7 +414,7 @@ export async function registerShipment({ payload, wallet }) {
       payloadHash,
     } = prepareShipmentPersistence(
       shipmentId,
-      { manufacturerUUID, consumerUUID },
+      { manufacturerUUID, consumerUUID, status: statusRaw },
       {
         shipmentItems: normalizedItems,
         checkpoints,
@@ -393,6 +440,7 @@ export async function registerShipment({ payload, wallet }) {
       id: shipmentId,
       manufacturerUUID: normalized.manufacturerUUID,
       consumerUUID: normalized.consumerUUID,
+      status: normalized.status,
       shipment_hash: payloadHash,
       tx_hash: txHash,
       created_by: normalizeRegistrationWallet(wallet),
@@ -438,12 +486,14 @@ export async function registerShipment({ payload, wallet }) {
           if (!packageId) {
             continue;
           }
-          await assignPackageToShipment(
+          await syncPackageShipmentState({
             packageId,
             shipmentId,
-            item.quantity,
-            client,
-          );
+            quantity: item.quantity ?? null,
+            wallet,
+            dbClient: client,
+            onMissingPackage: buildPackageMissingError,
+          });
         }
 
         for (const [idx, checkpoint] of checkpoints.entries()) {
@@ -565,6 +615,7 @@ export async function getShipmentDetails({ id }) {
             {
               manufacturerUUID: formattedShipment.manufacturerUUID,
               consumerUUID: formattedShipment.consumerUUID,
+              status: formattedShipment.status ?? "PENDING",
             },
             {
               shipmentItems,
@@ -618,9 +669,18 @@ export async function updateShipment({ id, payload, wallet }) {
       throw shipmentNotFound();
     }
 
-    const { manufacturerUUID, consumerUUID } = requireShipmentEndpoints(
+    const {
+      manufacturerUUID,
+      consumerUUID,
+      status: statusCandidate,
+    } = requireShipmentEndpoints(
       payload ?? {},
     );
+
+    const statusRaw =
+      typeof statusCandidate === "string" && statusCandidate.trim()
+        ? statusCandidate
+        : existing.status ?? "PENDING";
 
     const shipmentItems = Array.isArray(payload?.shipmentItems)
       ? payload.shipmentItems
@@ -661,7 +721,7 @@ export async function updateShipment({ id, payload, wallet }) {
       payloadHash,
     } = prepareShipmentPersistence(
       id,
-      { manufacturerUUID, consumerUUID },
+      { manufacturerUUID, consumerUUID, status: statusRaw },
       { shipmentItems: normalizedItems, checkpoints },
     );
 
@@ -719,6 +779,7 @@ export async function updateShipment({ id, payload, wallet }) {
             id,
             manufacturerUUID: normalized.manufacturerUUID,
             consumerUUID: normalized.consumerUUID,
+            status: normalized.status,
             shipment_hash: payloadHash,
             tx_hash: txHash,
             updated_by: normalizeRegistrationWallet(wallet),
@@ -730,19 +791,30 @@ export async function updateShipment({ id, payload, wallet }) {
           client,
         );
 
-        await clearPackagesFromShipment(id, [], client);
+        const existingAssignments = await listPackagesByShipmentUuid(id, client);
+        for (const existingPackage of existingAssignments) {
+          await syncPackageShipmentState({
+            packageId: existingPackage.id,
+            shipmentId: null,
+            wallet,
+            dbClient: client,
+            onMissingPackage: buildPackageMissingError,
+          });
+        }
 
         for (const item of normalizedItems) {
           const packageId = item.packageUUID ?? item.package_uuid ?? null;
           if (!packageId) {
             continue;
           }
-          await assignPackageToShipment(
+          await syncPackageShipmentState({
             packageId,
-            id,
-            item.quantity,
-            client,
-          );
+            shipmentId: id,
+            quantity: item.quantity ?? null,
+            wallet,
+            dbClient: client,
+            onMissingPackage: buildPackageMissingError,
+          });
         }
 
         await deleteShipmentSegmentsByShipmentId(id, client);
@@ -821,6 +893,157 @@ export async function updateShipment({ id, payload, wallet }) {
   }
 }
 
+export async function listManufacturerShipments({ manufacturerId, status }) {
+  const parsed = ManufacturerShipmentsQuery.safeParse({
+    manufacturerId,
+    status,
+  });
+  if (!parsed.success) {
+    const message =
+      parsed.error.issues?.[0]?.message ??
+      "manufacturerId must be a valid UUID";
+    throw shipmentValidationError(message);
+  }
+
+  const {
+    manufacturerId: normalizedManufacturerId,
+    status: statusValue,
+  } = parsed.data;
+  const statusFilter =
+    typeof statusValue === "string" && statusValue.length > 0
+      ? statusValue
+      : null;
+  const shipments = await listShipmentsByManufacturerId(
+    normalizedManufacturerId,
+    { status: statusFilter },
+  );
+
+  const result = await Promise.all(
+    shipments.map(async (shipment) => {
+      const shipmentId =
+        shipment.id ??
+        shipment.shipment_id ??
+        shipment.shipmentId ??
+        null;
+
+      const segments = shipmentId
+        ? await listShipmentSegmentsRawByShipmentId(shipmentId)
+        : [];
+
+      const mappedSegments = segments.map((segment) => ({
+        segmentId:
+          segment.id ??
+          segment.segment_id ??
+          segment.segmentId ??
+          null,
+        status: normalizeStatusValue(segment.status),
+        startCheckpoint: {
+          id: segment.start_checkpoint_id ?? null,
+          state: toNullableTrimmed(segment.start_state ?? null),
+          country: toNullableTrimmed(segment.start_country ?? null),
+        },
+        endCheckpoint: {
+          id: segment.end_checkpoint_id ?? null,
+          state: toNullableTrimmed(segment.end_state ?? null),
+          country: toNullableTrimmed(segment.end_country ?? null),
+        },
+      }));
+
+      const consumerId =
+        shipment.consumer_uuid ??
+        shipment.consumerUUID ??
+        shipment.destination_party_uuid ??
+        shipment.destinationPartyUUID ??
+        null;
+
+      return {
+        shipmentId,
+        manufacturerId:
+          shipment.manufacturer_uuid ??
+          shipment.manufacturerUUID ??
+          normalizedManufacturerId,
+        status: normalizeStatusValue(
+          shipment.status ??
+            shipment.shipment_status ??
+            shipment.shipmentStatus,
+        ),
+        consumer: {
+          id: consumerId,
+          legalName: toNullableTrimmed(
+            shipment.consumer_legal_name ?? null,
+          ),
+        },
+        segments: mappedSegments,
+      };
+    }),
+  );
+
+  return {
+    statusCode: 200,
+    body: result,
+  };
+}
+
+export async function listManufacturerShipmentProductSummary({
+  manufacturerId,
+  status,
+}) {
+  const parsed = ManufacturerShipmentsQuery.safeParse({
+    manufacturerId,
+    status,
+  });
+
+  if (!parsed.success) {
+    const message =
+      parsed.error.issues?.[0]?.message ??
+      "manufacturerId must be a valid UUID";
+    throw shipmentValidationError(message);
+  }
+
+  const {
+    manufacturerId: normalizedManufacturerId,
+    status: statusValue,
+  } = parsed.data;
+
+  const rows = await summarizeManufacturerPackagesForShipments(
+    {
+      manufacturerId: normalizedManufacturerId,
+      status: statusValue ?? null,
+    },
+  );
+
+  const grouped = rows.reduce((acc, row) => {
+    const category =
+      (typeof row.product_category_name === "string" &&
+        row.product_category_name.trim().length > 0)
+        ? row.product_category_name.trim()
+        : "Uncategorized";
+    const product =
+      (typeof row.product_name === "string" &&
+        row.product_name.trim().length > 0)
+        ? row.product_name.trim()
+        : "Unknown Product";
+    const quantity =
+      typeof row.total_quantity === "number"
+        ? row.total_quantity
+        : Number(row.total_quantity ?? 0) || 0;
+
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push({
+      product,
+      quantity,
+    });
+    return acc;
+  }, {});
+
+  return {
+    statusCode: 200,
+    body: grouped,
+  };
+}
+
 export async function listShipments() {
   try {
     const shipments = await getAllShipmentRecords();
@@ -869,6 +1092,11 @@ export async function listShipments() {
                     shipment.destination_party_uuid ??
                     shipment.consumerUUID ??
                     shipment.destinationPartyUUID,
+                  status:
+                    shipment.status ??
+                    shipment.shipment_status ??
+                    shipment.shipmentStatus ??
+                    "PENDING",
                 },
                 {
                   shipmentItems,

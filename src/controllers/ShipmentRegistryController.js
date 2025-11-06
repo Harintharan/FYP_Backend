@@ -3,6 +3,8 @@ import {
   getShipmentDetails,
   updateShipment as updateShipmentService,
   listShipments,
+  listManufacturerShipments,
+  listManufacturerShipmentProductSummary,
 } from "../services/shipmentService.js";
 import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
 
@@ -51,6 +53,52 @@ export async function updateShipment(req, res) {
   }
 }
 
+export async function getManufacturerShipments(req, res) {
+  try {
+    const manufacturerId =
+      req.params.manufacturerId ??
+      req.params.manufacturer_id ??
+      req.params.id ??
+      null;
+
+    const { statusCode, body } = await listManufacturerShipments({
+      manufacturerId,
+      status: req.query?.status ?? null,
+    });
+    return res.status(statusCode).json(body);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error listing manufacturer shipments",
+      fallbackMessage: "Unable to list manufacturer shipments",
+    });
+  }
+}
+
+export async function getManufacturerShipmentProductSummary(req, res) {
+  try {
+    const manufacturerId =
+      req.params.manufacturerId ??
+      req.params.manufacturer_id ??
+      req.params.id ??
+      null;
+
+    const { statusCode, body } =
+      await listManufacturerShipmentProductSummary({
+        manufacturerId,
+        status: req.query?.status ?? null,
+      });
+
+    return res.status(statusCode).json(body);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage:
+        "Error listing manufacturer shipment product summary",
+      fallbackMessage:
+        "Unable to list manufacturer shipment product summary",
+    });
+  }
+}
+
 export async function getAllShipments(_req, res) {
   try {
     const { statusCode, body } = await listShipments();
@@ -62,4 +110,3 @@ export async function getAllShipments(_req, res) {
     });
   }
 }
-

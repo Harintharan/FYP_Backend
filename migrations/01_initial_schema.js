@@ -46,6 +46,7 @@ export const migrate = async (pool) => {
           CREATE TYPE package_status AS ENUM (
             'PACKAGE_READY_FOR_SHIPMENT',
             'PACKAGE_ALLOCATED',
+            'PACKAGE_ACCEPTED',
             'PACKAGE_IN_TRANSIT',
             'PACKAGE_DELIVERED',
             'PACKAGE_RETURNED',
@@ -63,6 +64,25 @@ export const migrate = async (pool) => {
           SELECT 1 FROM pg_type WHERE typname = 'shipment_segment_status'
         ) THEN
           CREATE TYPE shipment_segment_status AS ENUM (
+            'PENDING',
+            'ACCEPTED',
+            'IN_TRANSIT',
+            'DELIVERED',
+            'CLOSED',
+            'CANCELLED'
+          );
+        END IF;
+      END
+      $$;
+    `);
+
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_type WHERE typname = 'shipment_status'
+        ) THEN
+          CREATE TYPE shipment_status AS ENUM (
             'PENDING',
             'ACCEPTED',
             'IN_TRANSIT',
@@ -194,31 +214,6 @@ export const migrate = async (pool) => {
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS batches (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        product_id UUID NOT NULL REFERENCES products(id),
-        manufacturer_uuid UUID NOT NULL REFERENCES users(id),
-        facility TEXT NOT NULL,
-        production_start_time TIMESTAMP,
-        production_end_time TIMESTAMP,
-        quantity_produced TEXT NOT NULL,
-        expiry_date TEXT,
-        batch_hash TEXT,
-        tx_hash TEXT,
-        created_by TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_by TEXT,
-        updated_at TIMESTAMP,
-        pinata_cid TEXT,
-        pinata_pinned_at TIMESTAMPTZ
-      );
-      CREATE INDEX IF NOT EXISTS idx_batches_product
-        ON batches(product_id);
-      CREATE INDEX IF NOT EXISTS idx_batches_manufacturer
-        ON batches(manufacturer_uuid)
-    `);
-
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS checkpoint_registry (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
@@ -249,6 +244,7 @@ export const migrate = async (pool) => {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         manufacturer_uuid TEXT NOT NULL,
         consumer_uuid TEXT NOT NULL,
+        status shipment_status NOT NULL DEFAULT 'PENDING',
         shipment_hash TEXT,
         tx_hash TEXT,
         created_by TEXT,
@@ -265,6 +261,31 @@ export const migrate = async (pool) => {
   
 
    
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS batches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID NOT NULL REFERENCES products(id),
+        manufacturer_uuid UUID NOT NULL REFERENCES users(id),
+        facility TEXT NOT NULL,
+        production_start_time TIMESTAMP,
+        production_end_time TIMESTAMP,
+        quantity_produced TEXT NOT NULL,
+        expiry_date TEXT,
+        batch_hash TEXT,
+        tx_hash TEXT,
+        created_by TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_by TEXT,
+        updated_at TIMESTAMP,
+        pinata_cid TEXT,
+        pinata_pinned_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_batches_product
+        ON batches(product_id);
+      CREATE INDEX IF NOT EXISTS idx_batches_manufacturer
+        ON batches(manufacturer_uuid)
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS package_registry (
@@ -360,5 +381,4 @@ export const migrate = async (pool) => {
     return false;
   }
 };
-
 
