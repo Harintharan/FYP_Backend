@@ -346,6 +346,7 @@ async function performSegmentStatusTransition({
   assignSupplier = false,
   requireExistingSupplier = false,
   beforeUpdate = null,
+  shouldUpdateShipment = null,
 }) {
   if (!registration?.id) {
     throw registrationRequired();
@@ -401,6 +402,16 @@ async function performSegmentStatusTransition({
     });
   }
 
+  let allowShipmentUpdate = true;
+  if (typeof shouldUpdateShipment === "function") {
+    const result = await shouldUpdateShipment({
+      segment: existing,
+      shipmentId,
+      client,
+    });
+    allowShipmentUpdate = Boolean(result);
+  }
+
   const supplierIdForUpdate = assignSupplier
     ? registration.id
     : existing.supplier_id ?? registration.id;
@@ -413,11 +424,18 @@ async function performSegmentStatusTransition({
     dbClient: client,
   });
 
-  const { shipmentUpdate, packageUpdates } = await reconcileShipmentState({
-    shipmentId,
-    walletAddress,
-    client,
-  });
+  let shipmentUpdate = null;
+  let packageUpdates = [];
+
+  if (allowShipmentUpdate) {
+    const reconciliation = await reconcileShipmentState({
+      shipmentId,
+      walletAddress,
+      client,
+    });
+    shipmentUpdate = reconciliation.shipmentUpdate;
+    packageUpdates = reconciliation.packageUpdates;
+  }
 
   return {
     segment: updatedSegment,
@@ -707,45 +725,55 @@ export async function acceptShipmentSegment({
   walletAddress = null,
   dbClient = null,
 }) {
+  if (!segmentId) {
+    throw shipmentSegmentNotFound();
+  }
+
   if (!registration?.id) {
     throw registrationRequired();
   }
 
-  const existing = await findShipmentSegmentById(segmentId, dbClient);
-  if (!existing) {
-    throw shipmentSegmentNotFound();
-  }
+  const executor = dbClient
+    ? async (task) => task(dbClient)
+    : async (task) => runInTransaction(task);
 
-  const currentStatus =
-    typeof existing.status === "string"
-      ? existing.status.toUpperCase()
-      : null;
+  return executor(async (client) =>
+    performSegmentStatusTransition({
+      segmentId,
+      registration,
+      walletAddress,
+      client,
+      allowedStatuses: ["PENDING", "ACCEPTED"],
+      nextStatus: "ACCEPTED",
+      assignSupplier: true,
+      shouldUpdateShipment: async ({ segment, shipmentId, client }) => {
+        if (!shipmentId) {
+          throw shipmentNotFound();
+        }
 
-  if (currentStatus && currentStatus !== "PENDING" && currentStatus !== "ACCEPTED") {
-    throw shipmentSegmentConflict(
-      `Cannot accept shipment segment in status ${currentStatus}`
-    );
-  }
+        const segmentOrder =
+          typeof segment.segment_order === "number"
+            ? segment.segment_order
+            : Number(segment.segment_order);
 
-  const existingSupplier =
-    typeof existing.supplier_id === "string"
-      ? existing.supplier_id.toLowerCase()
-      : null;
-  const requestingSupplier = registration.id.toLowerCase();
+        if (!Number.isFinite(segmentOrder) || segmentOrder !== 1) {
+          return false;
+        }
 
-  if (existingSupplier && existingSupplier !== requestingSupplier) {
-    throw shipmentSegmentConflict(
-      "Shipment segment is already assigned to another supplier"
-    );
-  }
+        const shipmentRecord = await getShipmentById(shipmentId, client);
+        if (!shipmentRecord) {
+          throw shipmentNotFound();
+        }
 
-  return updateShipmentSegmentStatus({
-    segmentId,
-    status: "ACCEPTED",
-    supplierId: registration.id,
-    walletAddress,
-    dbClient,
-  });
+        const currentStatus =
+          typeof shipmentRecord.status === "string"
+            ? shipmentRecord.status.trim().toUpperCase()
+            : null;
+
+        return currentStatus === "PENDING";
+      },
+    })
+  );
 }
 
 export async function takeoverShipmentSegment({
