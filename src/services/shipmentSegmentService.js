@@ -426,6 +426,58 @@ async function performSegmentStatusTransition({
   };
 }
 
+async function ensureTakeoverLocationWithinRange({
+  segment,
+  client,
+  currentLatitude,
+  currentLongitude,
+}) {
+  const checkpointId = segment.start_checkpoint_id ?? null;
+  if (!checkpointId) {
+    throw shipmentSegmentConflict(
+      "Shipment segment missing start checkpoint information"
+    );
+  }
+
+  const checkpoint = await findCheckpointById(checkpointId, client);
+  if (!checkpoint) {
+    throw shipmentSegmentConflict("Start checkpoint not found for segment");
+  }
+
+  const checkpointLatitude = Number(
+    typeof checkpoint.latitude === "string"
+      ? checkpoint.latitude.trim()
+      : checkpoint.latitude
+  );
+  const checkpointLongitude = Number(
+    typeof checkpoint.longitude === "string"
+      ? checkpoint.longitude.trim()
+      : checkpoint.longitude
+  );
+
+  if (
+    !Number.isFinite(checkpointLatitude) ||
+    !Number.isFinite(checkpointLongitude)
+  ) {
+    throw shipmentSegmentConflict(
+      "Start checkpoint does not have valid coordinates"
+    );
+  }
+
+  const distanceKm = calculateDistanceInKilometers(
+    checkpointLatitude,
+    checkpointLongitude,
+    currentLatitude,
+    currentLongitude
+  );
+
+  if (!Number.isFinite(distanceKm) || distanceKm > 1) {
+    throw shipmentSegmentAccessDenied(
+      "Access denied: location is not within 1km of the origin checkpoint"
+    );
+  }
+}
+
 async function ensureHandoverLocationWithinRange({
   segment,
   client,
@@ -700,9 +752,15 @@ export async function takeoverShipmentSegment({
   segmentId,
   registration,
   walletAddress = null,
+  latitude,
+  longitude,
 }) {
   if (!segmentId) {
     throw shipmentSegmentNotFound();
+  }
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw shipmentSegmentConflict("Latitude and longitude are required");
   }
 
   return runInTransaction(async (client) => {
@@ -714,6 +772,14 @@ export async function takeoverShipmentSegment({
       allowedStatuses: ["PENDING", "ACCEPTED"],
       nextStatus: "IN_TRANSIT",
       assignSupplier: true,
+      beforeUpdate: async ({ segment }) => {
+        await ensureTakeoverLocationWithinRange({
+          segment,
+          client,
+          currentLatitude: latitude,
+          currentLongitude: longitude,
+        });
+      },
     });
   });
 }

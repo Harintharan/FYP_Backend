@@ -14,6 +14,7 @@ import { httpError } from "../utils/httpError.js";
 import { ErrorCodes } from "../errors/errorCodes.js";
 import {
   ShipmentSegmentStatusUpdatePayload,
+  ShipmentSegmentTakeoverPayload,
   ShipmentSegmentHandoverPayload,
 } from "../domain/shipmentSegment.schema.js";
 
@@ -116,10 +117,14 @@ export async function takeoverShipmentSegmentBySupplier(req, res) {
       });
     }
 
+    const parsed = ShipmentSegmentTakeoverPayload.parse(req.body ?? {});
+
     const updated = await takeoverShipmentSegment({
       segmentId,
       registration,
       walletAddress: req.wallet?.walletAddress ?? null,
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
     });
 
     return res.status(200).json(updated);
