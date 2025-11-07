@@ -160,6 +160,31 @@ export const migrate = async (pool) => {
       `CREATE INDEX IF NOT EXISTS idx_registrations_payload ON users USING GIN (payload)`
     );
 
+    // Add refresh_tokens table for authentication
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          address TEXT NOT NULL,
+          token TEXT NOT NULL UNIQUE,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ,
+          revoked BOOLEAN DEFAULT FALSE,
+          revoked_at TIMESTAMPTZ,
+          user_agent TEXT,
+          ip_address TEXT
+        )
+      `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_address ON refresh_tokens (address)`
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens (token)`
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_cleanup ON refresh_tokens (expires_at, revoked)`
+    );
+
     await pool.query(`
       CREATE OR REPLACE FUNCTION set_updated_at()
       RETURNS TRIGGER AS $$
@@ -377,4 +402,3 @@ export const migrate = async (pool) => {
     return false;
   }
 };
-

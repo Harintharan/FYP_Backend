@@ -15,6 +15,7 @@ import shipmentSegmentRoutes from "./routes/shipmentSegmentRoutes.js";
 import sensorDataRoutes from "./routes/sensorDataRoutes.js";
 import sensorDataBreachRoutes from "./routes/sensorDataBreachRoutes.js";
 import { runMigrations } from "../migrations/index.js";
+import { startAutomaticCleanup } from "./utils/tokenCleanup.js";
 
 const app = express();
 
@@ -26,7 +27,8 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.use("/auth", authRoutes);
+// Support legacy /auth path plus canonical /api/auth path
+app.use(["/auth", "/api/auth"], authRoutes);
 app.use("/api/registrations", registrationRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/batches", batchRoutes);
@@ -49,9 +51,9 @@ app.listen(port, async () => {
   try {
     await runMigrations();
     console.log("✅ Database setup completed successfully");
+    startAutomaticCleanup(24);
+    console.log("✅ Automatic token cleanup started");
   } catch (err) {
     console.error("❌ Error setting up database:", err);
   }
 });
-
-

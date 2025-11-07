@@ -124,6 +124,26 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add refresh_tokens table for authentication
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    address TEXT NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    revoked BOOLEAN DEFAULT FALSE,
+    revoked_at TIMESTAMPTZ,
+    user_agent TEXT,
+    ip_address TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_address ON refresh_tokens (address);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens (token);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_cleanup ON refresh_tokens (expires_at, revoked);
+
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pinata_cid TEXT;
 
 ALTER TABLE users
@@ -169,11 +189,9 @@ CREATE TABLE IF NOT EXISTS batches (
     pinata_pinned_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_batches_product
-  ON batches (product_id);
+CREATE INDEX IF NOT EXISTS idx_batches_product ON batches (product_id);
 
-CREATE INDEX IF NOT EXISTS idx_batches_manufacturer
-  ON batches (manufacturer_uuid);
+CREATE INDEX IF NOT EXISTS idx_batches_manufacturer ON batches (manufacturer_uuid);
 
 CREATE TABLE IF NOT EXISTS checkpoint_registry (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
@@ -236,11 +254,9 @@ CREATE TABLE IF NOT EXISTS products (
     updated_at TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_products_category
-  ON products (product_category_id);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products (product_category_id);
 
-CREATE INDEX IF NOT EXISTS idx_products_manufacturer
-  ON products (manufacturer_uuid);
+CREATE INDEX IF NOT EXISTS idx_products_manufacturer ON products (manufacturer_uuid);
 
 CREATE TABLE IF NOT EXISTS package_registry (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
@@ -262,10 +278,10 @@ CREATE TABLE IF NOT EXISTS package_registry (
 );
 
 ALTER TABLE package_registry
-  DROP COLUMN IF EXISTS product_name,
-  DROP COLUMN IF EXISTS product_category,
-  DROP COLUMN IF EXISTS wifi_ssid,
-  DROP COLUMN IF EXISTS wifi_password;
+DROP COLUMN IF EXISTS product_name,
+DROP COLUMN IF EXISTS product_category,
+DROP COLUMN IF EXISTS wifi_ssid,
+DROP COLUMN IF EXISTS wifi_password;
 
 CREATE TABLE IF NOT EXISTS sensor_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
@@ -284,8 +300,7 @@ CREATE TABLE IF NOT EXISTS sensor_data (
     pinata_pinned_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_sensor_data_package_id
-  ON sensor_data (package_id);
+CREATE INDEX IF NOT EXISTS idx_sensor_data_package_id ON sensor_data (package_id);
 
 CREATE TABLE IF NOT EXISTS sensor_data_breach (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
@@ -303,9 +318,7 @@ CREATE TABLE IF NOT EXISTS sensor_data_breach (
     pinata_pinned_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_sensor_data_breach_sensor_data_id
-  ON sensor_data_breach (sensor_data_id);
-
+CREATE INDEX IF NOT EXISTS idx_sensor_data_breach_sensor_data_id ON sensor_data_breach (sensor_data_id);
 
 CREATE TABLE IF NOT EXISTS shipment_segment (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
@@ -326,8 +339,7 @@ CREATE TABLE IF NOT EXISTS shipment_segment (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_shipment_segment_shipment
-  ON shipment_segment (shipment_id);
+CREATE INDEX IF NOT EXISTS idx_shipment_segment_shipment ON shipment_segment (shipment_id);
 
 INSERT INTO
     migrations (name)
@@ -335,5 +347,3 @@ VALUES ('01_initial_schema')
 ON CONFLICT (name) DO NOTHING;
 
 COMMIT;
-
-

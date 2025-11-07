@@ -31,6 +31,8 @@ const SUPPORTED_KEYS = [
   "PINATA_PROXY_URL",
   "PINATA_USE_PROXY",
   "DEFAULT_MAX_PAYLOAD_BYTES",
+  "ACCESS_TOKEN_EXPIRY",
+  "REFRESH_TOKEN_EXPIRY_DAYS",
 ];
 
 const ADDRESS_40_REGEX = /^0x[0-9a-fA-F]{40}$/;
@@ -75,7 +77,9 @@ function resolveDatabaseConnection(baseEnvVars) {
     baseEnvVars.DB_NAME,
   ];
 
-  const allPresent = segments.every((segment) => segment && segment.trim() !== "");
+  const allPresent = segments.every(
+    (segment) => segment && segment.trim() !== ""
+  );
   if (!allPresent) {
     throw new Error(
       "DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME must be provided"
@@ -168,6 +172,18 @@ function resolveRegistrationPayloadLimit(baseEnvVars) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 8192;
 }
 
+function resolveAccessTokenExpiry(baseEnvVars) {
+  const value = baseEnvVars.ACCESS_TOKEN_EXPIRY;
+  return value && value.trim() !== "" ? value.trim() : "24h";
+}
+
+function resolveRefreshTokenExpiryDays(baseEnvVars) {
+  const parsed = baseEnvVars.REFRESH_TOKEN_EXPIRY_DAYS
+    ? Number.parseInt(baseEnvVars.REFRESH_TOKEN_EXPIRY_DAYS, 10)
+    : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 7;
+}
+
 export function buildConfig(env) {
   const baseEnvVars = toBaseEnvVars(env);
 
@@ -197,7 +213,7 @@ export function buildConfig(env) {
     "PRIVATE_KEY_OTHER must be a 0x-prefixed 32-byte hex string"
   );
 
-    const contractAddresses = {
+  const contractAddresses = {
     batchRegistry: assertHex(
       baseEnvVars.CONTRACT_ADDRESS_BATCH,
       "CONTRACT_ADDRESS_BATCH",
@@ -264,7 +280,7 @@ export function buildConfig(env) {
     contracts: contractAddresses,
     pinata: resolvePinataConfig(baseEnvVars),
     registrationPayloadMaxBytes: resolveRegistrationPayloadLimit(baseEnvVars),
+    accessTokenExpiry: resolveAccessTokenExpiry(baseEnvVars),
+    refreshTokenExpiryDays: resolveRefreshTokenExpiryDays(baseEnvVars),
   };
 }
-
-

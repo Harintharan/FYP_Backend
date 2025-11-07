@@ -13,9 +13,14 @@ const {
   contracts,
   pinata,
   registrationPayloadMaxBytes,
+  accessTokenExpiry,
+  refreshTokenExpiryDays,
 } = buildConfig(process.env);
 
 export { port, dbUrl, jwtPrivateKey, jwtPublicKey };
 export { chain, operatorWallet, contracts, pinata };
-export { registrationPayloadMaxBytes };
-
+export {
+  registrationPayloadMaxBytes,
+  accessTokenExpiry,
+  refreshTokenExpiryDays,
+};

@@ -41,8 +41,7 @@ export async function getAccountRole(address, approvedRegistration) {
   }
 
   const registration =
-    approvedRegistration ??
-    (await getApprovedUserByAddress(normalizedAddress));
+    approvedRegistration ?? (await getApprovedUserByAddress(normalizedAddress));
   const regType = registration?.reg_type;
 
   if (
@@ -75,4 +74,68 @@ export async function getApprovedUserByAddress(address) {
   );
 
   return rows[0] ?? null;
+}
+
+// Refresh Token Management
+
+export async function createRefreshToken(
+  address,
+  token,
+  expiresAt,
+  userAgent = null,
+  ipAddress = null
+) {
+  const { rows } = await query(
+    `INSERT INTO refresh_tokens (address, token, expires_at, user_agent, ip_address)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, token, expires_at`,
+    [address, token, expiresAt, userAgent, ipAddress]
+  );
+  return rows[0];
+}
+
+export async function findRefreshToken(token) {
+  const { rows } = await query(
+    `SELECT id, address, token, expires_at, revoked, last_used_at
+     FROM refresh_tokens
+     WHERE token = $1`,
+    [token]
+  );
+  return rows[0] ?? null;
+}
+
+export async function updateRefreshTokenLastUsed(tokenId) {
+  await query(
+    `UPDATE refresh_tokens
+     SET last_used_at = NOW()
+     WHERE id = $1`,
+    [tokenId]
+  );
+}
+
+export async function revokeRefreshToken(token) {
+  await query(
+    `UPDATE refresh_tokens
+     SET revoked = TRUE, revoked_at = NOW()
+     WHERE token = $1`,
+    [token]
+  );
+}
+
+export async function revokeAllRefreshTokensForAddress(address) {
+  await query(
+    `UPDATE refresh_tokens
+     SET revoked = TRUE, revoked_at = NOW()
+     WHERE address = $1 AND revoked = FALSE`,
+    [address]
+  );
+}
+
+export async function deleteExpiredRefreshTokens() {
+  const { rowCount } = await query(
+    `DELETE FROM refresh_tokens
+     WHERE expires_at < NOW() OR revoked = TRUE`,
+    []
+  );
+  return rowCount;
 }
