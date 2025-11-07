@@ -10,6 +10,7 @@ import {
   updateShipmentSegmentRecord,
   deleteShipmentSegmentsByShipmentId as modelDeleteSegments,
   findShipmentSegmentById,
+  listShipmentSegmentsBySupplierAndStatus,
 } from "../models/ShipmentSegmentModel.js";
 import {
   summarizePackagesByShipmentId,
@@ -53,8 +54,10 @@ import {
   registrationRequired,
   manufacturerForbidden,
 } from "../errors/packageErrors.js";
+import { SHIPMENT_SEGMENT_STATUS_VALUES } from "../domain/shipmentSegment.schema.js";
 
 const PINATA_ENTITY = "shipment_segment";
+const VALID_SEGMENT_STATUSES = new Set(SHIPMENT_SEGMENT_STATUS_VALUES);
 
 function determineShipmentStatusFromSegments(segments) {
   const statuses = Array.isArray(segments)
@@ -97,6 +100,14 @@ function determineShipmentStatusFromSegments(segments) {
   }
 
   return null;
+}
+
+function normalizeSegmentStatus(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.toUpperCase() : null;
 }
 
 function mapSegmentsToCheckpoints(segments) {
@@ -847,6 +858,52 @@ export async function handoverShipmentSegment({
       },
     });
   });
+}
+
+export async function listSupplierShipmentSegments({
+  supplierId,
+  status = null,
+}) {
+  if (!supplierId) {
+    throw registrationRequired();
+  }
+
+  const normalizedStatus = normalizeSegmentStatus(status);
+  if (normalizedStatus && !VALID_SEGMENT_STATUSES.has(normalizedStatus)) {
+    throw shipmentSegmentConflict(
+      `Unsupported segment status filter: ${status}`
+    );
+  }
+
+  const rows = await listShipmentSegmentsBySupplierAndStatus({
+    supplierId,
+    status: normalizedStatus ?? null,
+  });
+
+  return rows.map((row) => ({
+    segmentId: row.id ?? row.segment_id ?? null,
+    status: normalizeSegmentStatus(row.status),
+    expectedShipDate: row.expected_ship_date ?? null,
+    estimatedArrivalDate: row.estimated_arrival_date ?? null,
+    timeTolerance: row.time_tolerance ?? null,
+    shipment: {
+      id: row.shipment_id ?? null,
+      consumer: {
+        id: row.consumer_uuid ?? null,
+        legalName: row.consumer_legal_name ?? null,
+      },
+    },
+    startCheckpoint: {
+      id: row.start_checkpoint_id ?? null,
+      state: row.start_state ?? null,
+      country: row.start_country ?? null,
+    },
+    endCheckpoint: {
+      id: row.end_checkpoint_id ?? null,
+      state: row.end_state ?? null,
+      country: row.end_country ?? null,
+    },
+  }));
 }
 
 export async function deleteShipmentSegmentsByShipmentId(shipmentId, dbClient) {

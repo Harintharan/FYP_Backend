@@ -7,6 +7,7 @@ import {
   acceptShipmentSegment,
   takeoverShipmentSegment,
   handoverShipmentSegment,
+  listSupplierShipmentSegments,
 } from "../services/shipmentSegmentService.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
 import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
@@ -73,6 +74,32 @@ export async function listPendingShipmentSegments(_req, res) {
     return handleControllerError(res, err, {
       logMessage: "Error listing pending shipment segments",
       fallbackMessage: "Unable to list pending shipment segments",
+    });
+  }
+}
+
+export async function listSupplierSegments(req, res) {
+  try {
+    const registration = req.registration ?? null;
+    if (!registration?.id) {
+      throw httpError(403, "Supplier registration is required", {
+        code: ErrorCodes.FORBIDDEN,
+      });
+    }
+
+    const status =
+      typeof req.query?.status === "string" ? req.query.status : null;
+
+    const segments = await listSupplierShipmentSegments({
+      supplierId: registration.id,
+      status,
+    });
+
+    return res.status(200).json(segments);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error listing supplier shipment segments",
+      fallbackMessage: "Unable to list supplier shipment segments",
     });
   }
 }

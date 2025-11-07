@@ -126,6 +126,45 @@ export async function listShipmentSegmentsByStatusWithDetails(status) {
   return rows;
 }
 
+export async function listShipmentSegmentsBySupplierAndStatus({
+  supplierId,
+  status,
+}) {
+  const params = [supplierId];
+  let statusClause = "";
+
+  if (status) {
+    params.push(status);
+    statusClause = `AND ss.status = $${params.length}::shipment_segment_status`;
+  }
+
+  const { rows } = await query(
+    `SELECT
+        ss.*,
+        sc_start.state AS start_state,
+        sc_start.country AS start_country,
+        sc_end.state AS end_state,
+        sc_end.country AS end_country,
+        sr.consumer_uuid,
+        u.payload -> 'identification' ->> 'legalName' AS consumer_legal_name
+      FROM shipment_segment ss
+      JOIN checkpoint_registry sc_start
+        ON sc_start.id = ss.start_checkpoint_id
+      JOIN checkpoint_registry sc_end
+        ON sc_end.id = ss.end_checkpoint_id
+      JOIN shipment_registry sr
+        ON sr.id = ss.shipment_id
+      LEFT JOIN users u
+        ON u.id::text = sr.consumer_uuid
+     WHERE ss.supplier_id = $1::uuid
+       ${statusClause}
+     ORDER BY ss.segment_order ASC, ss.created_at ASC`,
+    params
+  );
+
+  return rows;
+}
+
 export async function updateShipmentSegmentRecord({
   segmentId,
   status,

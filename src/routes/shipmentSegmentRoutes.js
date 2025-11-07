@@ -7,6 +7,7 @@ import {
   acceptShipmentSegmentBySupplier,
   takeoverShipmentSegmentBySupplier,
   handoverShipmentSegmentBySupplier,
+  listSupplierSegments,
 } from "../controllers/ShipmentSegmentController.js";
 import { requireAuth, requireRegistrationRole } from "../middleware/roles.js";
 
@@ -17,6 +18,11 @@ router.get(
   "/shipment-segments/pending",
   requireAuth,
   listPendingShipmentSegments
+);
+router.get(
+  "/shipment-segments/supplier",
+  requireRegistrationRole("SUPPLIER"),
+  listSupplierSegments
 );
 
 router.patch(
