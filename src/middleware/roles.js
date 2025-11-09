@@ -49,7 +49,12 @@ export function requireRole(requiredRole) {
   };
 }
 
-export function requireRegistrationRole(expectedType) {
+export function requireRegistrationRole(...expectedTypes) {
+  const allowedTypes =
+    expectedTypes.length === 1 && Array.isArray(expectedTypes[0])
+      ? expectedTypes[0]
+      : expectedTypes;
+
   return async (req, res, next) => {
     requireAuth(req, res, async () => {
       try {
@@ -66,7 +71,10 @@ export function requireRegistrationRole(expectedType) {
           return res.status(403).json({ error: "User not registered" });
         }
 
-        if (registration.reg_type !== expectedType) {
+        if (
+          allowedTypes.length > 0 &&
+          !allowedTypes.includes(registration.reg_type)
+        ) {
           return res.status(403).json({ error: "Access Denied" });
         }
 

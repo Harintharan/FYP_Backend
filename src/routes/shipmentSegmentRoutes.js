@@ -47,7 +47,7 @@ router.post(
 );
 router.get(
   "/shipment-segments/:id",
-  requireRegistrationRole("MANUFACTURER"),
+  requireRegistrationRole("MANUFACTURER", "SUPPLIER"),
   getShipmentSegmentPackages
 );
 

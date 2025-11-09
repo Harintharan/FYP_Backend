@@ -63,10 +63,7 @@ function determineShipmentStatusFromSegments(segments) {
   const statuses = Array.isArray(segments)
     ? segments
         .map((segment) => {
-          const value =
-            segment?.status ??
-            segment?.STATUS ??
-            null;
+          const value = segment?.status ?? segment?.STATUS ?? null;
           if (typeof value !== "string") {
             return null;
           }
@@ -125,8 +122,8 @@ function mapSegmentsToCheckpoints(segments) {
       typeof segment.segment_order === "number"
         ? segment.segment_order
         : Number.isFinite(Number(segment.segment_order))
-          ? Number(segment.segment_order)
-          : null,
+        ? Number(segment.segment_order)
+        : null,
   }));
 }
 
@@ -155,11 +152,7 @@ function resolveShipmentUpdatedBy(walletAddress) {
   return shipmentOperatorAddress ?? null;
 }
 
-async function reconcileShipmentState({
-  shipmentId,
-  walletAddress,
-  client,
-}) {
+async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
   const segments = await listShipmentSegmentsByShipmentId(shipmentId, client);
   const computedShipmentStatus = determineShipmentStatusFromSegments(segments);
 
@@ -212,7 +205,7 @@ async function reconcileShipmentState({
       {
         shipmentItems,
         checkpoints,
-      },
+      }
     );
 
     const { txHash, shipmentHash } = await updateShipmentOnChain(
@@ -252,8 +245,7 @@ async function reconcileShipmentState({
       walletAddress,
       operation: "update",
       identifier: shipmentId,
-      errorMessage:
-        "?? Failed to back up shipment status update to Pinata:",
+      errorMessage: "?? Failed to back up shipment status update to Pinata:",
     });
 
     const updatedShipmentRecord = await updateShipmentRecord(
@@ -265,10 +257,7 @@ async function reconcileShipmentState({
         shipment_hash: payloadHash,
         tx_hash: txHash,
         updated_by: resolveShipmentUpdatedBy(walletAddress),
-        pinata_cid:
-          pinataBackup?.IpfsHash ??
-          shipmentRecord.pinata_cid ??
-          null,
+        pinata_cid: pinataBackup?.IpfsHash ?? shipmentRecord.pinata_cid ?? null,
         pinata_pinned_at: pinataBackup?.Timestamp
           ? new Date(pinataBackup.Timestamp)
           : shipmentRecord.pinata_pinned_at ?? null,
@@ -279,15 +268,10 @@ async function reconcileShipmentState({
     const formattedShipment = formatShipmentRecord(updatedShipmentRecord);
     const shipmentResponse = {
       ...formattedShipment,
-      pinataCid:
-        formattedShipment.pinataCid ??
-        pinataBackup?.IpfsHash ??
-        null,
+      pinataCid: formattedShipment.pinataCid ?? pinataBackup?.IpfsHash ?? null,
       pinataPinnedAt:
         formattedShipment.pinataPinnedAt ??
-        (pinataBackup?.Timestamp
-          ? new Date(pinataBackup.Timestamp)
-          : null),
+        (pinataBackup?.Timestamp ? new Date(pinataBackup.Timestamp) : null),
     };
 
     const packageStatusMap = {
@@ -322,9 +306,7 @@ async function reconcileShipmentState({
         })
       );
 
-      packageUpdates = packageResults.filter(
-        (entry) => entry !== null
-      );
+      packageUpdates = packageResults.filter((entry) => entry !== null);
     }
 
     return {
@@ -617,29 +599,35 @@ export async function createShipmentSegment({
     errorMessage: "⚠️ Failed to back up shipment segment to Pinata:",
   });
 
-  const record = await insertShipmentSegment({
-    id: segmentId,
-    shipmentId: normalized.shipmentId,
-    startCheckpointId: normalized.startCheckpointId,
-    endCheckpointId: normalized.endCheckpointId,
-    expectedShipDate: normalized.expectedShipDate,
-    estimatedArrivalDate: normalized.estimatedArrivalDate,
-    timeTolerance: normalized.timeTolerance ?? null,
-    supplierId: normalized.supplierId ?? null,
-    segmentOrder: normalized.segmentOrder ?? effectiveOrder,
-    status: normalized.status,
-    segmentHash: payloadHash,
-    txHash,
-    pinataCid: pinataBackup?.IpfsHash ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : null,
-  }, dbClient);
+  const record = await insertShipmentSegment(
+    {
+      id: segmentId,
+      shipmentId: normalized.shipmentId,
+      startCheckpointId: normalized.startCheckpointId,
+      endCheckpointId: normalized.endCheckpointId,
+      expectedShipDate: normalized.expectedShipDate,
+      estimatedArrivalDate: normalized.estimatedArrivalDate,
+      timeTolerance: normalized.timeTolerance ?? null,
+      supplierId: normalized.supplierId ?? null,
+      segmentOrder: normalized.segmentOrder ?? effectiveOrder,
+      status: normalized.status,
+      segmentHash: payloadHash,
+      txHash,
+      pinataCid: pinataBackup?.IpfsHash ?? null,
+      pinataPinnedAt: pinataBackup?.Timestamp
+        ? new Date(pinataBackup.Timestamp)
+        : null,
+    },
+    dbClient
+  );
 
   return formatShipmentSegmentRecord(record);
 }
 
-export async function listShipmentSegmentsForShipment(shipmentId, dbClient = null) {
+export async function listShipmentSegmentsForShipment(
+  shipmentId,
+  dbClient = null
+) {
   const rows = await listShipmentSegmentsByShipmentId(shipmentId, dbClient);
 
   return Promise.all(
@@ -714,18 +702,21 @@ export async function updateShipmentSegmentStatus({
     errorMessage: "⚠️ Failed to back up shipment segment update to Pinata:",
   });
 
-  const updated = await updateShipmentSegmentRecord({
-    segmentId,
-    status: normalized.status,
-    supplierId: normalized.supplierId ?? null,
-    segmentOrder: normalized.segmentOrder ?? null,
-    segmentHash: payloadHash,
-    txHash,
-    pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : existing.pinata_pinned_at ?? null,
-  }, dbClient);
+  const updated = await updateShipmentSegmentRecord(
+    {
+      segmentId,
+      status: normalized.status,
+      supplierId: normalized.supplierId ?? null,
+      segmentOrder: normalized.segmentOrder ?? null,
+      segmentHash: payloadHash,
+      txHash,
+      pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
+      pinataPinnedAt: pinataBackup?.Timestamp
+        ? new Date(pinataBackup.Timestamp)
+        : existing.pinata_pinned_at ?? null,
+    },
+    dbClient
+  );
 
   return formatShipmentSegmentRecord(updated);
 }
@@ -965,13 +956,6 @@ export async function getShipmentSegmentPackageDetails({
 
   const normalizeUuid = (value) =>
     typeof value === "string" ? value.trim().toLowerCase() : null;
-
-  const manufacturerUuid = normalizeUuid(shipment.manufacturer_uuid);
-  const registrationUuid = normalizeUuid(registration.id);
-
-  if (!manufacturerUuid || !registrationUuid || manufacturerUuid !== registrationUuid) {
-    throw manufacturerForbidden();
-  }
 
   const rows = await summarizePackagesByShipmentId(shipmentId);
 
