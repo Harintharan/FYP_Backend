@@ -11,6 +11,7 @@ import {
   deleteShipmentSegmentsByShipmentId as modelDeleteSegments,
   findShipmentSegmentById,
   findShipmentSegmentDetailsById,
+  findPreviousShipmentSegment,
   listShipmentSegmentsBySupplierAndStatus,
 } from "../models/ShipmentSegmentModel.js";
 import {
@@ -541,6 +542,40 @@ async function ensureHandoverLocationWithinRange({
     );
   }
 }
+
+async function ensurePreviousSegmentsDelivered({ segment, client }) {
+  const shipmentId = segment.shipment_id ?? null;
+  if (!shipmentId) {
+    throw shipmentNotFound();
+  }
+
+  const rawOrder =
+    typeof segment.segment_order === "number"
+      ? segment.segment_order
+      : Number(segment.segment_order);
+  if (!Number.isFinite(rawOrder) || rawOrder <= 1) {
+    return;
+  }
+
+  const previousSegment = await findPreviousShipmentSegment({
+    shipmentId,
+    segmentOrder: rawOrder,
+    dbClient: client,
+  });
+
+  if (!previousSegment) {
+    throw shipmentSegmentConflict(
+      "Cannot take over segment until earlier segments are recorded"
+    );
+  }
+
+  const previousStatus = normalizeSegmentStatus(previousSegment.status);
+  if (previousStatus !== "DELIVERED") {
+    throw shipmentSegmentConflict(
+      "Cannot take over segment until the previous segment is DELIVERED"
+    );
+  }
+}
 export async function createShipmentSegment({
   shipmentId,
   startCheckpointId,
@@ -746,7 +781,7 @@ export async function acceptShipmentSegment({
       registration,
       walletAddress,
       client,
-      allowedStatuses: ["PENDING", "ACCEPTED"],
+      allowedStatuses: ["PENDING"],
       nextStatus: "ACCEPTED",
       assignSupplier: true,
       shouldUpdateShipment: async ({ segment, shipmentId, client }) => {
@@ -810,6 +845,10 @@ export async function takeoverShipmentSegment({
           currentLatitude: latitude,
           currentLongitude: longitude,
         });
+        await ensurePreviousSegmentsDelivered({
+          segment,
+          client,
+        });
       },
     });
   });
@@ -847,6 +886,10 @@ export async function handoverShipmentSegment({
           currentLatitude: latitude,
           currentLongitude: longitude,
         });
+        await ensurePreviousSegmentsDelivered({
+          segment,
+          client,
+        });
       },
     });
   });
@@ -875,30 +918,58 @@ export async function listSupplierShipmentSegments({
     filterBySupplier: shouldFilterBySupplier,
   });
 
-  return rows.map((row) => ({
-    segmentId: row.id ?? row.segment_id ?? null,
-    status: normalizeSegmentStatus(row.status),
-    expectedShipDate: row.expected_ship_date ?? null,
-    estimatedArrivalDate: row.estimated_arrival_date ?? null,
-    timeTolerance: row.time_tolerance ?? null,
-    shipment: {
-      id: row.shipment_id ?? null,
-      consumer: {
-        id: row.consumer_uuid ?? null,
-        legalName: row.consumer_legal_name ?? null,
+  return rows.map((row) => {
+    const statusValue = normalizeSegmentStatus(row.status);
+    const previousStatus = normalizeSegmentStatus(row.previous_segment_status);
+    const rawOrder =
+      typeof row.segment_order === "number"
+        ? row.segment_order
+        : Number(row.segment_order);
+    const segmentOrder = Number.isFinite(rawOrder) ? rawOrder : null;
+    const isFirstSegment = segmentOrder === null ? true : segmentOrder <= 1;
+    const previousDelivered = isFirstSegment
+      ? true
+      : previousStatus === "DELIVERED";
+    const canAccept = statusValue === "PENDING";
+    const canTakeover =
+      previousDelivered &&
+      (statusValue === "PENDING" || statusValue === "ACCEPTED");
+    const isInTransit = statusValue === "IN_TRANSIT";
+    const canHandover = isInTransit;
+    const canDeliver = isInTransit;
+
+    return {
+      segmentId: row.id ?? row.segment_id ?? null,
+      status: statusValue,
+      segmentOrder,
+      expectedShipDate: row.expected_ship_date ?? null,
+      estimatedArrivalDate: row.estimated_arrival_date ?? null,
+      timeTolerance: row.time_tolerance ?? null,
+      shipment: {
+        id: row.shipment_id ?? null,
+        consumer: {
+          id: row.consumer_uuid ?? null,
+          legalName: row.consumer_legal_name ?? null,
+        },
       },
-    },
-    startCheckpoint: {
-      id: row.start_checkpoint_id ?? null,
-      state: row.start_state ?? null,
-      country: row.start_country ?? null,
-    },
-    endCheckpoint: {
-      id: row.end_checkpoint_id ?? null,
-      state: row.end_state ?? null,
-      country: row.end_country ?? null,
-    },
-  }));
+      startCheckpoint: {
+        id: row.start_checkpoint_id ?? null,
+        state: row.start_state ?? null,
+        country: row.start_country ?? null,
+      },
+      endCheckpoint: {
+        id: row.end_checkpoint_id ?? null,
+        state: row.end_state ?? null,
+        country: row.end_country ?? null,
+      },
+      actions: {
+        canAccept,
+        canTakeover,
+        canHandover,
+        canDeliver,
+      },
+    };
+  });
 }
 
 export async function deleteShipmentSegmentsByShipmentId(shipmentId, dbClient) {

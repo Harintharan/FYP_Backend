@@ -104,6 +104,29 @@ export async function findShipmentSegmentDetailsById(segmentId, dbClient) {
   return rows[0] ?? null;
 }
 
+export async function findPreviousShipmentSegment({
+  shipmentId,
+  segmentOrder,
+  dbClient,
+}) {
+  if (!shipmentId || !Number.isFinite(segmentOrder)) {
+    return null;
+  }
+
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `SELECT *
+       FROM shipment_segment
+      WHERE shipment_id = $1
+        AND segment_order < $2
+      ORDER BY segment_order DESC
+      LIMIT 1`,
+    [shipmentId, segmentOrder]
+  );
+
+  return rows[0] ?? null;
+}
+
 export async function listShipmentSegmentsByShipmentId(shipmentId, dbClient) {
   const exec = resolveExecutor(dbClient);
   const { rows } = await exec(
@@ -182,6 +205,7 @@ export async function listShipmentSegmentsBySupplierAndStatus({
   const { rows } = await query(
     `SELECT
         ss.*,
+        prev_segment.status AS previous_segment_status,
         sc_start.state AS start_state,
         sc_start.country AS start_country,
         sc_end.state AS end_state,
@@ -195,6 +219,14 @@ export async function listShipmentSegmentsBySupplierAndStatus({
         ON sc_end.id = ss.end_checkpoint_id
       JOIN shipment_registry sr
         ON sr.id = ss.shipment_id
+      LEFT JOIN LATERAL (
+        SELECT status
+          FROM shipment_segment prev
+         WHERE prev.shipment_id = ss.shipment_id
+           AND prev.segment_order < ss.segment_order
+         ORDER BY prev.segment_order DESC
+         LIMIT 1
+      ) prev_segment ON true
       LEFT JOIN users u
         ON u.id::text = sr.consumer_uuid
      ${whereClause}

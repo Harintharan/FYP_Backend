@@ -29,8 +29,6 @@ export async function getAccountRole(address, approvedRegistration) {
 
   const normalizedAddress = address.toLowerCase();
 
-  console.log("Checking account role for address:", normalizedAddress);
-
   const adminResult = await query(
     `SELECT role FROM accounts WHERE LOWER(address) = $1 LIMIT 1`,
     [normalizedAddress]
