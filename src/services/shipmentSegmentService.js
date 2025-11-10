@@ -866,9 +866,12 @@ export async function listSupplierShipmentSegments({
     );
   }
 
+  const shouldFilterBySupplier = normalizedStatus !== "PENDING";
+
   const rows = await listShipmentSegmentsBySupplierAndStatus({
     supplierId,
     status: normalizedStatus ?? null,
+    filterBySupplier: shouldFilterBySupplier,
   });
 
   return rows.map((row) => ({

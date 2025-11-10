@@ -129,14 +129,27 @@ export async function listShipmentSegmentsByStatusWithDetails(status) {
 export async function listShipmentSegmentsBySupplierAndStatus({
   supplierId,
   status,
+  filterBySupplier = true,
 }) {
-  const params = [supplierId];
-  let statusClause = "";
+  const params = [];
+  const conditions = [];
+
+  if (filterBySupplier) {
+    params.push(supplierId);
+    conditions.push(`ss.supplier_id = $${params.length}::uuid`);
+  }
 
   if (status) {
     params.push(status);
-    statusClause = `AND ss.status = $${params.length}::shipment_segment_status`;
+    conditions.push(
+      `ss.status = $${params.length}::shipment_segment_status`
+    );
   }
+
+  const whereClause =
+    conditions.length > 0
+      ? `WHERE ${conditions.join("\n       AND ")}`
+      : "";
 
   const { rows } = await query(
     `SELECT
@@ -156,8 +169,7 @@ export async function listShipmentSegmentsBySupplierAndStatus({
         ON sr.id = ss.shipment_id
       LEFT JOIN users u
         ON u.id::text = sr.consumer_uuid
-     WHERE ss.supplier_id = $1::uuid
-       ${statusClause}
+     ${whereClause}
      ORDER BY ss.segment_order ASC, ss.created_at ASC`,
     params
   );
