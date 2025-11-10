@@ -76,6 +76,34 @@ export async function findShipmentSegmentById(segmentId, dbClient) {
   return rows[0] ?? null;
 }
 
+export async function findShipmentSegmentDetailsById(segmentId, dbClient) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `SELECT
+        ss.*,
+        sr.consumer_uuid,
+        sr.manufacturer_uuid,
+        sc_start.state AS start_state,
+        sc_start.country AS start_country,
+        sc_end.state AS end_state,
+        sc_end.country AS end_country,
+        u.payload -> 'identification' ->> 'legalName' AS consumer_legal_name
+      FROM shipment_segment ss
+      JOIN shipment_registry sr
+        ON sr.id::text = ss.shipment_id::text
+      LEFT JOIN checkpoint_registry sc_start
+        ON sc_start.id::text = ss.start_checkpoint_id::text
+      LEFT JOIN checkpoint_registry sc_end
+        ON sc_end.id::text = ss.end_checkpoint_id::text
+      LEFT JOIN users u
+        ON u.id::text = sr.consumer_uuid::text
+     WHERE ss.id = $1
+     LIMIT 1`,
+    [segmentId]
+  );
+  return rows[0] ?? null;
+}
+
 export async function listShipmentSegmentsByShipmentId(shipmentId, dbClient) {
   const exec = resolveExecutor(dbClient);
   const { rows } = await exec(

@@ -10,6 +10,7 @@ import {
   updateShipmentSegmentRecord,
   deleteShipmentSegmentsByShipmentId as modelDeleteSegments,
   findShipmentSegmentById,
+  findShipmentSegmentDetailsById,
   listShipmentSegmentsBySupplierAndStatus,
 } from "../models/ShipmentSegmentModel.js";
 import {
@@ -942,7 +943,7 @@ export async function getShipmentSegmentPackageDetails({
     throw registrationRequired();
   }
 
-  const segment = await findShipmentSegmentById(segmentId);
+  const segment = await findShipmentSegmentDetailsById(segmentId);
   if (!segment) {
     throw shipmentSegmentNotFound();
   }
@@ -962,11 +963,41 @@ export async function getShipmentSegmentPackageDetails({
 
   const rows = await summarizePackagesByShipmentId(shipmentId);
 
-  return rows.map((row) => ({
+  const packages = rows.map((row) => ({
     productCategory: row.product_category_name ?? null,
     productName: row.product_name ?? null,
     requiredStartTemp: row.required_start_temp ?? null,
     requiredEndTemp: row.required_end_temp ?? null,
     quantity: row.total_quantity ?? 0,
   }));
+
+  const segmentDetails = {
+    segmentId: segment.id ?? segment.segment_id ?? null,
+    status: normalizeSegmentStatus(segment.status),
+    expectedShipDate: segment.expected_ship_date ?? null,
+    estimatedArrivalDate: segment.estimated_arrival_date ?? null,
+    timeTolerance: segment.time_tolerance ?? null,
+    shipment: {
+      id: shipmentId ?? null,
+      consumer: {
+        id: segment.consumer_uuid ?? null,
+        legalName: segment.consumer_legal_name ?? null,
+      },
+    },
+    startCheckpoint: {
+      id: segment.start_checkpoint_id ?? null,
+      state: segment.start_state ?? null,
+      country: segment.start_country ?? null,
+    },
+    endCheckpoint: {
+      id: segment.end_checkpoint_id ?? null,
+      state: segment.end_state ?? null,
+      country: segment.end_country ?? null,
+    },
+  };
+
+  return {
+    ...segmentDetails,
+    packages,
+  };
 }
