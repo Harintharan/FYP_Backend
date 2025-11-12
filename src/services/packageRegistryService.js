@@ -170,12 +170,16 @@ export async function createPackage({ payload, registration, wallet }) {
   if ("status" in sanitizedPayload) {
     delete sanitizedPayload.status;
   }
+  if ("quantity" in sanitizedPayload) {
+    delete sanitizedPayload.quantity;
+  }
   const defaultStatus = "PACKAGE_READY_FOR_SHIPMENT";
+  const defaultQuantity = 50;
   const { normalized, canonical, payloadHash } = preparePackagePersistence(
     packageId,
     sanitizedPayload,
     {},
-    { status: defaultStatus }
+    { status: defaultStatus, quantity: defaultQuantity }
   );
 
   ensureManufacturerAccess(registration, normalized.manufacturerUUID);
