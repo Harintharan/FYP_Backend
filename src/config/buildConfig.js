@@ -17,6 +17,7 @@ const REQUIRED_KEYS = [
 
 const SUPPORTED_KEYS = [
   ...REQUIRED_KEYS,
+  "HOST",
   "DATABASE_URL",
   "DB_USER",
   "DB_PASSWORD",
@@ -135,6 +136,11 @@ function resolvePort(baseEnvVars) {
   return portValue;
 }
 
+function resolveHost(baseEnvVars) {
+  const hostValue = baseEnvVars.HOST ? baseEnvVars.HOST.trim() : "";
+  return hostValue !== "" ? hostValue : "0.0.0.0";
+}
+
 function resolvePinataConfig(baseEnvVars) {
   const pinataApiKey = baseEnvVars.PINATA_API_KEY
     ? baseEnvVars.PINATA_API_KEY.trim()
@@ -190,6 +196,7 @@ export function buildConfig(env) {
   ensureRequired(baseEnvVars);
 
   const port = resolvePort(baseEnvVars);
+  const host = resolveHost(baseEnvVars);
   const dbUrl = resolveDatabaseConnection(baseEnvVars);
 
   const privateKey = assertHex(
@@ -265,6 +272,7 @@ export function buildConfig(env) {
   };
 
   return {
+    host,
     port,
     dbUrl,
     jwtPrivateKey: normalizePem(baseEnvVars.JWT_PRIVATE_KEY),

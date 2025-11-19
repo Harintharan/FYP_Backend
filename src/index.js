@@ -1,7 +1,7 @@
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-import { port } from "./config.js";
+import { host, port } from "./config.js";
 import authRoutes from "./routes/auth.js";
 import registrationRoutes from "./routes/registrations.js";
 import testRoutes from "./routes/test.js";
@@ -48,8 +48,12 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, async () => {
-  console.log(`Server listening on port ${port}`);
+app.listen(port, host, async () => {
+  const networkHint =
+    host === "0.0.0.0"
+      ? " (share your machine's LAN IP so others on the network can connect)"
+      : "";
+  console.log(`Server listening on ${host}:${port}${networkHint}`);
   try {
     await runMigrations();
     console.log("✅ Database setup completed successfully");

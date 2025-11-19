@@ -4,6 +4,7 @@ import { buildConfig } from "./config/buildConfig.js";
 loadEnvironment();
 
 const {
+  host,
   port,
   dbUrl,
   jwtPrivateKey,
@@ -17,7 +18,7 @@ const {
   refreshTokenExpiryDays,
 } = buildConfig(process.env);
 
-export { port, dbUrl, jwtPrivateKey, jwtPublicKey };
+export { host, port, dbUrl, jwtPrivateKey, jwtPublicKey };
 export { chain, operatorWallet, contracts, pinata };
 export {
   registrationPayloadMaxBytes,
