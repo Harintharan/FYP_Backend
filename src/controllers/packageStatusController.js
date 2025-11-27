@@ -5,7 +5,7 @@ import db from "../db.js";
  */
 export async function getPackageStatusWithBreaches(req, res) {
   const client = await db.connect();
-  
+
   try {
     const { packageId } = req.params;
 
@@ -26,13 +26,13 @@ export async function getPackageStatusWithBreaches(req, res) {
       LEFT JOIN product_categories pc ON pr.product_category_id = pc.id
       WHERE p.id = $1
     `;
-    
+
     const packageResult = await client.query(packageQuery, [packageId]);
-    
+
     if (packageResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        error: "Package not found"
+        error: "Package not found",
       });
     }
 
@@ -68,7 +68,7 @@ export async function getPackageStatusWithBreaches(req, res) {
       WHERE p.id = $1
       ORDER BY ss.segment_order ASC
     `;
-    
+
     const shipmentResult = await client.query(shipmentQuery, [packageId]);
 
     // Get all condition breaches for this package
@@ -92,7 +92,7 @@ export async function getPackageStatusWithBreaches(req, res) {
       WHERE cb.package_id = $1
       ORDER BY cb.breach_start_time DESC
     `;
-    
+
     const breachResult = await client.query(breachQuery, [packageId]);
 
     // Structure the response
@@ -106,18 +106,18 @@ export async function getPackageStatusWithBreaches(req, res) {
         status: shipment.shipment_status,
         shipment_date: shipment.shipment_date,
         segments: shipmentResult.rows
-          .filter(row => row.segment_id !== null)
-          .map(row => ({
+          .filter((row) => row.segment_id !== null)
+          .map((row) => ({
             segment_id: row.segment_id,
             from_location: {
               name: row.from_location,
               state: row.from_state,
-              country: row.from_country
+              country: row.from_country,
             },
             to_location: {
               name: row.to_location,
               state: row.to_state,
-              country: row.to_country
+              country: row.to_country,
             },
             status: row.segment_status,
             carrier: row.carrier,
@@ -125,8 +125,8 @@ export async function getPackageStatusWithBreaches(req, res) {
             estimated_arrival_date: row.estimated_arrival_date,
             segment_order: row.segment_order,
             start_timestamp: row.start_timestamp,
-            end_timestamp: row.end_timestamp
-          }))
+            end_timestamp: row.end_timestamp,
+          })),
       });
     }
 
@@ -136,16 +136,18 @@ export async function getPackageStatusWithBreaches(req, res) {
       byType: {},
       bySeverity: {},
       resolved: 0,
-      active: 0
+      active: 0,
     };
 
-    breachResult.rows.forEach(breach => {
+    breachResult.rows.forEach((breach) => {
       // Count by type
-      breachStats.byType[breach.breach_type] = (breachStats.byType[breach.breach_type] || 0) + 1;
-      
+      breachStats.byType[breach.breach_type] =
+        (breachStats.byType[breach.breach_type] || 0) + 1;
+
       // Count by severity
-      breachStats.bySeverity[breach.severity] = (breachStats.bySeverity[breach.severity] || 0) + 1;
-      
+      breachStats.bySeverity[breach.severity] =
+        (breachStats.bySeverity[breach.severity] || 0) + 1;
+
       // Count resolved vs active
       if (breach.resolved_at) {
         breachStats.resolved++;
@@ -167,14 +169,14 @@ export async function getPackageStatusWithBreaches(req, res) {
             type: packageData.product_type,
             temperature_requirements: {
               min: packageData.temperature_min_requirement,
-              max: packageData.temperature_max_requirement
-            }
-          }
+              max: packageData.temperature_max_requirement,
+            },
+          },
         },
         shipment_chain: shipmentChain,
         breaches: {
           statistics: breachStats,
-          records: breachResult.rows.map(breach => ({
+          records: breachResult.rows.map((breach) => ({
             breach_uuid: breach.breach_uuid,
             breach_type: breach.breach_type,
             severity: breach.severity,
@@ -184,28 +186,30 @@ export async function getPackageStatusWithBreaches(req, res) {
             detected_value: breach.detected_value,
             threshold: {
               min: breach.threshold_min,
-              max: breach.threshold_max
+              max: breach.threshold_max,
             },
-            location: breach.latitude && breach.longitude ? {
-              latitude: breach.latitude,
-              longitude: breach.longitude
-            } : null,
+            location:
+              breach.latitude && breach.longitude
+                ? {
+                    latitude: breach.latitude,
+                    longitude: breach.longitude,
+                  }
+                : null,
             blockchain: {
               tx_hash: breach.tx_hash,
-              ipfs_cid: breach.pinata_cid
+              ipfs_cid: breach.pinata_cid,
             },
-            created_at: breach.created_at
-          }))
-        }
-      }
+            created_at: breach.created_at,
+          })),
+        },
+      },
     });
-
   } catch (error) {
     console.error("Error fetching package status with breaches:", error);
     return res.status(500).json({
       success: false,
       error: "Failed to fetch package status",
-      details: error.message
+      details: error.message,
     });
   } finally {
     client.release();
