@@ -61,7 +61,7 @@ app.listen(port, host, async () => {
     await runMigrations();
     console.log("✅ Database setup completed successfully");
     startAutomaticCleanup(24);
-    console.log("✅ Automatic token cleanup started");
+    // console.log("✅ Automatic token cleanup started");
   } catch (err) {
     console.error("❌ Error setting up database:", err);
   }

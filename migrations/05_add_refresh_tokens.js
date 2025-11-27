@@ -6,7 +6,7 @@
 export const migrate = async (pool) => {
   try {
     await pool.query("BEGIN");
-    console.log("Running migration: 06_add_refresh_tokens");
+    // console.log("Running migration: 06_add_refresh_tokens");
 
     // Create refresh_tokens table
     await pool.query(`
@@ -49,7 +49,7 @@ export const migrate = async (pool) => {
     );
 
     await pool.query("COMMIT");
-    console.log("✅ Refresh tokens migration completed successfully");
+    // console.log("✅ Refresh tokens migration completed successfully");
     return true;
   } catch (error) {
     await pool.query("ROLLBACK");

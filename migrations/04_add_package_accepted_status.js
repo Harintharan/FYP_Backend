@@ -1,7 +1,7 @@
 export const migrate = async (pool) => {
   try {
     await pool.query("BEGIN");
-    console.log("Adding PACKAGE_ACCEPTED status to package_status enum...");
+    // console.log("Adding PACKAGE_ACCEPTED status to package_status enum...");
 
     await pool.query(`
       DO $$
@@ -21,11 +21,11 @@ export const migrate = async (pool) => {
 
     await pool.query(
       "INSERT INTO migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING",
-      ['05_add_package_accepted_status']
+      ["05_add_package_accepted_status"]
     );
 
     await pool.query("COMMIT");
-    console.log("PACKAGE_ACCEPTED status added successfully.");
+    // console.log("PACKAGE_ACCEPTED status added successfully.");
     return true;
   } catch (error) {
     await pool.query("ROLLBACK");

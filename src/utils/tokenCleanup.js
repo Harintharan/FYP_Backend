@@ -6,9 +6,9 @@ import { deleteExpiredRefreshTokens } from "../models/authModel.js";
  */
 export async function cleanupExpiredTokens() {
   try {
-    console.log("Starting refresh token cleanup...");
+    // console.log("Starting refresh token cleanup...");
     const deletedCount = await deleteExpiredRefreshTokens();
-    console.log(`✓ Cleaned up ${deletedCount} expired/revoked tokens`);
+    // console.log(`✓ Cleaned up ${deletedCount} expired/revoked tokens`);
     return deletedCount;
   } catch (error) {
     console.error("Error during token cleanup:", error);
@@ -23,9 +23,9 @@ export async function cleanupExpiredTokens() {
 export function startAutomaticCleanup(intervalHours = 24) {
   const intervalMs = intervalHours * 60 * 60 * 1000;
 
-  console.log(
-    `Starting automatic token cleanup every ${intervalHours} hours...`
-  );
+  // console.log(
+  //   `Starting automatic token cleanup every ${intervalHours} hours...`
+  // );
 
   // Run immediately on startup
   cleanupExpiredTokens().catch(console.error);

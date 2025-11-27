@@ -1,7 +1,7 @@
 export const migrate = async (pool) => {
   try {
     await pool.query("BEGIN");
-    console.log("Adding shipment status column...");
+    // console.log("Adding shipment status column...");
 
     await pool.query(`
       DO $$
@@ -50,7 +50,7 @@ export const migrate = async (pool) => {
     );
 
     await pool.query("COMMIT");
-    console.log("Shipment status column added.");
+    // console.log("Shipment status column added.");
     return true;
   } catch (error) {
     await pool.query("ROLLBACK");

@@ -34,7 +34,7 @@ export async function runMigrations() {
       const migrationName = file.replace(".js", "");
 
       if (!completedMigrationNames.has(migrationName)) {
-        console.log(`📝 Running migration: ${migrationName}`);
+        // console.log(`📝 Running migration: ${migrationName}`);
         const moduleUrl = pathToFileURL(path.join(__dirname, file)).href;
         const migrationModule = await import(moduleUrl);
         const migrate = migrationModule.migrate;
@@ -47,12 +47,12 @@ export async function runMigrations() {
 
         const success = await migrate(pool);
         if (success) {
-          console.log(`✅ Migration ${migrationName} completed`);
+          // console.log(`✅ Migration ${migrationName} completed`);
         } else {
           throw new Error(`Migration ${migrationName} failed`);
         }
       } else {
-        console.log(`⏭️ Migration ${migrationName} already applied, skipping`);
+        // console.log(`⏭️ Migration ${migrationName} already applied, skipping`);
       }
     }
 
