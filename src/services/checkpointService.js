@@ -90,7 +90,10 @@ function normalizeRegType(value) {
   return VALID_REG_TYPES.has(upper) ? upper : null;
 }
 
-async function formatCheckpointWithIntegrity(row, { tolerateMissing = true } = {}) {
+async function formatCheckpointWithIntegrity(
+  row,
+  { tolerateMissing = true } = {}
+) {
   const integrity = await ensureCheckpointOnChainIntegrity(row, {
     tolerateMissing,
   });
@@ -131,10 +134,8 @@ export async function upsertCheckpointForRegistration({
   let normalizedOnChainHash = normalizedComputedHash;
 
   if (existing) {
-    const { txHash: chainTxHash, checkpointHash } = await updateCheckpointOnChain(
-      checkpointIdBytes16,
-      canonical
-    );
+    const { txHash: chainTxHash, checkpointHash } =
+      await updateCheckpointOnChain(checkpointIdBytes16, canonical);
     checkpointTxHash = chainTxHash ?? checkpointTxHash;
     normalizedOnChainHash = checkpointHash
       ? normalizeHash(checkpointHash)
@@ -538,5 +539,110 @@ export async function listApprovedCheckpointsByType({ regType }) {
   return {
     statusCode: 200,
     body: formatted,
+  };
+}
+
+/**
+ * Search checkpoints by ownerType, name, and/or userId
+ * @param {Object} params
+ * @param {string} [params.ownerType] - MANUFACTURER, SUPPLIER, WAREHOUSE, or CONSUMER
+ * @param {string} [params.name] - Search by checkpoint name (partial match)
+ * @param {string} [params.userId] - Search by owner user id
+ * @param {Object} params.dbClient - Database client
+ */
+export async function searchCheckpointsByFilters({
+  ownerType,
+  name,
+  userId,
+  dbClient,
+}) {
+  // Validate that at least ownerType or userId is provided
+  if (!ownerType && !userId) {
+    return {
+      statusCode: 400,
+      body: { error: "Either ownerType or userId query parameter is required" },
+    };
+  }
+
+  // Validate ownerType value if provided
+  if (ownerType && !VALID_REG_TYPES.has(ownerType.toUpperCase())) {
+    return {
+      statusCode: 400,
+      body: {
+        error: `Invalid ownerType. Must be one of: ${[...VALID_REG_TYPES].join(
+          ", "
+        )}`,
+      },
+    };
+  }
+
+  // Build dynamic WHERE clause for search filters
+  const conditions = [];
+  const params = [];
+  let paramIndex = 1;
+
+  // Add ownerType condition if provided
+  if (ownerType) {
+    conditions.push(`u.reg_type = $${paramIndex}`);
+    params.push(ownerType.toUpperCase());
+    paramIndex++;
+  }
+
+  // Build OR conditions for name and userId
+  const orConditions = [];
+  if (name) {
+    orConditions.push(`c.name ILIKE $${paramIndex}`);
+    params.push(`%${name}%`);
+    paramIndex++;
+  }
+  if (userId) {
+    orConditions.push(`c.owner_uuid = $${paramIndex}`);
+    params.push(userId);
+    paramIndex++;
+  }
+
+  // Add OR conditions if any exist
+  if (orConditions.length > 0) {
+    conditions.push(`(${orConditions.join(" OR ")})`);
+  }
+
+  const whereClause = conditions.length > 0 ? conditions.join(" AND ") : "1=1";
+
+  // Query checkpoints with owner information
+  const query = `
+    SELECT 
+      c.id,
+      c.name,
+      c.address,
+      c.state,
+      c.country,
+      c.owner_uuid,
+      u.reg_type,
+      u.status
+    FROM checkpoint_registry c
+    INNER JOIN users u ON c.owner_uuid = u.id
+    WHERE ${whereClause}
+    ORDER BY c.name ASC
+  `;
+
+  const result = await dbClient.query(query, params);
+
+  // Format response
+  const checkpoints = result.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    address: row.address,
+    state: row.state,
+    country: row.country,
+    owner_uuid: row.owner_uuid,
+    owner_info: {
+      reg_type: row.reg_type,
+      status: row.status,
+    },
+  }));
+
+  return {
+    statusCode: 200,
+    body: checkpoints,
   };
 }

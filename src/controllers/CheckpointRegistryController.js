@@ -9,7 +9,9 @@ import {
   listApprovedCheckpointsForUser,
   getApprovedCheckpointRecord,
   listApprovedCheckpointsByType,
+  searchCheckpointsByFilters,
 } from "../services/checkpointService.js";
+import db from "../db.js";
 import { respondWithZodError } from "../http/responders/validationErrorResponder.js";
 import { handleControllerError } from "../http/responders/controllerErrorResponder.js";
 
@@ -89,8 +91,7 @@ export async function listAllCheckpoints(req, res) {
       (typeof userId === "string" && userId.trim().length > 0) ||
         (typeof checkpointId === "string" && checkpointId.trim().length > 0)
     );
-    const hasTypeFilter =
-      typeof type === "string" && type.trim().length > 0;
+    const hasTypeFilter = typeof type === "string" && type.trim().length > 0;
 
     let serviceResponse;
     if (hasIdFilters) {
@@ -139,5 +140,33 @@ export async function getCheckpointByCheckpointId(req, res) {
       logMessage: "Error fetching checkpoint for checkpointId param",
       fallbackMessage: "Unable to fetch checkpoint",
     });
+  }
+}
+
+/**
+ * Search checkpoints by ownerType, name, and/or userId
+ * Query params:
+ *  - ownerType: MANUFACTURER, SUPPLIER, WAREHOUSE, or CONSUMER (optional if userId is provided)
+ *  - name: search by checkpoint name (optional)
+ *  - userId: search by owner user id (optional)
+ */
+export async function searchCheckpoints(req, res) {
+  const client = await db.connect();
+  try {
+    const { ownerType, name, userId } = req.query;
+    const { statusCode, body } = await searchCheckpointsByFilters({
+      ownerType,
+      name,
+      userId,
+      dbClient: client,
+    });
+    return res.status(statusCode).json(body);
+  } catch (err) {
+    return handleControllerError(res, err, {
+      logMessage: "Error searching checkpoints",
+      fallbackMessage: "Unable to search checkpoints",
+    });
+  } finally {
+    client.release();
   }
 }

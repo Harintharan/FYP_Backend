@@ -8,8 +8,8 @@ import {
   listAllCheckpoints,
   listCheckpointsByUserId,
   getCheckpointByCheckpointId,
+  searchCheckpoints,
 } from "../controllers/CheckpointRegistryController.js";
-import { getCheckpointsByOwnerType } from "../controllers/checkpointsByOwnerTypeController.js";
 
 const router = Router();
 
@@ -35,6 +35,6 @@ router.get(
   listCheckpointsForOwner
 );
 router.get("/checkpoints/:id", requireAuth, getCheckpoint);
-router.get("/checkpoints", requireAuth, getCheckpointsByOwnerType);
+router.get("/checkpoints", requireAuth, searchCheckpoints);
 
 export default router;
