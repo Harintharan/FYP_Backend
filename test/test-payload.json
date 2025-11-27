@@ -1,0 +1,143 @@
+{
+    "packageId": "30c8995e-b8e9-40ef-9908-f38222d4cd5d",
+    "macAddress": "AC:DE:48:00:11:22",
+    "ipAddress": "192.168.1.100",
+    "requestSendTimeStamp": "2025-11-26T16:45:42.123456Z",
+    "sensorData": [
+        {
+            "sensorType": "GPS",
+            "data": "6.080250,80.193450",
+            "timestamp": 1732647942
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "5.0",
+            "timestamp": 1732647943
+        },
+        {
+            "sensorType": "Door",
+            "data": "Closed",
+            "timestamp": 1732647944
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "9.0",
+            "timestamp": 1732647954
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "10.0",
+            "timestamp": 1732647964
+        },
+        {
+            "sensorType": "GPS",
+            "data": "6.080260,80.193460",
+            "timestamp": 1732647979
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "11.0",
+            "timestamp": 1732647994
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "12.0",
+            "timestamp": 1732648009
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "12.5",
+            "timestamp": 1732648034
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "12.0",
+            "timestamp": 1732648074
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "7.0",
+            "timestamp": 1732648075
+        },
+        {
+            "sensorType": "Door",
+            "data": "Open",
+            "timestamp": 1732648080
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "13.0",
+            "timestamp": 1732648150
+        },
+        {
+            "sensorType": "GPS",
+            "data": "6.080280,80.193470",
+            "timestamp": 1732648160
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "14.0",
+            "timestamp": 1732648165
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "6.5",
+            "timestamp": 1732648175
+        },
+        {
+            "sensorType": "GPS",
+            "data": "6.080281,80.193471",
+            "timestamp": 1732648180
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "1.0",
+            "timestamp": 1732648190
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "0.5",
+            "timestamp": 1732648195
+        },
+        {
+            "sensorType": "GPS",
+            "data": "6.080290,80.193481",
+            "timestamp": 1732648210
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "0.0",
+            "timestamp": 1732648221
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "0.0",
+            "timestamp": 1732648282
+        },
+        {
+            "sensorType": "Humidity",
+            "data": "45",
+            "timestamp": 1732648283
+        },
+        {
+            "sensorType": "Door",
+            "data": "Closed",
+            "timestamp": 1732648290
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "2.0",
+            "timestamp": 1732648295
+        },
+        {
+            "sensorType": "Temperature",
+            "data": "0.0",
+            "timestamp": 1732648305
+        },
+        {
+            "sensorType": "GPS",
+            "data": "6.080295,80.193485",
+            "timestamp": 1732648310
+        }
+    ]
+}

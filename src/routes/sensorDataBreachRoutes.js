@@ -1,15 +1,2 @@
-import { Router } from "express";
-import {
-  createSensorDataBreach,
-  listBreachesBySensorData,
-  getSensorDataBreachEntry,
-} from "../controllers/sensorDataBreachController.js";
-import { requireAuth } from "../middleware/roles.js";
-
-const router = Router();
-
-router.post("/", requireAuth, createSensorDataBreach);
-router.get("/sensor-data/:sensorDataId", requireAuth, listBreachesBySensorData);
-router.get("/:id", requireAuth, getSensorDataBreachEntry);
-
-export default router;
+// Removed. This route handled legacy sensor_data_breach endpoints.
+// The sensor_data and sensor_data_breach tables and associated APIs have been removed.

@@ -8,8 +8,8 @@ const CONTRACTS = [
   "CheckpointRegistry",
   "ShipmentRegistry",
   "ShipmentSegmentRegistry",
-  "SensorDataRegistry",
-  "SensorDataBreachRegistry",
+  "TelemetryMessageRegistry",
+  "ConditionBreachRegistry",
 ];
 
 const ENV_OUTPUT_ORDER = [
@@ -20,8 +20,8 @@ const ENV_OUTPUT_ORDER = [
   ["CheckpointRegistry", "CONTRACT_ADDRESS_CHECKPOINT"],
   ["ShipmentRegistry", "CONTRACT_ADDRESS_SHIPMENT"],
   ["ShipmentSegmentRegistry", "CONTRACT_ADDRESS_SHIPMENT_SEGMENT"],
-  ["SensorDataRegistry", "CONTRACT_ADDRESS_SENSOR_DATA"],
-  ["SensorDataBreachRegistry", "CONTRACT_ADDRESS_SENSOR_DATA_BREACH"],
+  ["TelemetryMessageRegistry", "CONTRACT_ADDRESS_TELEMETRY_MESSAGE"],
+  ["ConditionBreachRegistry", "CONTRACT_ADDRESS_CONDITION_BREACH"],
 ];
 
 async function deployContract(name) {

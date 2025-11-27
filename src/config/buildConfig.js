@@ -11,8 +11,9 @@ const REQUIRED_KEYS = [
   "CONTRACT_ADDRESS_SHIPMENT",
   "CONTRACT_ADDRESS_PRODUCT",
   "CONTRACT_ADDRESS_PACKAGE",
-  "CONTRACT_ADDRESS_SENSOR_DATA",
-  "CONTRACT_ADDRESS_SENSOR_DATA_BREACH",
+  // Sensor data contracts deprecated; legacy registry removed
+  "CONTRACT_ADDRESS_TELEMETRY_MESSAGE",
+  "CONTRACT_ADDRESS_CONDITION_BREACH",
 ];
 
 const SUPPORTED_KEYS = [
@@ -257,17 +258,18 @@ export function buildConfig(env) {
       ADDRESS_40_REGEX,
       "CONTRACT_ADDRESS_PACKAGE must be a valid 0x-prefixed address"
     ),
-    sensorDataRegistry: assertHex(
-      baseEnvVars.CONTRACT_ADDRESS_SENSOR_DATA,
-      "CONTRACT_ADDRESS_SENSOR_DATA",
+    // sensorDataRegistry and sensorDataBreachRegistry removed
+    telemetryMessageRegistry: assertHex(
+      baseEnvVars.CONTRACT_ADDRESS_TELEMETRY_MESSAGE,
+      "CONTRACT_ADDRESS_TELEMETRY_MESSAGE",
       ADDRESS_40_REGEX,
-      "CONTRACT_ADDRESS_SENSOR_DATA must be a valid 0x-prefixed address"
+      "CONTRACT_ADDRESS_TELEMETRY_MESSAGE must be a valid 0x-prefixed address"
     ),
-    sensorDataBreachRegistry: assertHex(
-      baseEnvVars.CONTRACT_ADDRESS_SENSOR_DATA_BREACH,
-      "CONTRACT_ADDRESS_SENSOR_DATA_BREACH",
+    conditionBreachRegistry: assertHex(
+      baseEnvVars.CONTRACT_ADDRESS_CONDITION_BREACH,
+      "CONTRACT_ADDRESS_CONDITION_BREACH",
       ADDRESS_40_REGEX,
-      "CONTRACT_ADDRESS_SENSOR_DATA_BREACH must be a valid 0x-prefixed address"
+      "CONTRACT_ADDRESS_CONDITION_BREACH must be a valid 0x-prefixed address"
     ),
   };
 

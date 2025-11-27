@@ -13,8 +13,10 @@ import sensorTypeRoutes from "./routes/SensorTypeRoutes.js";
 import checkpointRoutes from "./routes/checkpointRoutes.js";
 import shipmentRoutes from "./routes/shipmentRoutes.js";
 import shipmentSegmentRoutes from "./routes/shipmentSegmentRoutes.js";
-import sensorDataRoutes from "./routes/sensorDataRoutes.js";
-import sensorDataBreachRoutes from "./routes/sensorDataBreachRoutes.js";
+// sensorData and sensorDataBreach APIs removed - legacy tables were dropped
+import telemetryRoutes from "./routes/telemetryRoutes.js";
+import packageStatusRoutes from "./routes/packageStatusRoutes.js";
+// sensorData and sensorDataBreach APIs removed - legacy tables were dropped
 import { runMigrations } from "../migrations/index.js";
 import { startAutomaticCleanup } from "./utils/tokenCleanup.js";
 
@@ -37,8 +39,9 @@ app.use("/api/product-categories", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/package-registry", packageRegistryRoutes);
 app.use("/api/sensor-types", sensorTypeRoutes);
-app.use("/api/sensor-data", sensorDataRoutes);
-app.use("/api/sensor-data-breaches", sensorDataBreachRoutes);
+// Legacy sensor_data routes removed to simplify telemetry handling
+app.use("/api/telemetry", telemetryRoutes);
+app.use("/api/package-status", packageStatusRoutes);
 app.use("/api", checkpointRoutes);
 app.use("/api", shipmentRoutes);
 app.use("/api", shipmentSegmentRoutes);
