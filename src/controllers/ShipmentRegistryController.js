@@ -82,26 +82,33 @@ export async function getManufacturerShipmentProductSummary(req, res) {
       req.params.id ??
       null;
 
-    const { statusCode, body } =
-      await listManufacturerShipmentProductSummary({
-        manufacturerId,
-        status: req.query?.status ?? null,
-      });
+    const { statusCode, body } = await listManufacturerShipmentProductSummary({
+      manufacturerId,
+      status: req.query?.status ?? null,
+    });
 
     return res.status(statusCode).json(body);
   } catch (err) {
     return handleControllerError(res, err, {
-      logMessage:
-        "Error listing manufacturer shipment product summary",
-      fallbackMessage:
-        "Unable to list manufacturer shipment product summary",
+      logMessage: "Error listing manufacturer shipment product summary",
+      fallbackMessage: "Unable to list manufacturer shipment product summary",
     });
   }
 }
 
-export async function getAllShipments(_req, res) {
+export async function getAllShipments(req, res) {
   try {
-    const { statusCode, body } = await listShipments();
+    const manufacturerUUID = req.query?.manufacturerUUID;
+    const status = req.query?.status;
+    const cursor = req.query?.cursor;
+    const limit = req.query?.limit ? parseInt(req.query.limit, 10) : undefined;
+
+    const { statusCode, body } = await listShipments({
+      manufacturerUUID,
+      status,
+      cursor,
+      limit,
+    });
     return res.status(statusCode).json(body);
   } catch (err) {
     return handleControllerError(res, err, {

@@ -55,7 +55,7 @@ const REQUIRED_CHECKPOINT_FIELDS = Object.freeze([
 
 function buildPackageMissingError(packageId) {
   return shipmentValidationError(
-    `Package ${packageId} not found for shipment allocation`,
+    `Package ${packageId} not found for shipment allocation`
   );
 }
 
@@ -73,10 +73,7 @@ function normalizeShipmentResponse(payload) {
 
   const normalizedItems = Array.isArray(payload.shipmentItems)
     ? payload.shipmentItems.map((item) => {
-        const packageId =
-          item?.package_uuid ??
-          item?.packageUUID ??
-          null;
+        const packageId = item?.package_uuid ?? item?.packageUUID ?? null;
         const quantityValue =
           item && Object.prototype.hasOwnProperty.call(item, "quantity")
             ? item.quantity
@@ -94,11 +91,11 @@ function normalizeShipmentResponse(payload) {
     consumerUUID: consumerValue,
     destinationPartyUUID: consumerValue,
     status:
-      (typeof payload.status === "string"
+      typeof payload.status === "string"
         ? payload.status.toUpperCase()
         : typeof payload.shipmentStatus === "string"
-          ? payload.shipmentStatus.toUpperCase()
-          : "PENDING"),
+        ? payload.shipmentStatus.toUpperCase()
+        : "PENDING",
     shipmentItems: normalizedItems,
   };
 }
@@ -115,8 +112,7 @@ function toNullableTrimmed(value) {
 }
 
 function normalizeStatusValue(value) {
-  const trimmed =
-    typeof value === "string" ? value.trim() : null;
+  const trimmed = typeof value === "string" ? value.trim() : null;
   return trimmed && trimmed.length > 0 ? trimmed.toUpperCase() : null;
 }
 
@@ -155,24 +151,20 @@ function buildCanonicalCheckpointsFromSegments(segments) {
 async function assertCheckpointExists(checkpointId) {
   const { rows } = await query(
     `SELECT 1 FROM checkpoint_registry WHERE id = $1`,
-    [checkpointId],
+    [checkpointId]
   );
   return rows.length > 0;
 }
 
 function normalizeQuantity(rawQuantity, index) {
-  if (
-    rawQuantity === undefined ||
-    rawQuantity === null ||
-    rawQuantity === ""
-  ) {
+  if (rawQuantity === undefined || rawQuantity === null || rawQuantity === "") {
     return null;
   }
 
   const parsed = Number(rawQuantity);
   if (!Number.isFinite(parsed) || parsed < 0) {
     throw shipmentValidationError(
-      `shipmentItems[${index}].quantity must be a non-negative number`,
+      `shipmentItems[${index}].quantity must be a non-negative number`
     );
   }
 
@@ -182,7 +174,7 @@ function normalizeQuantity(rawQuantity, index) {
 async function normalizeShipmentItemsInput(
   shipmentItems,
   manufacturerUUID,
-  currentShipmentId = null,
+  currentShipmentId = null
 ) {
   if (!Array.isArray(shipmentItems)) {
     return [];
@@ -200,7 +192,7 @@ async function normalizeShipmentItemsInput(
 
     if (!packageIdRaw || typeof packageIdRaw !== "string") {
       throw shipmentValidationError(
-        `shipmentItems[${index}].packageUUID is required`,
+        `shipmentItems[${index}].packageUUID is required`
       );
     }
 
@@ -208,18 +200,17 @@ async function normalizeShipmentItemsInput(
     const product = await findPackageById(packageId);
     if (!product) {
       throw shipmentValidationError(
-        `shipmentItems[${index}].packageUUID does not exist`,
+        `shipmentItems[${index}].packageUUID does not exist`
       );
     }
 
     if (
       typeof manufacturerUUID === "string" &&
       product.manufacturer_uuid &&
-      product.manufacturer_uuid.toLowerCase() !==
-        manufacturerUUID.toLowerCase()
+      product.manufacturer_uuid.toLowerCase() !== manufacturerUUID.toLowerCase()
     ) {
       throw shipmentValidationError(
-        `shipmentItems[${index}].packageUUID belongs to a different manufacturer`,
+        `shipmentItems[${index}].packageUUID belongs to a different manufacturer`
       );
     }
 
@@ -229,7 +220,7 @@ async function normalizeShipmentItemsInput(
         product.shipment_id.toLowerCase() !== currentShipmentId.toLowerCase())
     ) {
       throw shipmentConflictError(
-        `shipmentItems[${index}].packageUUID is already assigned to another shipment`,
+        `shipmentItems[${index}].packageUUID is already assigned to another shipment`
       );
     }
 
@@ -239,9 +230,12 @@ async function normalizeShipmentItemsInput(
       product.shipment_id &&
       product.shipment_id.toLowerCase() === currentShipmentId.toLowerCase();
 
-    if (!isSameShipment && currentStatus !== PACKAGE_STATUS_READY_FOR_SHIPMENT) {
+    if (
+      !isSameShipment &&
+      currentStatus !== PACKAGE_STATUS_READY_FOR_SHIPMENT
+    ) {
       throw shipmentConflictError(
-        `shipmentItems[${index}].packageUUID must be in status ${PACKAGE_STATUS_READY_FOR_SHIPMENT}`,
+        `shipmentItems[${index}].packageUUID must be in status ${PACKAGE_STATUS_READY_FOR_SHIPMENT}`
       );
     }
 
@@ -278,12 +272,11 @@ function requireShipmentEndpoints(payload) {
     payload?.destinationPartyUUID ??
     payload?.destination_party_uuid ??
     null;
-  const statusCandidate =
-    payload?.status ?? payload?.shipmentStatus ?? null;
+  const statusCandidate = payload?.status ?? payload?.shipmentStatus ?? null;
 
   if (!manufacturerUUID || !consumerUUID) {
     throw shipmentValidationError(
-      "manufacturerUUID and consumerUUID are required",
+      "manufacturerUUID and consumerUUID are required"
     );
   }
 
@@ -303,26 +296,26 @@ async function validateCheckpoints(checkpoints) {
     for (const field of REQUIRED_CHECKPOINT_FIELDS) {
       if (!checkpoint[field]) {
         throw shipmentValidationError(
-          `checkpoints[${index}] missing required field: ${field}`,
+          `checkpoints[${index}] missing required field: ${field}`
         );
       }
     }
 
     const startExists = await assertCheckpointExists(
-      checkpoint.start_checkpoint_id,
+      checkpoint.start_checkpoint_id
     );
     if (!startExists) {
       throw shipmentValidationError(
-        `checkpoints[${index}].start_checkpoint_id does not exist`,
+        `checkpoints[${index}].start_checkpoint_id does not exist`
       );
     }
 
     const endExists = await assertCheckpointExists(
-      checkpoint.end_checkpoint_id,
+      checkpoint.end_checkpoint_id
     );
     if (!endExists) {
       throw shipmentValidationError(
-        `checkpoints[${index}].end_checkpoint_id does not exist`,
+        `checkpoints[${index}].end_checkpoint_id does not exist`
       );
     }
   }
@@ -376,9 +369,7 @@ export async function registerShipment({ payload, wallet }) {
       manufacturerUUID,
       consumerUUID,
       status: statusCandidate,
-    } = requireShipmentEndpoints(
-      payload ?? {},
-    );
+    } = requireShipmentEndpoints(payload ?? {});
 
     const statusRaw =
       typeof statusCandidate === "string" && statusCandidate.trim()
@@ -389,9 +380,7 @@ export async function registerShipment({ payload, wallet }) {
       ? payload.shipmentItems
       : [];
     if (shipmentItems.length === 0) {
-      throw shipmentValidationError(
-        "At least one shipment item is required",
-      );
+      throw shipmentValidationError("At least one shipment item is required");
     }
 
     const checkpoints = Array.isArray(payload?.checkpoints)
@@ -402,7 +391,7 @@ export async function registerShipment({ payload, wallet }) {
 
     const normalizedItems = await normalizeShipmentItemsInput(
       shipmentItems,
-      manufacturerUUID,
+      manufacturerUUID
     );
 
     const shipmentId = randomUUID();
@@ -418,12 +407,12 @@ export async function registerShipment({ payload, wallet }) {
       {
         shipmentItems: normalizedItems,
         checkpoints,
-      },
+      }
     );
 
     const { txHash, shipmentHash } = await registerShipmentOnChain(
       uuidToBytes16Hex(shipmentId),
-      payloadHash,
+      payloadHash
     );
 
     const normalizedOnChain = normalizeHash(shipmentHash);
@@ -463,7 +452,7 @@ export async function registerShipment({ payload, wallet }) {
         {
           operation: "create",
           identifier: shipmentId,
-        },
+        }
       );
     } catch (backupErr) {
       console.error("⚠️ Failed to back up shipment to Pinata:", backupErr);
@@ -478,7 +467,7 @@ export async function registerShipment({ payload, wallet }) {
             pinata_cid: pinataBackup?.IpfsHash ?? null,
             pinata_pinned_at: pinataBackup?.Timestamp ?? null,
           },
-          client,
+          client
         );
 
         for (const item of normalizedItems) {
@@ -501,8 +490,8 @@ export async function registerShipment({ payload, wallet }) {
             typeof checkpoint.segment_order === "number"
               ? checkpoint.segment_order
               : typeof checkpoint.segmentOrder === "number"
-                ? checkpoint.segmentOrder
-                : idx + 1;
+              ? checkpoint.segmentOrder
+              : idx + 1;
 
           await createShipmentSegment({
             shipmentId,
@@ -523,7 +512,7 @@ export async function registerShipment({ payload, wallet }) {
     } catch (transactionErr) {
       console.error(
         "❌ Failed to persist shipment within transaction:",
-        transactionErr,
+        transactionErr
       );
       throw transactionErr;
     }
@@ -552,8 +541,8 @@ export async function registerShipment({ payload, wallet }) {
         {
           IpfsHash: pinataBackup?.IpfsHash ?? null,
           Timestamp: pinataBackup?.Timestamp ?? null,
-        },
-      ),
+        }
+      )
     );
 
     responsePayload.pinataCid =
@@ -582,76 +571,11 @@ export async function getShipmentDetails({ id }) {
       throw shipmentNotFound();
     }
 
-    const formattedShipment = formatShipmentRecord(shipment);
-    const shipmentSegments = await listShipmentSegmentsForShipment(id);
-    const checkpoints = buildCheckpointsFromSegments(shipmentSegments);
-    const canonicalCheckpoints =
-      buildCanonicalCheckpointsFromSegments(shipmentSegments);
-    const assignedProducts = await listPackagesByShipmentUuid(id);
-    const shipmentItems = mapAssignedProductsToShipmentItems(assignedProducts);
-
-    let dbHash = null;
-    let blockchainHash = null;
-    let integrity = "not_on_chain";
-
-    try {
-      const integrityResult = await ensureShipmentOnChainIntegrity({
-        shipmentRecord: shipment,
-        checkpoints: canonicalCheckpoints,
-        shipmentItems,
-      });
-      dbHash = integrityResult.hash;
-      blockchainHash = integrityResult.hash;
-      integrity = "valid";
-    } catch (integrityErr) {
-      const details = integrityErr?.details ?? {};
-
-      if (details.computed) {
-        dbHash = normalizeHash(details.computed);
-      } else {
-        try {
-          const prepared = prepareShipmentPersistence(
-            id,
-            {
-              manufacturerUUID: formattedShipment.manufacturerUUID,
-              consumerUUID: formattedShipment.consumerUUID,
-              status: formattedShipment.status ?? "PENDING",
-            },
-            {
-              shipmentItems,
-              checkpoints: canonicalCheckpoints,
-            },
-          );
-          dbHash = normalizeHash(prepared.payloadHash);
-        } catch (computeErr) {
-          console.warn(
-            "⚠️ Failed to recompute shipment hash locally:",
-            computeErr.message,
-          );
-        }
-      }
-
-      if (details.onChain) {
-        blockchainHash = normalizeHash(details.onChain);
-        integrity = "tampered";
-      } else if (integrityErr.code === ShipmentErrorCodes.HASH_MISMATCH) {
-        integrity = "tampered";
-      }
-    }
-
-    const payload = normalizeShipmentResponse({
-      ...formattedShipment,
-      checkpoints,
-      shipmentItems,
-      shipmentSegments,
-      dbHash,
-      blockchainHash,
-      integrity,
-    });
-
+    // The enhanced getShipmentById now returns segments and packages directly
+    // Just return the shipment data without extra transformations
     return {
       statusCode: 200,
-      body: normalizePinataFields(payload),
+      body: shipment,
     };
   } catch (error) {
     throw toHttpError(error);
@@ -673,9 +597,7 @@ export async function updateShipment({ id, payload, wallet }) {
       manufacturerUUID,
       consumerUUID,
       status: statusCandidate,
-    } = requireShipmentEndpoints(
-      payload ?? {},
-    );
+    } = requireShipmentEndpoints(payload ?? {});
 
     const statusRaw =
       typeof statusCandidate === "string" && statusCandidate.trim()
@@ -686,9 +608,7 @@ export async function updateShipment({ id, payload, wallet }) {
       ? payload.shipmentItems
       : [];
     if (shipmentItems.length === 0) {
-      throw shipmentValidationError(
-        "At least one shipment item is required",
-      );
+      throw shipmentValidationError("At least one shipment item is required");
     }
 
     const checkpoints = Array.isArray(payload?.checkpoints)
@@ -700,7 +620,7 @@ export async function updateShipment({ id, payload, wallet }) {
     const normalizedItems = await normalizeShipmentItemsInput(
       shipmentItems,
       manufacturerUUID,
-      id,
+      id
     );
 
     if (
@@ -709,7 +629,7 @@ export async function updateShipment({ id, payload, wallet }) {
         manufacturerUUID.toLowerCase()
     ) {
       throw shipmentValidationError(
-        "manufacturerUUID cannot be changed for an existing shipment",
+        "manufacturerUUID cannot be changed for an existing shipment"
       );
     }
 
@@ -722,12 +642,12 @@ export async function updateShipment({ id, payload, wallet }) {
     } = prepareShipmentPersistence(
       id,
       { manufacturerUUID, consumerUUID, status: statusRaw },
-      { shipmentItems: normalizedItems, checkpoints },
+      { shipmentItems: normalizedItems, checkpoints }
     );
 
     const { txHash, shipmentHash } = await updateShipmentOnChain(
       uuidToBytes16Hex(id),
-      payloadHash,
+      payloadHash
     );
 
     const normalizedOnChain = shipmentHash
@@ -762,12 +682,12 @@ export async function updateShipment({ id, payload, wallet }) {
         {
           operation: "update",
           identifier: id,
-        },
+        }
       );
     } catch (backupErr) {
       console.error(
         "⚠️ Failed to back up shipment update to Pinata:",
-        backupErr,
+        backupErr
       );
     }
 
@@ -788,10 +708,13 @@ export async function updateShipment({ id, payload, wallet }) {
               ? new Date(pinataBackup.Timestamp)
               : existing.pinata_pinned_at ?? null,
           },
-          client,
+          client
         );
 
-        const existingAssignments = await listPackagesByShipmentUuid(id, client);
+        const existingAssignments = await listPackagesByShipmentUuid(
+          id,
+          client
+        );
         for (const existingPackage of existingAssignments) {
           await syncPackageShipmentState({
             packageId: existingPackage.id,
@@ -823,8 +746,8 @@ export async function updateShipment({ id, payload, wallet }) {
             typeof checkpoint.segment_order === "number"
               ? checkpoint.segment_order
               : typeof checkpoint.segmentOrder === "number"
-                ? checkpoint.segmentOrder
-                : idx + 1;
+              ? checkpoint.segmentOrder
+              : idx + 1;
 
           await createShipmentSegment({
             shipmentId: id,
@@ -845,7 +768,7 @@ export async function updateShipment({ id, payload, wallet }) {
     } catch (transactionErr) {
       console.error(
         "❌ Failed to persist shipment update within transaction:",
-        transactionErr,
+        transactionErr
       );
       throw transactionErr;
     }
@@ -874,8 +797,8 @@ export async function updateShipment({ id, payload, wallet }) {
         {
           IpfsHash: pinataBackup?.IpfsHash ?? null,
           Timestamp: pinataBackup?.Timestamp ?? null,
-        },
-      ),
+        }
+      )
     );
 
     responsePayload.pinataCid =
@@ -893,7 +816,12 @@ export async function updateShipment({ id, payload, wallet }) {
   }
 }
 
-export async function listManufacturerShipments({ manufacturerId, status }) {
+export async function listManufacturerShipments({
+  manufacturerId,
+  status,
+  cursor,
+  limit = 20,
+}) {
   const parsed = ManufacturerShipmentsQuery.safeParse({
     manufacturerId,
     status,
@@ -905,82 +833,64 @@ export async function listManufacturerShipments({ manufacturerId, status }) {
     throw shipmentValidationError(message);
   }
 
-  const {
-    manufacturerId: normalizedManufacturerId,
-    status: statusValue,
-  } = parsed.data;
+  const { manufacturerId: normalizedManufacturerId, status: statusValue } =
+    parsed.data;
   const statusFilter =
     typeof statusValue === "string" && statusValue.length > 0
       ? statusValue
       : null;
+
   const shipments = await listShipmentsByManufacturerId(
     normalizedManufacturerId,
-    { status: statusFilter },
+    { status: statusFilter, cursor, limit }
   );
 
-  const result = await Promise.all(
-    shipments.map(async (shipment) => {
-      const shipmentId =
-        shipment.id ??
-        shipment.shipment_id ??
-        shipment.shipmentId ??
-        null;
+  // Check if we have more results (we fetched limit + 1)
+  const hasMore = shipments.length > limit;
+  const actualShipments = hasMore ? shipments.slice(0, limit) : shipments;
 
-      const segments = shipmentId
-        ? await listShipmentSegmentsRawByShipmentId(shipmentId)
-        : [];
+  const result = actualShipments.map((shipment) => {
+    const consumerId =
+      shipment.consumer_uuid ??
+      shipment.consumerUUID ??
+      shipment.destination_party_uuid ??
+      shipment.destinationPartyUUID ??
+      null;
 
-      const mappedSegments = segments.map((segment) => ({
-        segmentId:
-          segment.id ??
-          segment.segment_id ??
-          segment.segmentId ??
-          null,
-        status: normalizeStatusValue(segment.status),
-        startCheckpoint: {
-          id: segment.start_checkpoint_id ?? null,
-          state: toNullableTrimmed(segment.start_state ?? null),
-          country: toNullableTrimmed(segment.start_country ?? null),
-        },
-        endCheckpoint: {
-          id: segment.end_checkpoint_id ?? null,
-          state: toNullableTrimmed(segment.end_state ?? null),
-          country: toNullableTrimmed(segment.end_country ?? null),
-        },
-      }));
+    const consumerName =
+      shipment.consumer_company_name ?? shipment.consumer_legal_name ?? null;
 
-      const consumerId =
-        shipment.consumer_uuid ??
-        shipment.consumerUUID ??
-        shipment.destination_party_uuid ??
-        shipment.destinationPartyUUID ??
-        null;
+    const segments = Array.isArray(shipment.segments) ? shipment.segments : [];
 
-      return {
-        shipmentId,
-        manufacturerId:
-          shipment.manufacturer_uuid ??
-          shipment.manufacturerUUID ??
-          normalizedManufacturerId,
-        status: normalizeStatusValue(
-          shipment.status ??
-            shipment.shipment_status ??
-            shipment.shipmentStatus,
-        ),
-        consumer: {
-          id: consumerId,
-          legalName: toNullableTrimmed(
-            shipment.consumer_legal_name ?? null,
-          ),
-        },
-        segments: mappedSegments,
-      };
-    }),
-  );
+    const shipmentItems = Array.isArray(shipment.shipment_items)
+      ? shipment.shipment_items
+      : [];
+
+    return {
+      id: shipment.id,
+      destinationPartyUUID: consumerId,
+      destinationPartyName: consumerName,
+      status: normalizeStatusValue(shipment.status),
+      createdAt: shipment.created_at,
+      segments,
+      totalPackages: shipmentItems.length,
+      totalSegments: segments.length,
+    };
+  });
+
+  // Get next cursor from last item
+  const nextCursor =
+    hasMore && actualShipments.length > 0
+      ? actualShipments[actualShipments.length - 1].created_at
+      : null;
 
   return {
     statusCode: 200,
-    body: result,
+    body: {
+      shipments: result,
+      cursor: nextCursor,
+      hasMore,
+    },
   };
 }
 
@@ -1000,27 +910,22 @@ export async function listManufacturerShipmentProductSummary({
     throw shipmentValidationError(message);
   }
 
-  const {
-    manufacturerId: normalizedManufacturerId,
-    status: statusValue,
-  } = parsed.data;
+  const { manufacturerId: normalizedManufacturerId, status: statusValue } =
+    parsed.data;
 
-  const rows = await summarizeManufacturerPackagesForShipments(
-    {
-      manufacturerId: normalizedManufacturerId,
-      status: statusValue ?? null,
-    },
-  );
+  const rows = await summarizeManufacturerPackagesForShipments({
+    manufacturerId: normalizedManufacturerId,
+    status: statusValue ?? null,
+  });
 
   const grouped = rows.reduce((acc, row) => {
     const category =
-      (typeof row.product_category_name === "string" &&
-        row.product_category_name.trim().length > 0)
+      typeof row.product_category_name === "string" &&
+      row.product_category_name.trim().length > 0
         ? row.product_category_name.trim()
         : "Uncategorized";
     const product =
-      (typeof row.product_name === "string" &&
-        row.product_name.trim().length > 0)
+      typeof row.product_name === "string" && row.product_name.trim().length > 0
         ? row.product_name.trim()
         : "Unknown Product";
     const quantity =
@@ -1044,21 +949,39 @@ export async function listManufacturerShipmentProductSummary({
   };
 }
 
-export async function listShipments() {
+export async function listShipments({
+  manufacturerUUID,
+  status,
+  cursor,
+  limit,
+} = {}) {
   try {
+    // If manufacturerUUID is provided, use the optimized manufacturer endpoint
+    if (
+      manufacturerUUID &&
+      typeof manufacturerUUID === "string" &&
+      manufacturerUUID.trim()
+    ) {
+      return await listManufacturerShipments({
+        manufacturerId: manufacturerUUID.trim(),
+        status,
+        cursor,
+        limit,
+      });
+    }
+
+    // Otherwise, return full shipment details
     const shipments = await getAllShipmentRecords();
     const result = await Promise.all(
       shipments.map(async (shipment) => {
         const shipmentId = shipment.id ?? shipment.shipment_id;
         const shipmentSegments = await listShipmentSegmentsForShipment(
-          shipmentId,
+          shipmentId
         );
         const checkpoints = buildCheckpointsFromSegments(shipmentSegments);
         const canonicalCheckpoints =
           buildCanonicalCheckpointsFromSegments(shipmentSegments);
-        const assignedProducts = await listPackagesByShipmentUuid(
-          shipmentId,
-        );
+        const assignedProducts = await listPackagesByShipmentUuid(shipmentId);
         const shipmentItems =
           mapAssignedProductsToShipmentItems(assignedProducts);
 
@@ -1101,7 +1024,7 @@ export async function listShipments() {
                 {
                   shipmentItems,
                   checkpoints: canonicalCheckpoints,
-                },
+                }
               );
               dbHash = normalizeHash(prepared.payloadHash);
             } catch {
@@ -1129,7 +1052,7 @@ export async function listShipments() {
         });
 
         return normalizePinataFields(payload);
-      }),
+      })
     );
 
     return {
