@@ -57,6 +57,15 @@ import {
   manufacturerForbidden,
 } from "../errors/packageErrors.js";
 import { SHIPMENT_SEGMENT_STATUS_VALUES } from "../domain/shipmentSegment.schema.js";
+import {
+  notifySegmentAccepted,
+  notifySegmentTakeover,
+  notifySegmentHandover,
+  notifySegmentDelivered,
+  notifyShipmentAccepted,
+  notifyShipmentInTransit,
+  notifyShipmentDelivered,
+} from "./notificationTriggers.js";
 
 const PINATA_ENTITY = "shipment_segment";
 const VALID_SEGMENT_STATUSES = new Set(SHIPMENT_SEGMENT_STATUS_VALUES);
@@ -183,6 +192,33 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
   const checkpoints = mapSegmentsToCheckpoints(segments);
 
   if (shipmentStatusChanged) {
+    // Get wallet addresses from database (already stored as wallet addresses)
+    const manufacturerWallet =
+      shipmentRecord.manufacturer_uuid ??
+      shipmentRecord.manufacturerUUID ??
+      null;
+    const consumerWallet =
+      shipmentRecord.consumer_uuid ??
+      shipmentRecord.destination_party_uuid ??
+      shipmentRecord.consumerUUID ??
+      shipmentRecord.destinationPartyUUID ??
+      null;
+
+    // Convert wallet addresses to UUIDs for validation/hashing
+    const { query } = await import("../db.js");
+    const manufacturerResult = await query(
+      `SELECT id FROM users WHERE public_key = $1`,
+      [manufacturerWallet]
+    );
+    const consumerResult = await query(
+      `SELECT id FROM users WHERE public_key = $1`,
+      [consumerWallet]
+    );
+
+    const manufacturerUUID =
+      manufacturerResult.rows[0]?.id || manufacturerWallet;
+    const consumerUUID = consumerResult.rows[0]?.id || consumerWallet;
+
     const {
       normalized,
       normalizedItems,
@@ -192,16 +228,8 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
     } = prepareShipmentPersistence(
       shipmentId,
       {
-        manufacturerUUID:
-          shipmentRecord.manufacturer_uuid ??
-          shipmentRecord.manufacturerUUID ??
-          null,
-        consumerUUID:
-          shipmentRecord.consumer_uuid ??
-          shipmentRecord.destination_party_uuid ??
-          shipmentRecord.consumerUUID ??
-          shipmentRecord.destinationPartyUUID ??
-          null,
+        manufacturerUUID,
+        consumerUUID,
         status: computedShipmentStatus,
       },
       {
@@ -233,8 +261,8 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
       entity: "shipment",
       record: {
         id: shipmentId,
-        manufacturerUUID: normalized.manufacturerUUID,
-        consumerUUID: normalized.consumerUUID,
+        manufacturerUUID: normalized.manufacturerUUID, // Use UUID for Pinata
+        consumerUUID: normalized.consumerUUID, // Use UUID for Pinata
         payloadCanonical: canonical,
         payloadHash,
         payload: {
@@ -247,14 +275,14 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
       walletAddress,
       operation: "update",
       identifier: shipmentId,
-      errorMessage: "?? Failed to back up shipment status update to Pinata:",
+      errorMessage: "⚠️ Failed to back up shipment status update to Pinata:",
     });
 
     const updatedShipmentRecord = await updateShipmentRecord(
       shipmentId,
       {
-        manufacturerUUID: normalized.manufacturerUUID,
-        consumerUUID: normalized.consumerUUID,
+        manufacturerUUID: manufacturerWallet, // Use wallet address for DB
+        consumerUUID: consumerWallet, // Use wallet address for DB
         status: normalized.status,
         shipment_hash: payloadHash,
         tx_hash: txHash,
@@ -266,6 +294,19 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
       },
       client
     );
+
+    // Send notification for shipment status change
+    const previousStatus = shipmentRecord.status?.toUpperCase();
+    const newStatus = computedShipmentStatus;
+    if (previousStatus !== newStatus) {
+      if (newStatus === "ACCEPTED") {
+        notifyShipmentAccepted(shipmentId).catch(console.error);
+      } else if (newStatus === "IN_TRANSIT") {
+        notifyShipmentInTransit(shipmentId).catch(console.error);
+      } else if (newStatus === "DELIVERED") {
+        notifyShipmentDelivered(shipmentId).catch(console.error);
+      }
+    }
 
     const formattedShipment = formatShipmentRecord(updatedShipmentRecord);
     const shipmentResponse = {
@@ -418,6 +459,15 @@ async function performSegmentStatusTransition({
     walletAddress,
     dbClient: client,
   });
+
+  // Send notification for segment status change
+  if (nextStatus === "ACCEPTED") {
+    notifySegmentAccepted(segmentId, supplierIdForUpdate).catch(console.error);
+  } else if (nextStatus === "IN_TRANSIT" && currentStatus !== "IN_TRANSIT") {
+    notifySegmentTakeover(segmentId, supplierIdForUpdate).catch(console.error);
+  } else if (nextStatus === "DELIVERED") {
+    notifySegmentDelivered(segmentId).catch(console.error);
+  }
 
   let shipmentUpdate = null;
   let packageUpdates = [];
@@ -870,7 +920,7 @@ export async function handoverShipmentSegment({
   }
 
   return runInTransaction(async (client) => {
-    return performSegmentStatusTransition({
+    const result = await performSegmentStatusTransition({
       segmentId,
       registration,
       walletAddress,
@@ -892,6 +942,11 @@ export async function handoverShipmentSegment({
         });
       },
     });
+
+    // Send handover notification
+    notifySegmentHandover(segmentId, registration.id).catch(console.error);
+
+    return result;
   });
 }
 

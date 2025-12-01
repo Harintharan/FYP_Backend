@@ -1,6 +1,7 @@
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
+import http from "http";
 import { host, port } from "./config.js";
 import authRoutes from "./routes/auth.js";
 import registrationRoutes from "./routes/registrations.js";
@@ -13,14 +14,17 @@ import sensorTypeRoutes from "./routes/SensorTypeRoutes.js";
 import checkpointRoutes from "./routes/checkpointRoutes.js";
 import shipmentRoutes from "./routes/shipmentRoutes.js";
 import shipmentSegmentRoutes from "./routes/shipmentSegmentRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 // sensorData and sensorDataBreach APIs removed - legacy tables were dropped
 import telemetryRoutes from "./routes/telemetryRoutes.js";
 import packageStatusRoutes from "./routes/packageStatusRoutes.js";
 // sensorData and sensorDataBreach APIs removed - legacy tables were dropped
 import { runMigrations } from "../migrations/index.js";
 import { startAutomaticCleanup } from "./utils/tokenCleanup.js";
+import { initializeWebSocketServer } from "./websocket/index.js";
 
 const app = express();
+const httpServer = http.createServer(app);
 
 app.use(helmet());
 app.use(cors());
@@ -45,18 +49,23 @@ app.use("/api/package-status", packageStatusRoutes);
 app.use("/api", checkpointRoutes);
 app.use("/api", shipmentRoutes);
 app.use("/api", shipmentSegmentRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error", err);
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, host, async () => {
+httpServer.listen(port, host, async () => {
   const networkHint =
     host === "0.0.0.0"
       ? " (share your machine's LAN IP so others on the network can connect)"
       : "";
   console.log(`Server listening on ${host}:${port}${networkHint}`);
+
+  // Initialize WebSocket server
+  initializeWebSocketServer(httpServer);
+
   try {
     await runMigrations();
     console.log("✅ Database setup completed successfully");

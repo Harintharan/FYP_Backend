@@ -7,6 +7,7 @@ import {
   getAllShipments as getAllShipmentRecords,
   listShipmentsByManufacturerId,
 } from "../models/ShipmentRegistryModel.js";
+import { notifyShipmentCreated } from "./notificationTriggers.js";
 import {
   findPackageById,
   listPackagesByShipmentUuid,
@@ -371,6 +372,30 @@ export async function registerShipment({ payload, wallet }) {
       status: statusCandidate,
     } = requireShipmentEndpoints(payload ?? {});
 
+    // Convert UUIDs to wallet addresses
+    const { rows: manufacturerRows } = await query(
+      `SELECT public_key FROM users WHERE id = $1`,
+      [manufacturerUUID]
+    );
+    const { rows: consumerRows } = await query(
+      `SELECT public_key FROM users WHERE id = $1`,
+      [consumerUUID]
+    );
+
+    if (!manufacturerRows[0]?.public_key) {
+      throw shipmentValidationError(
+        `Manufacturer with UUID ${manufacturerUUID} not found`
+      );
+    }
+    if (!consumerRows[0]?.public_key) {
+      throw shipmentValidationError(
+        `Consumer with UUID ${consumerUUID} not found`
+      );
+    }
+
+    const manufacturerWallet = manufacturerRows[0].public_key;
+    const consumerWallet = consumerRows[0].public_key;
+
     const statusRaw =
       typeof statusCandidate === "string" && statusCandidate.trim()
         ? statusCandidate
@@ -427,8 +452,8 @@ export async function registerShipment({ payload, wallet }) {
 
     const createPayload = {
       id: shipmentId,
-      manufacturerUUID: normalized.manufacturerUUID,
-      consumerUUID: normalized.consumerUUID,
+      manufacturerUUID: manufacturerWallet, // Use wallet address for DB
+      consumerUUID: consumerWallet, // Use wallet address for DB
       status: normalized.status,
       shipment_hash: payloadHash,
       tx_hash: txHash,
@@ -441,6 +466,8 @@ export async function registerShipment({ payload, wallet }) {
         "shipment",
         {
           ...createPayload,
+          manufacturerUUID: normalized.manufacturerUUID, // Use UUID for Pinata
+          consumerUUID: normalized.consumerUUID, // Use UUID for Pinata
           payloadCanonical: canonical,
           payloadHash,
           payload: {
@@ -550,6 +577,10 @@ export async function registerShipment({ payload, wallet }) {
     responsePayload.pinataTimestamp =
       formattedShipment.pinataPinnedAt ??
       (pinataBackup?.Timestamp ? new Date(pinataBackup.Timestamp) : null);
+
+    // Send notification to manufacturer and consumer
+    const creatorUserId = wallet?.registration?.id || null;
+    notifyShipmentCreated(shipmentId, creatorUserId).catch(console.error);
 
     return {
       statusCode: 201,
