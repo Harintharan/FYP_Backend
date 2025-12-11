@@ -52,25 +52,28 @@ function assertHex(value, key, regex, message) {
 }
 
 function resolveDatabaseConnection(baseEnvVars) {
+  // Prefer DATABASE_URL if provided (e.g., from Heroku Postgres)
   let connectionString = baseEnvVars.DATABASE_URL;
-  if (connectionString && connectionString.includes("${")) {
-    connectionString = connectionString.replace(/\$\{([^}]+)\}/g, (_, key) => {
-      const value = baseEnvVars[key];
-      if (!value || value.trim() === "") {
-        throw new Error(`DATABASE_URL references ${key}, but it is not set`);
-      }
-      const trimmed = value.trim();
-      if (key === "DB_USER" || key === "DB_PASSWORD") {
-        return encodeURIComponent(trimmed);
-      }
-      return trimmed;
-    });
-  }
-
+  
   if (connectionString && connectionString.trim() !== "") {
+    // Handle template variable substitution if present
+    if (connectionString.includes("${")) {
+      connectionString = connectionString.replace(/\$\{([^}]+)\}/g, (_, key) => {
+        const value = baseEnvVars[key];
+        if (!value || value.trim() === "") {
+          throw new Error(`DATABASE_URL references ${key}, but it is not set`);
+        }
+        const trimmed = value.trim();
+        if (key === "DB_USER" || key === "DB_PASSWORD") {
+          return encodeURIComponent(trimmed);
+        }
+        return trimmed;
+      });
+    }
     return connectionString;
   }
 
+  // Fallback: Build connection string from individual DB_* variables (local development only)
   const segments = [
     baseEnvVars.DB_USER,
     baseEnvVars.DB_PASSWORD,
@@ -82,9 +85,10 @@ function resolveDatabaseConnection(baseEnvVars) {
   const allPresent = segments.every(
     (segment) => segment && segment.trim() !== ""
   );
+  
   if (!allPresent) {
     throw new Error(
-      "DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME must be provided"
+      "DATABASE_URL must be provided (or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME for local development)"
     );
   }
 
