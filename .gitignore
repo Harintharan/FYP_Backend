@@ -44,7 +44,6 @@ coverage.json
 .prettierrc
 
 # Hardhat build products
-blockchain/artifacts/
 blockchain/cache/
 blockchain/typechain-types/
 blockchain/coverage/
