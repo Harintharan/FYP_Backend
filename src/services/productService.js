@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { ProductPayload, ProductUpdatePayload } from "../domain/product.schema.js";
+import {
+  ProductPayload,
+  ProductUpdatePayload,
+} from "../domain/product.schema.js";
 import {
   prepareProductPersistence,
   ensureProductOnChainIntegrity,
@@ -11,7 +14,7 @@ import {
   deleteProduct,
   findProductById,
   listProducts,
-} from "../models/ProductModel.js";
+} from "../models/productModel.js";
 import { findProductCategoryById } from "../models/ProductCategoryModel.js";
 import {
   registrationRequired,
@@ -217,24 +220,21 @@ export async function updateProductRecord({
     errorMessage: "⚠️ Failed to back up product update to Pinata:",
   });
 
-  await updateProduct(
-    id,
-    {
-      name: normalized.productName,
-      productCategoryId: normalized.productCategoryId,
-      manufacturerUuid: normalized.manufacturerUuid,
-      requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
-      requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
-      handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
-      productHash: payloadHash,
-      txHash,
-      updatedBy: registration.id,
-      pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-      pinataPinnedAt: pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : existing.pinata_pinned_at ?? null,
-    }
-  );
+  await updateProduct(id, {
+    name: normalized.productName,
+    productCategoryId: normalized.productCategoryId,
+    manufacturerUuid: normalized.manufacturerUuid,
+    requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
+    requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
+    handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
+    productHash: payloadHash,
+    txHash,
+    updatedBy: registration.id,
+    pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
+    pinataPinnedAt: pinataBackup?.Timestamp
+      ? new Date(pinataBackup.Timestamp)
+      : existing.pinata_pinned_at ?? null,
+  });
 
   const record = await findProductById(id);
   return {

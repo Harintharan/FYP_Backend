@@ -15,7 +15,7 @@ import {
   findBatchById,
   listBatchesByManufacturerUuid,
 } from "../models/batchModel.js";
-import { findProductById } from "../models/ProductModel.js";
+import { findProductById } from "../models/productModel.js";
 import { normalizeHash } from "../utils/hash.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { backupRecordSafely } from "./pinataBackupService.js";
@@ -226,8 +226,7 @@ export async function updateBatchDetails({
     }
     if (
       product.manufacturer_uuid &&
-      product.manufacturer_uuid.toLowerCase() !==
-        registration.id.toLowerCase()
+      product.manufacturer_uuid.toLowerCase() !== registration.id.toLowerCase()
     ) {
       throw batchErrors.manufacturerForbidden();
     }
@@ -283,19 +282,16 @@ export async function updateBatchDetails({
     productionStartTime: sanitizeOptionalTimestamp(
       normalized.productionStartTime
     ),
-    productionEndTime: sanitizeOptionalTimestamp(
-      normalized.productionEndTime
-    ),
+    productionEndTime: sanitizeOptionalTimestamp(normalized.productionEndTime),
     quantityProduced: normalized.quantityProduced,
     expiryDate: sanitizeOptionalString(normalized.expiryDate),
     batchHash: payloadHash,
     txHash,
     updatedBy: wallet?.walletAddress ?? null,
     pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-    pinataPinnedAt:
-      pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : existing.pinata_pinned_at ?? null,
+    pinataPinnedAt: pinataBackup?.Timestamp
+      ? new Date(pinataBackup.Timestamp)
+      : existing.pinata_pinned_at ?? null,
   });
 
   const formatted = formatBatchRecord(record);
