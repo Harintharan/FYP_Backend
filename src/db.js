@@ -3,6 +3,10 @@ import { dbUrl } from "./config.js";
 
 const pool = new Pool({
   connectionString: dbUrl,
+  ssl:
+    process.env.NODE_ENV === "production" || process.env.DATABASE_URL
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 pool.on("error", (err) => {
