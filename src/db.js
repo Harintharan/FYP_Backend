@@ -1,12 +1,15 @@
 import { Pool } from "pg";
 import { dbUrl } from "./config.js";
 
+// Determine SSL configuration based on DB_SSL environment variable
+// Set DB_SSL=true in production (Heroku sets this automatically)
+// Set DB_SSL=false or leave unset for local development
+const sslConfig =
+  process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false;
+
 const pool = new Pool({
   connectionString: dbUrl,
-  ssl:
-    process.env.NODE_ENV === "production" || process.env.DATABASE_URL
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: sslConfig,
 });
 
 pool.on("error", (err) => {
