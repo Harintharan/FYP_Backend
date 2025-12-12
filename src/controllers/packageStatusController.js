@@ -77,7 +77,8 @@ export async function getPackageStatusWithBreaches(req, res) {
         cb.id as breach_uuid,
         cb.breach_type,
         cb.severity,
-        cb.breach_start_time as detected_at,
+        COALESCE(sr.sensor_timestamp, cb.breach_start_time) as detected_at,
+        COALESCE(sr.sensor_timestamp_unix, EXTRACT(EPOCH FROM cb.breach_start_time)) as detected_at_unix,
         cb.resolved_at,
         cb.breach_certainty as status,
         cb.measured_avg_value as detected_value,
@@ -89,6 +90,7 @@ export async function getPackageStatusWithBreaches(req, res) {
         cb.pinata_cid,
         cb.created_at
       FROM condition_breaches cb
+      LEFT JOIN sensor_readings sr ON sr.id = cb.sensor_reading_id
       WHERE cb.package_id = $1
       ORDER BY cb.breach_start_time DESC
     `;
