@@ -1,5 +1,5 @@
 # Hardhat build artifacts
-artifacts/
+# artifacts/
 cache/
 typechain-types/
 coverage/
