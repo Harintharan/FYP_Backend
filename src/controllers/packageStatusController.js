@@ -15,6 +15,7 @@ export async function getPackageStatusWithBreaches(req, res) {
         p.id as package_uuid,
         p.status as package_accepted,
         p.batch_id,
+        b.expiry_date as batch_expiry_date,
         p.created_at as package_created_at,
         pr.name as product_name,
         pc.name as product_type,
@@ -166,6 +167,10 @@ export async function getPackageStatusWithBreaches(req, res) {
           package_accepted: packageData.package_accepted,
           batch_id: packageData.batch_id,
           created_at: packageData.package_created_at,
+          batch: {
+            expiry_date: packageData.batch_expiry_date,
+            expiryDate: packageData.batch_expiry_date,
+          },
           product: {
             name: packageData.product_name,
             type: packageData.product_type,

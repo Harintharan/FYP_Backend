@@ -45,7 +45,8 @@ export async function getAccountRole(address, approvedRegistration) {
   if (
     regType === "MANUFACTURER" ||
     regType === "SUPPLIER" ||
-    regType === "WAREHOUSE"
+    regType === "WAREHOUSE" ||
+    regType === "CONSUMER"
   ) {
     return regType;
   }
