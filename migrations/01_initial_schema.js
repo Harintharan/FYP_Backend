@@ -358,7 +358,7 @@ export const migrate = async (pool) => {
     `);
 
     // sensor_data table creation removed - legacy table
-    // sensor_data_breach table creation removed - legacy table
+    // sensor_data_breach table creation removed - legacy table that referenced sensor_data
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS shipment_segment (

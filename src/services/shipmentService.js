@@ -393,9 +393,6 @@ export async function registerShipment({ payload, wallet }) {
       );
     }
 
-    const manufacturerWallet = manufacturerRows[0].public_key;
-    const consumerWallet = consumerRows[0].public_key;
-
     const statusRaw =
       typeof statusCandidate === "string" && statusCandidate.trim()
         ? statusCandidate
@@ -452,8 +449,9 @@ export async function registerShipment({ payload, wallet }) {
 
     const createPayload = {
       id: shipmentId,
-      manufacturerUUID: manufacturerWallet, // Use wallet address for DB
-      consumerUUID: consumerWallet, // Use wallet address for DB
+      // Persist canonical UUIDs in DB; wallet addresses are used only for chain/notifications
+      manufacturerUUID: normalized.manufacturerUUID,
+      consumerUUID: normalized.consumerUUID,
       status: normalized.status,
       shipment_hash: payloadHash,
       tx_hash: txHash,

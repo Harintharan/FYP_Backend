@@ -953,6 +953,8 @@ export async function handoverShipmentSegment({
 export async function listSupplierShipmentSegments({
   supplierId,
   status = null,
+  cursor = null,
+  limit = 20,
 }) {
   if (!supplierId) {
     throw registrationRequired();
@@ -971,9 +973,14 @@ export async function listSupplierShipmentSegments({
     supplierId,
     status: normalizedStatus ?? null,
     filterBySupplier: shouldFilterBySupplier,
+    cursor,
+    limit,
   });
 
-  return rows.map((row) => {
+  const hasMore = rows.length > limit;
+  const sliced = hasMore ? rows.slice(0, limit) : rows;
+
+  const mapped = sliced.map((row) => {
     const statusValue = normalizeSegmentStatus(row.status);
     const previousStatus = normalizeSegmentStatus(row.previous_segment_status);
     const rawOrder =
@@ -1002,21 +1009,23 @@ export async function listSupplierShipmentSegments({
       timeTolerance: row.time_tolerance ?? null,
       shipment: {
         id: row.shipment_id ?? null,
-        consumer: {
-          id: row.consumer_uuid ?? null,
-          legalName: row.consumer_legal_name ?? null,
-        },
+      consumer: {
+        id: row.consumer_uuid ?? null,
+        legalName: row.consumer_legal_name ?? null,
       },
-      startCheckpoint: {
-        id: row.start_checkpoint_id ?? null,
-        state: row.start_state ?? null,
-        country: row.start_country ?? null,
-      },
-      endCheckpoint: {
-        id: row.end_checkpoint_id ?? null,
-        state: row.end_state ?? null,
-        country: row.end_country ?? null,
-      },
+    },
+    startCheckpoint: {
+      id: row.start_checkpoint_id ?? null,
+      name: row.start_name ?? null,
+      state: row.start_state ?? null,
+      country: row.start_country ?? null,
+    },
+    endCheckpoint: {
+      id: row.end_checkpoint_id ?? null,
+      name: row.end_name ?? null,
+      state: row.end_state ?? null,
+      country: row.end_country ?? null,
+    },
       actions: {
         canAccept,
         canTakeover,
@@ -1025,6 +1034,13 @@ export async function listSupplierShipmentSegments({
       },
     };
   });
+
+  const nextCursor =
+    hasMore && sliced.length > 0
+      ? sliced[sliced.length - 1].created_at ?? null
+      : null;
+
+  return { segments: mapped, cursor: nextCursor, hasMore };
 }
 
 export async function deleteShipmentSegmentsByShipmentId(shipmentId, dbClient) {
@@ -1099,6 +1115,7 @@ export async function getShipmentSegmentPackageDetails({
 
   const segmentDetails = {
     segmentId: segment.id ?? segment.segment_id ?? null,
+    shipmentId: shipmentId ?? null,
     status: normalizeSegmentStatus(segment.status),
     expectedShipDate: segment.expected_ship_date ?? null,
     estimatedArrivalDate: segment.estimated_arrival_date ?? null,
@@ -1109,16 +1126,32 @@ export async function getShipmentSegmentPackageDetails({
         id: segment.consumer_uuid ?? null,
         legalName: segment.consumer_legal_name ?? null,
       },
+      manufacturer: {
+        id: segment.manufacturer_uuid ?? null,
+        legalName: segment.manufacturer_legal_name ?? null,
+      },
     },
     startCheckpoint: {
       id: segment.start_checkpoint_id ?? null,
+      name: segment.start_name ?? null,
       state: segment.start_state ?? null,
+      address: segment.start_address ?? null,
       country: segment.start_country ?? null,
     },
     endCheckpoint: {
       id: segment.end_checkpoint_id ?? null,
+      name: segment.end_name ?? null,
       state: segment.end_state ?? null,
+      address: segment.end_address ?? null,
       country: segment.end_country ?? null,
+    },
+    consumer: {
+      id: segment.consumer_uuid ?? null,
+      name: segment.consumer_legal_name ?? null,
+    },
+    manufacturer: {
+      id: segment.manufacturer_uuid ?? null,
+      name: segment.manufacturer_legal_name ?? null,
     },
   };
 

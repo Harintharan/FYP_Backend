@@ -89,13 +89,27 @@ export async function listSupplierSegments(req, res) {
 
     const status =
       typeof req.query?.status === "string" ? req.query.status : null;
+    const cursor =
+      typeof req.query?.cursor === "string" ? req.query.cursor : null;
+    const limitRaw = req.query?.limit;
+    const limit =
+      typeof limitRaw === "string" && Number.isFinite(Number(limitRaw))
+        ? Math.min(Math.max(Number(limitRaw), 1), 100)
+        : 20;
 
-    const segments = await listSupplierShipmentSegments({
-      supplierId: registration.id,
-      status,
+    const { segments, cursor: nextCursor, hasMore } =
+      await listSupplierShipmentSegments({
+        supplierId: registration.id,
+        status,
+        cursor,
+        limit,
+      });
+
+    return res.status(200).json({
+      segments,
+      cursor: nextCursor,
+      hasMore,
     });
-
-    return res.status(200).json(segments);
   } catch (err) {
     return handleControllerError(res, err, {
       logMessage: "Error listing supplier shipment segments",

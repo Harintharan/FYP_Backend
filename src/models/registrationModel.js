@@ -136,7 +136,7 @@ export async function findApprovedRegistrationByPublicKey(publicKey, dbClient) {
   const { rows } = await exec(
     `SELECT id, reg_type, status
        FROM users
-      WHERE public_key = $1
+      WHERE LOWER(public_key) = LOWER($1)
         AND status = 'APPROVED'
       ORDER BY updated_at DESC NULLS LAST, created_at DESC
       LIMIT 1`,
