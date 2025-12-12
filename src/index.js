@@ -18,6 +18,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 // sensorData and sensorDataBreach APIs removed - legacy tables were dropped
 import telemetryRoutes from "./routes/telemetryRoutes.js";
 import packageStatusRoutes from "./routes/packageStatusRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 // sensorData and sensorDataBreach APIs removed - legacy tables were dropped
 import { runMigrations } from "../migrations/index.js";
 import { startAutomaticCleanup } from "./utils/tokenCleanup.js";
@@ -50,6 +51,7 @@ app.use("/api", checkpointRoutes);
 app.use("/api", shipmentRoutes);
 app.use("/api", shipmentSegmentRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error", err);
