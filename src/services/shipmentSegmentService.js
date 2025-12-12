@@ -1002,21 +1002,23 @@ export async function listSupplierShipmentSegments({
       timeTolerance: row.time_tolerance ?? null,
       shipment: {
         id: row.shipment_id ?? null,
-        consumer: {
-          id: row.consumer_uuid ?? null,
-          legalName: row.consumer_legal_name ?? null,
-        },
+      consumer: {
+        id: row.consumer_uuid ?? null,
+        legalName: row.consumer_legal_name ?? null,
       },
-      startCheckpoint: {
-        id: row.start_checkpoint_id ?? null,
-        state: row.start_state ?? null,
-        country: row.start_country ?? null,
-      },
-      endCheckpoint: {
-        id: row.end_checkpoint_id ?? null,
-        state: row.end_state ?? null,
-        country: row.end_country ?? null,
-      },
+    },
+    startCheckpoint: {
+      id: row.start_checkpoint_id ?? null,
+      name: row.start_name ?? null,
+      state: row.start_state ?? null,
+      country: row.start_country ?? null,
+    },
+    endCheckpoint: {
+      id: row.end_checkpoint_id ?? null,
+      name: row.end_name ?? null,
+      state: row.end_state ?? null,
+      country: row.end_country ?? null,
+    },
       actions: {
         canAccept,
         canTakeover,
@@ -1099,6 +1101,7 @@ export async function getShipmentSegmentPackageDetails({
 
   const segmentDetails = {
     segmentId: segment.id ?? segment.segment_id ?? null,
+    shipmentId: shipmentId ?? null,
     status: normalizeSegmentStatus(segment.status),
     expectedShipDate: segment.expected_ship_date ?? null,
     estimatedArrivalDate: segment.estimated_arrival_date ?? null,
@@ -1109,16 +1112,32 @@ export async function getShipmentSegmentPackageDetails({
         id: segment.consumer_uuid ?? null,
         legalName: segment.consumer_legal_name ?? null,
       },
+      manufacturer: {
+        id: segment.manufacturer_uuid ?? null,
+        legalName: segment.manufacturer_legal_name ?? null,
+      },
     },
     startCheckpoint: {
       id: segment.start_checkpoint_id ?? null,
+      name: segment.start_name ?? null,
       state: segment.start_state ?? null,
+      address: segment.start_address ?? null,
       country: segment.start_country ?? null,
     },
     endCheckpoint: {
       id: segment.end_checkpoint_id ?? null,
+      name: segment.end_name ?? null,
       state: segment.end_state ?? null,
+      address: segment.end_address ?? null,
       country: segment.end_country ?? null,
+    },
+    consumer: {
+      id: segment.consumer_uuid ?? null,
+      name: segment.consumer_legal_name ?? null,
+    },
+    manufacturer: {
+      id: segment.manufacturer_uuid ?? null,
+      name: segment.manufacturer_legal_name ?? null,
     },
   };
 

@@ -83,14 +83,21 @@ export async function findShipmentSegmentDetailsById(segmentId, dbClient) {
         ss.*,
         sr.consumer_uuid,
         sr.manufacturer_uuid,
+        m.payload -> 'identification' ->> 'legalName' AS manufacturer_legal_name,
+        sc_start.address AS start_address,
         sc_start.state AS start_state,
+        sc_start.name AS start_name,
         sc_start.country AS start_country,
+        sc_end.address AS end_address,
         sc_end.state AS end_state,
+        sc_end.name AS end_name,
         sc_end.country AS end_country,
         u.payload -> 'identification' ->> 'legalName' AS consumer_legal_name
       FROM shipment_segment ss
       JOIN shipment_registry sr
         ON sr.id::text = ss.shipment_id::text
+      LEFT JOIN users m
+        ON m.id::text = sr.manufacturer_uuid::text
       LEFT JOIN checkpoint_registry sc_start
         ON sc_start.id::text = ss.start_checkpoint_id::text
       LEFT JOIN checkpoint_registry sc_end
@@ -206,8 +213,10 @@ export async function listShipmentSegmentsBySupplierAndStatus({
     `SELECT
         ss.*,
         prev_segment.status AS previous_segment_status,
+        sc_start.name AS start_name,
         sc_start.state AS start_state,
         sc_start.country AS start_country,
+        sc_end.name AS end_name,
         sc_end.state AS end_state,
         sc_end.country AS end_country,
         sr.consumer_uuid,
