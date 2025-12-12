@@ -953,6 +953,8 @@ export async function handoverShipmentSegment({
 export async function listSupplierShipmentSegments({
   supplierId,
   status = null,
+  cursor = null,
+  limit = 20,
 }) {
   if (!supplierId) {
     throw registrationRequired();
@@ -971,9 +973,14 @@ export async function listSupplierShipmentSegments({
     supplierId,
     status: normalizedStatus ?? null,
     filterBySupplier: shouldFilterBySupplier,
+    cursor,
+    limit,
   });
 
-  return rows.map((row) => {
+  const hasMore = rows.length > limit;
+  const sliced = hasMore ? rows.slice(0, limit) : rows;
+
+  const mapped = sliced.map((row) => {
     const statusValue = normalizeSegmentStatus(row.status);
     const previousStatus = normalizeSegmentStatus(row.previous_segment_status);
     const rawOrder =
@@ -1027,6 +1034,13 @@ export async function listSupplierShipmentSegments({
       },
     };
   });
+
+  const nextCursor =
+    hasMore && sliced.length > 0
+      ? sliced[sliced.length - 1].created_at ?? null
+      : null;
+
+  return { segments: mapped, cursor: nextCursor, hasMore };
 }
 
 export async function deleteShipmentSegmentsByShipmentId(shipmentId, dbClient) {

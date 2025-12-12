@@ -188,6 +188,8 @@ export async function listShipmentSegmentsBySupplierAndStatus({
   supplierId,
   status,
   filterBySupplier = true,
+  cursor = null,
+  limit = 20,
 }) {
   const params = [];
   const conditions = [];
@@ -202,6 +204,11 @@ export async function listShipmentSegmentsBySupplierAndStatus({
     conditions.push(
       `ss.status = $${params.length}::shipment_segment_status`
     );
+  }
+
+  if (cursor) {
+    params.push(cursor);
+    conditions.push(`ss.created_at < $${params.length}::timestamptz`);
   }
 
   const whereClause =
@@ -239,7 +246,8 @@ export async function listShipmentSegmentsBySupplierAndStatus({
       LEFT JOIN users u
         ON u.id::text = sr.consumer_uuid
      ${whereClause}
-     ORDER BY ss.segment_order ASC, ss.created_at ASC`,
+     ORDER BY ss.created_at DESC, ss.segment_order ASC
+     LIMIT $${params.push(limit + 1)}`,
     params
   );
 
