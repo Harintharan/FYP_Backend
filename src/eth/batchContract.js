@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
 import BatchRegistryArtifact from "../../blockchain/artifacts/contracts/BatchRegistry.sol/BatchRegistry.json" with { type: "json" };
-import { chain, operatorWallet, contracts } from "../config.js";
+import { operatorWallet, contracts } from "../config.js";
+import { getNonceManagedWallet } from "./walletManager.js";
 
-const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
-const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
+const wallet = getNonceManagedWallet(operatorWallet.privateKey);
 
 export const batchRegistry = new ethers.Contract(
   contracts.batchRegistry,

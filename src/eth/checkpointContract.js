@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
 import CheckpointRegistryArtifact from "../../blockchain/artifacts/contracts/CheckpointRegistry.sol/CheckpointRegistry.json" with { type: "json" };
-import { chain, operatorWallet, contracts } from "../config.js";
+import { operatorWallet, contracts } from "../config.js";
+import { getNonceManagedWallet } from "./walletManager.js";
 
-const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
-const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
+const wallet = getNonceManagedWallet(operatorWallet.privateKey);
 
 export const checkpointRegistry = new ethers.Contract(
   contracts.checkpointRegistry,

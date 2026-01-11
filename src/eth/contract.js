@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
 import RegistrationRegistryArtifact from "../../blockchain/artifacts/contracts/RegistrationRegistry.sol/RegistrationRegistry.json" with { type: "json" };
 import { chain } from "../config.js";
+import { getNonceManagedWallet } from "./walletManager.js";
 
-const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
-const wallet = new ethers.Wallet(chain.privateKey, provider);
+const wallet = getNonceManagedWallet(chain.privateKey);
 const registryAddress = chain.registryAddress;
 
 export const registry = new ethers.Contract(

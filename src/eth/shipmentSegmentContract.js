@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
 import ShipmentSegmentRegistryArtifact from "../../blockchain/artifacts/contracts/ShipmentSegmentRegistry.sol/ShipmentSegmentRegistry.json" with { type: "json" };
-import { chain, operatorWallet, contracts } from "../config.js";
+import { operatorWallet, contracts } from "../config.js";
+import { getNonceManagedWallet } from "./walletManager.js";
 
-const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
-const wallet = new ethers.Wallet(operatorWallet.privateKey, provider);
+const wallet = getNonceManagedWallet(operatorWallet.privateKey);
 
 export const shipmentSegmentRegistry = new ethers.Contract(
   contracts.shipmentSegment,
