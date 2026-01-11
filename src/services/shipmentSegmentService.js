@@ -18,6 +18,7 @@ import {
   summarizePackagesByShipmentId,
   listPackagesByShipmentUuid,
 } from "../models/PackageRegistryModel.js";
+import { findLatestSensorReadingByPackageId } from "../models/SensorReadingModel.js";
 import {
   getShipmentById,
   updateShipment as updateShipmentRecord,
@@ -52,6 +53,7 @@ import {
   shipmentNotFound,
   hashMismatch as shipmentHashMismatch,
 } from "../errors/shipmentErrors.js";
+import { checkpointRangeKm } from "../config.js";
 import {
   registrationRequired,
   manufacturerForbidden,
@@ -534,9 +536,9 @@ async function ensureTakeoverLocationWithinRange({
     currentLongitude
   );
 
-  if (!Number.isFinite(distanceKm) || distanceKm > 1) {
+  if (!Number.isFinite(distanceKm) || distanceKm > checkpointRangeKm) {
     throw shipmentSegmentAccessDenied(
-      "Access denied: location is not within 1km of the origin checkpoint"
+      `Access denied: location is not within ${checkpointRangeKm}km of the origin checkpoint`
     );
   }
 }
@@ -586,9 +588,77 @@ async function ensureHandoverLocationWithinRange({
     currentLongitude
   );
 
-  if (!Number.isFinite(distanceKm) || distanceKm > 1) {
+  if (!Number.isFinite(distanceKm) || distanceKm > checkpointRangeKm) {
     throw shipmentSegmentAccessDenied(
-      "Access denied: location is not within 1km of the destination checkpoint"
+      `Access denied: location is not within ${checkpointRangeKm}km of the destination checkpoint`
+    );
+  }
+}
+
+async function ensureDeviceLocationWithinRange({
+  segment,
+  client,
+  currentLatitude,
+  currentLongitude,
+}) {
+  const shipmentId = segment.shipment_id ?? null;
+  if (!shipmentId) {
+    throw shipmentNotFound();
+  }
+
+  const packages = await listPackagesByShipmentUuid(shipmentId, client);
+  if (!packages.length) {
+    throw shipmentSegmentConflict("Shipment has no packages assigned");
+  }
+
+  const selectedPackage = packages[Math.floor(Math.random() * packages.length)];
+  const packageId =
+    selectedPackage?.id ??
+    selectedPackage?.package_id ??
+    selectedPackage?.packageId ??
+    null;
+
+  if (!packageId) {
+    throw shipmentSegmentConflict("Unable to resolve a package for GPS check");
+  }
+
+  const gpsReading = await findLatestSensorReadingByPackageId(
+    packageId,
+    "GPS",
+    client
+  );
+
+  if (!gpsReading) {
+    throw shipmentSegmentConflict(
+      "No GPS sensor readings found for the selected package"
+    );
+  }
+
+  const gpsLatitude = Number(
+    typeof gpsReading.latitude === "string"
+      ? gpsReading.latitude.trim()
+      : gpsReading.latitude
+  );
+  const gpsLongitude = Number(
+    typeof gpsReading.longitude === "string"
+      ? gpsReading.longitude.trim()
+      : gpsReading.longitude
+  );
+
+  if (!Number.isFinite(gpsLatitude) || !Number.isFinite(gpsLongitude)) {
+    throw shipmentSegmentConflict("Latest GPS reading has invalid coordinates");
+  }
+
+  const distanceKm = calculateDistanceInKilometers(
+    gpsLatitude,
+    gpsLongitude,
+    currentLatitude,
+    currentLongitude
+  );
+
+  if (!Number.isFinite(distanceKm) || distanceKm > checkpointRangeKm) {
+    throw shipmentSegmentAccessDenied(
+      `Access denied: location is not within ${checkpointRangeKm}km of the latest shipment GPS reading`
     );
   }
 }
@@ -626,6 +696,7 @@ async function ensurePreviousSegmentsDelivered({ segment, client }) {
     );
   }
 }
+
 export async function createShipmentSegment({
   shipmentId,
   startCheckpointId,
@@ -895,6 +966,12 @@ export async function takeoverShipmentSegment({
           currentLatitude: latitude,
           currentLongitude: longitude,
         });
+        await ensureDeviceLocationWithinRange({
+          segment,
+          client,
+          currentLatitude: latitude,
+          currentLongitude: longitude,
+        });
         await ensurePreviousSegmentsDelivered({
           segment,
           client,
@@ -931,6 +1008,12 @@ export async function handoverShipmentSegment({
       requireExistingSupplier: true,
       beforeUpdate: async ({ segment }) => {
         await ensureHandoverLocationWithinRange({
+          segment,
+          client,
+          currentLatitude: latitude,
+          currentLongitude: longitude,
+        });
+        await ensureDeviceLocationWithinRange({
           segment,
           client,
           currentLatitude: latitude,

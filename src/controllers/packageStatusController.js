@@ -1,4 +1,7 @@
 import db from "../db.js";
+import { checkpointRangeKm } from "../config.js";
+import { findLatestSensorReadingByPackageId } from "../models/SensorReadingModel.js";
+import { calculateDistanceInKilometers } from "../utils/geo.js";
 
 /**
  * Get complete package status including shipment chain and condition breaches
@@ -8,6 +11,10 @@ export async function getPackageStatusWithBreaches(req, res) {
 
   try {
     const { packageId } = req.params;
+    const latitude = Number(req.query?.latitude ?? req.query?.lat);
+    const longitude = Number(req.query?.longitude ?? req.query?.lng);
+    const hasDeviceCoords =
+      Number.isFinite(latitude) && Number.isFinite(longitude);
 
     // Get package details
     const packageQuery = `
@@ -159,6 +166,76 @@ export async function getPackageStatusWithBreaches(req, res) {
       }
     });
 
+    let locationCheck = null;
+    if (hasDeviceCoords) {
+      const gpsReading = await findLatestSensorReadingByPackageId(
+        packageId,
+        "GPS",
+        client
+      );
+
+      if (!gpsReading) {
+        locationCheck = {
+          status: "NO_GPS_READING",
+          range_km: checkpointRangeKm,
+          device_location: { latitude, longitude },
+          warning:
+            "No GPS readings were found for this package. Device telemetry may be offline.",
+        };
+      } else {
+        const gpsLatitude = Number(
+          typeof gpsReading.latitude === "string"
+            ? gpsReading.latitude.trim()
+            : gpsReading.latitude
+        );
+        const gpsLongitude = Number(
+          typeof gpsReading.longitude === "string"
+            ? gpsReading.longitude.trim()
+            : gpsReading.longitude
+        );
+
+        if (!Number.isFinite(gpsLatitude) || !Number.isFinite(gpsLongitude)) {
+          locationCheck = {
+            status: "GPS_INVALID",
+            range_km: checkpointRangeKm,
+            device_location: { latitude, longitude },
+            warning:
+              "The latest GPS reading is missing coordinates. Verify device telemetry.",
+          };
+        } else {
+          const distanceKm = calculateDistanceInKilometers(
+            gpsLatitude,
+            gpsLongitude,
+            latitude,
+            longitude
+          );
+          const withinRange =
+            Number.isFinite(distanceKm) && distanceKm <= checkpointRangeKm;
+
+          locationCheck = {
+            status: withinRange ? "OK" : "OUT_OF_RANGE",
+            range_km: checkpointRangeKm,
+            distance_km: Number.isFinite(distanceKm) ? distanceKm : null,
+            device_location: { latitude, longitude },
+            package_location: {
+              latitude: gpsLatitude,
+              longitude: gpsLongitude,
+            },
+            warning: withinRange
+              ? null
+              : "Device location is outside the allowed range of the package GPS.",
+          };
+        }
+      }
+    } else {
+      locationCheck = {
+        status: "NO_DEVICE_COORDS",
+        range_km: checkpointRangeKm,
+        warning:
+          "Device location was not provided. Location verification was skipped.",
+      };
+    }
+
     return res.json({
       success: true,
       data: {
@@ -209,6 +286,7 @@ export async function getPackageStatusWithBreaches(req, res) {
             created_at: breach.created_at,
           })),
         },
+        location_check: locationCheck,
       },
     });
   } catch (error) {

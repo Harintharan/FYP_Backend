@@ -16,6 +16,7 @@ const {
   registrationPayloadMaxBytes,
   accessTokenExpiry,
   refreshTokenExpiryDays,
+  checkpointRangeKm,
 } = buildConfig(process.env);
 
 export { host, port, dbUrl, jwtPrivateKey, jwtPublicKey };
@@ -24,4 +25,5 @@ export {
   registrationPayloadMaxBytes,
   accessTokenExpiry,
   refreshTokenExpiryDays,
+  checkpointRangeKm,
 };

@@ -77,6 +77,9 @@ CREATE INDEX IF NOT EXISTS idx_sensor_readings_lookup ON sensor_readings (
     sensor_timestamp
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sensor_readings_unique
+    ON sensor_readings (package_id, sensor_type, sensor_timestamp_unix);
+
 -- 3. Condition Breaches (detected violations)
 CREATE TABLE IF NOT EXISTS condition_breaches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

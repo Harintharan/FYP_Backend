@@ -35,6 +35,7 @@ const SUPPORTED_KEYS = [
   "DEFAULT_MAX_PAYLOAD_BYTES",
   "ACCESS_TOKEN_EXPIRY",
   "REFRESH_TOKEN_EXPIRY_DAYS",
+  "CHECKPOINT_RANGE_KM",
 ];
 
 const ADDRESS_40_REGEX = /^0x[0-9a-fA-F]{40}$/;
@@ -191,6 +192,16 @@ function resolveRefreshTokenExpiryDays(baseEnvVars) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 7;
 }
 
+function resolveCheckpointRangeKm(baseEnvVars) {
+  const rawValue = baseEnvVars.CHECKPOINT_RANGE_KM;
+  if (!rawValue || rawValue.trim() === "") {
+    return 1;
+  }
+
+  const parsed = Number.parseFloat(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 export function buildConfig(env) {
   const baseEnvVars = toBaseEnvVars(env);
 
@@ -292,5 +303,6 @@ export function buildConfig(env) {
     registrationPayloadMaxBytes: resolveRegistrationPayloadLimit(baseEnvVars),
     accessTokenExpiry: resolveAccessTokenExpiry(baseEnvVars),
     refreshTokenExpiryDays: resolveRefreshTokenExpiryDays(baseEnvVars),
+    checkpointRangeKm: resolveCheckpointRangeKm(baseEnvVars),
   };
 }

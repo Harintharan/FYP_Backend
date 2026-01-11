@@ -68,12 +68,19 @@ export async function insertSensorReading(
   return rows[0] ?? null;
 }
 
-export async function bulkInsertSensorReadings(readings, dbClient) {
+export async function bulkInsertSensorReadings(
+  readings,
+  dbClient,
+  { ignoreConflicts = false } = {}
+) {
   if (!readings || readings.length === 0) {
     return [];
   }
 
   const exec = resolveExecutor(dbClient);
+  const conflictClause = ignoreConflicts
+    ? "ON CONFLICT (package_id, sensor_type, sensor_timestamp_unix) DO NOTHING"
+    : "";
 
   const values = readings
     .map((r, idx) => {
@@ -109,6 +116,7 @@ export async function bulkInsertSensorReadings(readings, dbClient) {
        sensor_timestamp, unit, created_at
      )
      VALUES ${values}
+     ${conflictClause}
      RETURNING *`,
     params
   );
@@ -171,4 +179,32 @@ export async function listSensorReadingsByPackageId(
     params
   );
   return rows;
+}
+
+export async function findLatestSensorReadingByPackageId(
+  packageId,
+  sensorType,
+  dbClient
+) {
+  const exec = resolveExecutor(dbClient);
+  const params = [packageId];
+  const conditions = ["package_id = $1"];
+
+  if (sensorType) {
+    params.push(sensorType);
+    conditions.push(`sensor_type = $${params.length}`);
+  }
+
+  const { rows } = await exec(
+    `SELECT *
+       FROM sensor_readings
+      WHERE ${conditions.join(" AND ")}
+        AND latitude IS NOT NULL
+        AND longitude IS NOT NULL
+      ORDER BY sensor_timestamp DESC
+      LIMIT 1`,
+    params
+  );
+
+  return rows[0] ?? null;
 }
