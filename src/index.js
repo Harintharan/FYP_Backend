@@ -18,6 +18,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 // sensorData and sensorDataBreach APIs removed - legacy tables were dropped
 import telemetryRoutes from "./routes/telemetryRoutes.js";
 import packageStatusRoutes from "./routes/packageStatusRoutes.js";
+import wifiRoutes from "./routes/wifiRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 // sensorData and sensorDataBreach APIs removed - legacy tables were dropped
 import { runMigrations } from "../migrations/index.js";
@@ -47,6 +48,7 @@ app.use("/api/sensor-types", sensorTypeRoutes);
 // Legacy sensor_data routes removed to simplify telemetry handling
 app.use("/api/telemetry", telemetryRoutes);
 app.use("/api/package-status", packageStatusRoutes);
+app.use("/api", wifiRoutes);
 app.use("/api", checkpointRoutes);
 app.use("/api", shipmentRoutes);
 app.use("/api", shipmentSegmentRoutes);
