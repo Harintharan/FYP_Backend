@@ -15,7 +15,12 @@ import { findShipmentSegmentById } from "../models/ShipmentSegmentModel.js";
  * Get user by identifier (tries UUID first, then wallet address)
  */
 async function getUserByIdentifier(query, identifier) {
-  if (!identifier) return null;
+  if (!identifier) {
+    console.log(`❌ getUserByIdentifier called with null/undefined identifier`);
+    return null;
+  }
+
+  console.log(`🔍 getUserByIdentifier looking for: ${identifier}`);
 
   // First try as direct UUID (shipment_registry stores UUIDs)
   let result = await query(
@@ -23,12 +28,21 @@ async function getUserByIdentifier(query, identifier) {
     [identifier]
   );
 
+  console.log(`   UUID lookup returned ${result.rows.length} rows`);
+
   if (result.rows.length === 0) {
     // Try as public key (wallet address) as fallback
     result = await query(
       `SELECT id, payload FROM users WHERE public_key = $1`,
       [identifier]
     );
+    console.log(`   Public key lookup returned ${result.rows.length} rows`);
+  }
+
+  if (result.rows.length > 0) {
+    console.log(`   ✅ Found user: ${result.rows[0].id}`);
+  } else {
+    console.log(`   ❌ User not found`);
   }
 
   return result.rows[0] || null;
@@ -797,173 +811,245 @@ export async function notifySegmentDelivered(segmentId, supplierId) {
 // ============================================================================
 // CONDITION BREACH NOTIFICATIONS
 // ============================================================================
+// ============================================================================
+// CONDITION BREACH NOTIFICATIONS
+// ============================================================================
 
 /**
- * Notifies when a condition breach is detected
+ * Notifies when a condition breach is detected (Temperature, Container Open, etc)
+ *
+ * Recipients:
+ * 1. Manufacturer (from condition_breaches → package_registry → manufacturer_uuid)
+ * 2. Current Supplier IF IN_TRANSIT (from shipment_segment WHERE status='IN_TRANSIT')
+ *    - If no IN_TRANSIT segment: only Manufacturer is notified
+ *
+ * @param {string} breachId - Breach ID
+ * @param {object} breachData - Optional breach data (to avoid transaction issues)
  */
-export async function notifyConditionBreach(breachData) {
+export async function notifyConditionBreach(breachId, breachData = null) {
   try {
-    const {
-      breach_id,
-      shipment_id,
-      segment_id,
-      package_id,
-      breach_type,
-      severity,
-      description,
-    } = breachData;
-
-    const shipment = await getShipmentById(shipment_id);
-    if (!shipment) return;
+    console.log(
+      `\n📢 ===== notifyConditionBreach START ===== for breach ${breachId}`
+    );
 
     const { query } = await import("../db.js");
 
-    // Fetch manufacturer, consumer, and segment details in parallel
-    const queries = [
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-        shipment.manufacturer_uuid,
-      ]),
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-        shipment.consumer_uuid,
-      ]),
-    ];
-
-    // Add segment and checkpoint query if segment_id exists
-    if (segment_id) {
-      queries.push(
-        query(
-          `SELECT 
-            ss.supplier_id,
-            ss.expected_ship_date,
-            ss.estimated_arrival_date,
-            start_cp.name AS start_name,
-            start_cp.state AS start_state,
-            end_cp.name AS end_name,
-            end_cp.state AS end_state,
-            u.payload AS supplier_payload
-           FROM shipment_segment ss
-           LEFT JOIN checkpoint_registry start_cp ON start_cp.id = ss.start_checkpoint_id
-           LEFT JOIN checkpoint_registry end_cp ON end_cp.id = ss.end_checkpoint_id
-           LEFT JOIN users u ON u.id = ss.supplier_id
-           WHERE ss.id = $1`,
-          [segment_id]
-        )
+    // Step 1: Get breach details
+    let breach;
+    if (breachData) {
+      // Use provided data (avoids transaction/timing issues)
+      console.log(`✅ Using provided breach data (no DB query needed)`);
+      breach = breachData;
+    } else {
+      // Query from database (for direct calls)
+      console.log(`🔍 Step 1: Fetching breach record from database...`);
+      const breachResult = await query(
+        `SELECT * FROM condition_breaches WHERE id = $1`,
+        [breachId]
       );
-    }
 
-    const results = await Promise.all(queries);
-    const manufacturerResult = results[0];
-    const consumerResult = results[1];
-    const segmentResult = segment_id ? results[2] : null;
-
-    const recipients = [
-      manufacturerResult.rows[0]?.id,
-      consumerResult.rows[0]?.id,
-    ].filter(Boolean);
-
-    let supplierName = null;
-    let startLocation = null;
-    let endLocation = null;
-    let segmentMetadata = {};
-
-    // Add supplier and checkpoint details if segment exists
-    if (segmentResult?.rows[0]) {
-      const segmentData = segmentResult.rows[0];
-      if (segmentData.supplier_id) {
-        recipients.push(segmentData.supplier_id);
-        supplierName =
-          segmentData.supplier_payload?.identification?.legalName ||
-          segmentData.supplier_payload?.identification?.companyName ||
-          "Supplier";
+      if (!breachResult.rows.length) {
+        console.log(`❌ Breach not found in database: ${breachId}`);
+        return;
       }
 
-      startLocation = segmentData.start_name
-        ? `${segmentData.start_name}${
-            segmentData.start_state ? ", " + segmentData.start_state : ""
-          }`
-        : null;
-      endLocation = segmentData.end_name
-        ? `${segmentData.end_name}${
-            segmentData.end_state ? ", " + segmentData.end_state : ""
-          }`
-        : null;
-
-      segmentMetadata = {
-        ...(startLocation && { start_checkpoint: startLocation }),
-        ...(endLocation && { end_checkpoint: endLocation }),
-        ...(segmentData.expected_ship_date && {
-          expected_ship_date: segmentData.expected_ship_date,
-        }),
-        ...(segmentData.estimated_arrival_date && {
-          estimated_arrival_date: segmentData.estimated_arrival_date,
-        }),
-        ...(supplierName && { supplier_name: supplierName }),
-      };
+      breach = breachResult.rows[0];
     }
 
-    if (recipients.length === 0) return;
-
-    const notificationSeverity =
-      severity === "CRITICAL"
-        ? notificationService.NotificationSeverity.CRITICAL
-        : severity === "HIGH"
-        ? notificationService.NotificationSeverity.ERROR
-        : notificationService.NotificationSeverity.WARNING;
-
-    // Build enhanced message with location details
-    let enhancedMessage =
-      description || `A ${breach_type.toLowerCase()} breach has been detected`;
-    if (startLocation && endLocation) {
-      enhancedMessage += ` on route ${startLocation} → ${endLocation}`;
-    }
-    if (segment_id) {
-      enhancedMessage = `Segment #${segment_id}: ${enhancedMessage}`;
-    }
-
-    await notificationService.createBulkNotifications(recipients, {
-      type:
-        breach_type === "TEMPERATURE"
-          ? notificationService.NotificationType.TEMPERATURE_BREACH
-          : breach_type === "TIME"
-          ? notificationService.NotificationType.TIME_BREACH
-          : notificationService.NotificationType.CONDITION_BREACH,
-      severity: notificationSeverity,
-      title: `${breach_type} Breach Detected`,
-      message: enhancedMessage,
-      shipmentId: shipment_id,
-      segmentId: segment_id,
-      packageId: package_id,
-      breachId: breach_id,
-      metadata: {
-        breach_type,
-        severity,
-        ...segmentMetadata,
-      },
-      expiresInDays: 30,
+    console.log(`✅ Breach available:`, {
+      id: breach.id,
+      package_id: breach.package_id,
+      shipment_id: breach.shipment_id,
+      breach_type: breach.breach_type,
+      severity: breach.severity,
     });
+
+    // Step 2: Get package, manufacturer, and shipment details
+    console.log(`🔍 Step 2: Fetching package, manufacturer, and shipment...`);
+    const packageResult = await query(
+      `SELECT id, manufacturer_uuid, shipment_id FROM package_registry WHERE id = $1`,
+      [breach.package_id]
+    );
+
+    if (!packageResult.rows.length) {
+      console.log(`❌ Package not found: ${breach.package_id}`);
+      return;
+    }
+
+    const pkg = packageResult.rows[0];
+    console.log(`✅ Package found:`, {
+      id: pkg.id,
+      manufacturer_uuid: pkg.manufacturer_uuid,
+      shipment_id: pkg.shipment_id,
+    });
+
+    // Step 3: Get manufacturer user details
+    console.log(
+      `🔍 Step 3: Looking up manufacturer user: ${pkg.manufacturer_uuid}`
+    );
+    const manufacturerData = await getUserByIdentifier(
+      query,
+      pkg.manufacturer_uuid
+    );
+
+    if (!manufacturerData) {
+      console.log(`❌ Manufacturer user not found: ${pkg.manufacturer_uuid}`);
+      return;
+    }
+
+    const recipients = [manufacturerData.id];
+    console.log(`✅ Manufacturer user found:`, manufacturerData.id);
+
+    // Step 4: Get current supplier (if shipment in transit)
+    let currentSupplier = null;
+    const shipmentId = pkg.shipment_id || breach.shipment_id; // Try package first, then breach
+
+    if (shipmentId) {
+      console.log(
+        `🔍 Step 4: Checking for IN_TRANSIT segment for shipment: ${shipmentId}`
+      );
+
+      const supplierResult = await query(
+        `SELECT supplier_id FROM shipment_segment WHERE shipment_id = $1 AND status = 'IN_TRANSIT' LIMIT 1`,
+        [shipmentId]
+      );
+
+      console.log(`   Found ${supplierResult.rows.length} IN_TRANSIT segments`);
+
+      if (supplierResult.rows.length > 0) {
+        const supplierId = supplierResult.rows[0].supplier_id;
+        console.log(`   Segment has supplier_id: ${supplierId}`);
+
+        if (supplierId) {
+          currentSupplier = await getUserByIdentifier(query, supplierId);
+          if (currentSupplier) {
+            recipients.push(currentSupplier.id);
+            console.log(`✅ Current supplier user found:`, currentSupplier.id);
+          } else {
+            console.log(`❌ Supplier user not found for id: ${supplierId}`);
+          }
+        }
+      } else {
+        console.log(`ℹ️  No IN_TRANSIT segment - only notifying manufacturer`);
+      }
+    } else {
+      console.log(`ℹ️  No shipment_id available - only notifying manufacturer`);
+    }
+
+    if (recipients.length === 0) {
+      console.log(`❌ No valid recipients found for breach ${breachId}`);
+      return;
+    }
+
+    console.log(
+      `📨 Step 5: Creating notifications for ${recipients.length} recipients:`,
+      recipients
+    );
+
+    // Step 6: Create appropriate notification based on breach type
+    let title = "⚠️ Condition Breach Detected";
+    let message = `Condition breach detected on package`;
+    let severity = notificationService.NotificationSeverity.WARNING;
+
+    if (breach.breach_type === "TEMPERATURE_EXCURSION") {
+      title = "🌡️ Temperature Excursion";
+      message = `Temperature exceeded limits: ${parseFloat(
+        breach.measured_avg_value
+      ).toFixed(2)}°C `;
+      severity = notificationService.NotificationSeverity.WARNING;
+    } else if (breach.breach_type === "CONTAINER_OPENED") {
+      title = "🔓 Container Opened";
+      message = `Package container was opened during transit`;
+      severity = notificationService.NotificationSeverity.CRITICAL;
+    } else if (breach.breach_type === "DOOR_TAMPER") {
+      title = "🔒 Unauthorized Container Opening Detected";
+      message = `Unauthorized door opening detected`;
+      severity = notificationService.NotificationSeverity.CRITICAL;
+    } else {
+      message = `${breach.breach_type} breach detected on package`;
+      severity =
+        breach.severity === "CRITICAL"
+          ? notificationService.NotificationSeverity.CRITICAL
+          : breach.severity === "HIGH"
+          ? notificationService.NotificationSeverity.ERROR
+          : notificationService.NotificationSeverity.WARNING;
+    }
+
+    // Step 7: Send notification (exclude breachId to avoid FK constraint issues during transaction)
+    console.log(`📝 Building notification payload...`);
+
+    // Build metadata conditionally based on breach type
+    const baseMetadata = {
+      breach_type: breach.breach_type,
+      breach_id: breachId,
+      severity: breach.severity,
+      breach_time: breach.breach_start_time,
+      shipment_id: breach.shipment_id,
+      location_latitude: breach.location_latitude,
+      location_longitude: breach.location_longitude,
+      manufacturer_id: manufacturerData.id,
+      supplier_id: currentSupplier?.id || null,
+    };
+
+    // Add temperature-specific fields only for temperature excursions
+    if (breach.breach_type === "TEMPERATURE_EXCURSION") {
+      const tempValue = parseFloat(breach.measured_avg_value).toFixed(2);
+      const minTemp = parseFloat(breach.expected_min_value).toFixed(2);
+      const maxTemp = parseFloat(breach.expected_max_value).toFixed(2);
+      baseMetadata.measured_value = `${tempValue}°C`;
+      baseMetadata.allowed_range = `${minTemp}°C - ${maxTemp}°C`;
+    }
+
+    const notificationPayload = {
+      type: getNotificationType(breach.breach_type),
+      severity,
+      title,
+      message: `Package #${breach.package_id}: ${message}`,
+      packageId: breach.package_id,
+      shipmentId: breach.shipment_id,
+      breachId: null, // Set to null to avoid FK constraint during transaction
+      metadata: baseMetadata,
+    };
+
+    console.log(`📨 Calling createBulkNotifications with:`, {
+      recipientCount: recipients.length,
+      recipients,
+      type: notificationPayload.type,
+      severity: notificationPayload.severity,
+    });
+
+    const result = await notificationService.createBulkNotifications(
+      recipients,
+      notificationPayload
+    );
+
+    console.log(`✅ createBulkNotifications returned:`, result);
+    console.log(`✅ Breach notification sent for ${breachId}`);
+    console.log(`📢 ===== notifyConditionBreach END ===== \n`);
   } catch (error) {
-    console.error("Failed to send condition breach notification:", error);
+    console.error(
+      `\n❌ ===== CRITICAL ERROR in notifyConditionBreach for breach ${breachId}: =====`
+    );
+    console.error(`   Error message: ${error.message}`);
+    console.error(`   Error stack: ${error.stack}`);
+    console.error(`   Full error:`, error);
+    console.error(`❌ ===== ERROR END ===== \n`);
   }
 }
 
 /**
- * Notifies when a temperature breach occurs
+ * Helper function to map breach type to notification type
  */
-export async function notifyTemperatureBreach(telemetryData, packageData) {
-  try {
-    const { shipment_id, segment_id, package_id, temperature } = telemetryData;
-    const { min_temp, max_temp } = packageData;
+function getNotificationType(breachType) {
+  const breachTypeMap = {
+    TEMPERATURE_EXCURSION:
+      notificationService.NotificationType.TEMPERATURE_BREACH,
+    CONTAINER_OPENED: notificationService.NotificationType.CONDITION_BREACH,
+    DOOR_TAMPER: notificationService.NotificationType.CONDITION_BREACH,
+  };
 
-    await notifyConditionBreach({
-      breach_id: null, // Will be set if stored in DB
-      shipment_id,
-      segment_id,
-      package_id,
-      breach_type: "TEMPERATURE",
-      severity: "HIGH",
-      description: `Temperature ${temperature}°C exceeds acceptable range (${min_temp}°C - ${max_temp}°C)`,
-    });
-  } catch (error) {
-    console.error("Failed to send temperature breach notification:", error);
-  }
+  return (
+    breachTypeMap[breachType] ||
+    notificationService.NotificationType.CONDITION_BREACH
+  );
 }

@@ -66,17 +66,6 @@ export async function createNotification({
   expiresInDays = null,
 }) {
   try {
-    // Check if notification should be sent based on user preferences
-    const shouldSend = await query(
-      `SELECT should_send_notification($1, $2, $3) as should_send`,
-      [userId, type, severity]
-    );
-
-    if (!shouldSend.rows[0]?.should_send) {
-      console.log(`⏭️ Notification skipped for user ${userId} (preferences)`);
-      return null;
-    }
-
     const expiresAt = expiresInDays
       ? `NOW() + INTERVAL '${expiresInDays} days'`
       : null;

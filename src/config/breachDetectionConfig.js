@@ -11,32 +11,11 @@ export const BREACH_DETECTION_CONFIG = {
     minBreachDuration: 0, // Report all temperature breaches (even instant)
   },
 
-  Humidity: {
-    expectedInterval: 10,
-    maxGapTolerance: 60,
-    gracePeriod: 30,
-    minBreachDuration: 0,
-  },
-
-  Pressure: {
-    expectedInterval: 10,
-    maxGapTolerance: 60,
-    gracePeriod: 30,
-    minBreachDuration: 0,
-  },
-
   Door: {
     expectedInterval: 10,
     maxGapTolerance: 300, // Door status changes rarely, 5 min tolerance
     gracePeriod: 60,
     minBreachDuration: 0, // Report all door tamper events
-  },
-
-  Lock: {
-    expectedInterval: 10,
-    maxGapTolerance: 300,
-    gracePeriod: 60,
-    minBreachDuration: 0,
   },
 
   GPS: {
@@ -57,13 +36,6 @@ export const SEVERITY_THRESHOLDS = {
     HIGH: 5, // Deviation > 5°C
     MEDIUM: 2, // Deviation > 2°C
     LOW: 0, // Any deviation
-  },
-
-  Humidity: {
-    CRITICAL: 40, // Deviation > 40%
-    HIGH: 20, // Deviation > 20%
-    MEDIUM: 10, // Deviation > 10%
-    LOW: 0,
   },
 
   Door: {

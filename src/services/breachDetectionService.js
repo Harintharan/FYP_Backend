@@ -14,6 +14,7 @@ import { registerConditionBreachOnChain } from "../eth/conditionBreachContract.j
 import { backupRecordSafely } from "./pinataBackupService.js";
 import { prepareSensorDataBreachPersistence } from "./sensorDataBreachIntegrityService.js";
 import { stableStringify } from "../utils/canonicalize.js";
+import { notifyConditionBreach } from "./notificationTriggers.js";
 
 /**
  * Calculate severity based on deviation from expected range
@@ -163,6 +164,17 @@ async function saveBreachRecord(breach, context, dbClient) {
     },
     dbClient
   );
+
+  // Send notification to manufacturer and supplier (if in transit)
+  // Pass the savedBreach data to avoid transaction/timing issues
+  try {
+    await notifyConditionBreach(breachId, savedBreach);
+  } catch (error) {
+    console.error(
+      `❌ Failed to send breach notification for ${breachId}:`,
+      error
+    );
+  }
 
   return savedBreach;
 }
@@ -339,8 +351,7 @@ export async function detectDoorTamperBreaches(
   dbClient
 ) {
   const { messageId, wallet } = context;
-  const { shipment_id: shipmentId, status: shipmentStatus } =
-    shipmentInfo || {};
+  const { id: shipmentId, status: shipmentStatus } = shipmentInfo || {};
 
   // Only check for door breaches when shipment is IN_TRANSIT
   if (shipmentStatus !== "IN_TRANSIT") {
@@ -430,6 +441,17 @@ export async function detectDoorTamperBreaches(
         },
         dbClient
       );
+
+      // Send notification to manufacturer and supplier (if in transit)
+      // Pass the savedBreach data to avoid transaction/timing issues
+      try {
+        await notifyConditionBreach(breachId, savedBreach);
+      } catch (error) {
+        console.error(
+          `❌ Failed to send breach notification for ${breachId}:`,
+          error
+        );
+      }
 
       breaches.push(savedBreach);
     }
