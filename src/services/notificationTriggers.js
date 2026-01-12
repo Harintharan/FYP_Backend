@@ -8,6 +8,33 @@ import { findShipmentSegmentById } from "../models/ShipmentSegmentModel.js";
  */
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get user by identifier (tries UUID first, then wallet address)
+ */
+async function getUserByIdentifier(query, identifier) {
+  if (!identifier) return null;
+
+  // First try as direct UUID (shipment_registry stores UUIDs)
+  let result = await query(
+    `SELECT id, payload FROM users WHERE id = $1::uuid`,
+    [identifier]
+  );
+
+  if (result.rows.length === 0) {
+    // Try as public key (wallet address) as fallback
+    result = await query(
+      `SELECT id, payload FROM users WHERE public_key = $1`,
+      [identifier]
+    );
+  }
+
+  return result.rows[0] || null;
+}
+
+// ============================================================================
 // SHIPMENT NOTIFICATIONS
 // ============================================================================
 
@@ -22,22 +49,16 @@ export async function notifyShipmentCreated(shipmentId, createdByUserId) {
     // Get user IDs from wallet addresses
     const { query } = await import("../db.js");
 
-    const [manufacturerResult, consumerResult, segmentCountResult] =
+    const [manufacturerData, consumerData, segmentCountResult] =
       await Promise.all([
-        query(`SELECT id, status, payload FROM users WHERE public_key = $1`, [
-          shipment.manufacturer_uuid,
-        ]),
-        query(`SELECT id, status, payload FROM users WHERE public_key = $1`, [
-          shipment.consumer_uuid,
-        ]),
+        getUserByIdentifier(query, shipment.manufacturer_uuid),
+        getUserByIdentifier(query, shipment.consumer_uuid),
         query(
           `SELECT COUNT(*) as segment_count FROM shipment_segment WHERE shipment_id = $1`,
           [shipmentId]
         ),
       ]);
 
-    const manufacturerData = manufacturerResult.rows[0];
-    const consumerData = consumerResult.rows[0];
     const segmentCount = parseInt(
       segmentCountResult.rows[0]?.segment_count || 0
     );
@@ -129,16 +150,11 @@ export async function notifyShipmentAccepted(shipmentId) {
 
     const { query } = await import("../db.js");
 
-    const [manufacturerResult, consumerResult, segmentsResult] =
-      await Promise.all([
-        query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-          shipment.manufacturer_uuid,
-        ]),
-        query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-          shipment.consumer_uuid,
-        ]),
-        query(
-          `SELECT 
+    const [manufacturerData, consumerData, segmentsResult] = await Promise.all([
+      getUserByIdentifier(query, shipment.manufacturer_uuid),
+      getUserByIdentifier(query, shipment.consumer_uuid),
+      query(
+        `SELECT 
           ss.segment_order,
           ss.expected_ship_date,
           ss.estimated_arrival_date,
@@ -151,12 +167,10 @@ export async function notifyShipmentAccepted(shipmentId) {
          LEFT JOIN checkpoint_registry end_cp ON end_cp.id = ss.end_checkpoint_id
          WHERE ss.shipment_id = $1
          ORDER BY ss.segment_order ASC`,
-          [shipmentId]
-        ),
-      ]);
+        [shipmentId]
+      ),
+    ]);
 
-    const manufacturerData = manufacturerResult.rows[0];
-    const consumerData = consumerResult.rows[0];
     const segments = segmentsResult.rows;
 
     const recipients = [manufacturerData?.id, consumerData?.id].filter(Boolean);
@@ -208,16 +222,11 @@ export async function notifyShipmentInTransit(shipmentId) {
 
     const { query } = await import("../db.js");
 
-    const [manufacturerResult, consumerResult, segmentsResult] =
-      await Promise.all([
-        query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-          shipment.manufacturer_uuid,
-        ]),
-        query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-          shipment.consumer_uuid,
-        ]),
-        query(
-          `SELECT 
+    const [manufacturerData, consumerData, segmentsResult] = await Promise.all([
+      getUserByIdentifier(query, shipment.manufacturer_uuid),
+      getUserByIdentifier(query, shipment.consumer_uuid),
+      query(
+        `SELECT 
           ss.segment_order,
           ss.expected_ship_date,
           ss.estimated_arrival_date,
@@ -230,12 +239,10 @@ export async function notifyShipmentInTransit(shipmentId) {
          LEFT JOIN checkpoint_registry end_cp ON end_cp.id = ss.end_checkpoint_id
          WHERE ss.shipment_id = $1
          ORDER BY ss.segment_order ASC`,
-          [shipmentId]
-        ),
-      ]);
+        [shipmentId]
+      ),
+    ]);
 
-    const manufacturerData = manufacturerResult.rows[0];
-    const consumerData = consumerResult.rows[0];
     const segments = segmentsResult.rows;
 
     const recipients = [manufacturerData?.id, consumerData?.id].filter(Boolean);
@@ -279,63 +286,104 @@ export async function notifyShipmentInTransit(shipmentId) {
 
 /**
  * Notifies when a shipment is delivered
+ * @param {string} shipmentId - The shipment ID
+ * @param {Array} segments - Optional pre-fetched segments (for use within transactions)
  */
-export async function notifyShipmentDelivered(shipmentId) {
+export async function notifyShipmentDelivered(shipmentId, segments = null) {
   try {
+    console.log(`📢 notifyShipmentDelivered called for shipment ${shipmentId}`);
+
     const shipment = await getShipmentById(shipmentId);
-    if (!shipment) return;
+    if (!shipment) {
+      console.log(`❌ Shipment not found: ${shipmentId}`);
+      return;
+    }
+
+    console.log(`📦 Shipment found:`, {
+      id: shipment.id,
+      status: shipment.status,
+      manufacturer_uuid: shipment.manufacturer_uuid,
+      consumer_uuid: shipment.consumer_uuid,
+    });
 
     const { query } = await import("../db.js");
 
-    const [manufacturerResult, consumerResult, segmentsResult] =
-      await Promise.all([
-        query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-          shipment.manufacturer_uuid,
-        ]),
-        query(`SELECT id, payload FROM users WHERE public_key = $1`, [
-          shipment.consumer_uuid,
-        ]),
-        query(
-          `SELECT 
-          ss.segment_order,
-          ss.expected_ship_date,
-          ss.estimated_arrival_date,
-          start_cp.name AS start_name,
-          start_cp.state AS start_state,
-          end_cp.name AS end_name,
-          end_cp.state AS end_state
-         FROM shipment_segment ss
-         LEFT JOIN checkpoint_registry start_cp ON start_cp.id = ss.start_checkpoint_id
-         LEFT JOIN checkpoint_registry end_cp ON end_cp.id = ss.end_checkpoint_id
-         WHERE ss.shipment_id = $1
-         ORDER BY ss.segment_order ASC`,
-          [shipmentId]
-        ),
-      ]);
+    // Use pre-fetched segments if provided, otherwise query database
+    let allSegments;
+    if (segments && Array.isArray(segments) && segments.length > 0) {
+      console.log(`✅ Using provided segments (${segments.length} segments)`);
+      allSegments = segments;
+    } else {
+      console.log(`📥 Querying segments from database...`);
+      const allSegmentsResult = await query(
+        `SELECT id, status FROM shipment_segment WHERE shipment_id = $1 ORDER BY segment_order ASC`,
+        [shipmentId]
+      );
+      allSegments = allSegmentsResult.rows;
+    }
 
-    const manufacturerData = manufacturerResult.rows[0];
-    const consumerData = consumerResult.rows[0];
-    const segments = segmentsResult.rows;
+    console.log(
+      `📊 Segment statuses:`,
+      allSegments.map((s) => ({ id: s.id, status: s.status }))
+    );
+
+    if (allSegments.length === 0) {
+      console.log(`❌ No segments found for shipment ${shipmentId}`);
+      return;
+    }
+
+    // Check if all segments are delivered or closed (case-insensitive)
+    const allDelivered = allSegments.every((seg) => {
+      const status =
+        typeof seg.status === "string" ? seg.status.trim().toUpperCase() : "";
+      const isDelivered = status === "DELIVERED" || status === "CLOSED";
+      console.log(
+        `   📦 Segment ${seg.id}: ${seg.status} -> ${status} -> ${
+          isDelivered ? "✅" : "❌"
+        }`
+      );
+      return isDelivered;
+    });
+
+    if (!allDelivered) {
+      const pending = allSegments.filter((s) => {
+        const status =
+          typeof s.status === "string" ? s.status.trim().toUpperCase() : "";
+        return status !== "DELIVERED" && status !== "CLOSED";
+      });
+      console.log(
+        `⏭️ Not all segments delivered for shipment ${shipmentId}, skipping notification. Pending: ${pending
+          .map((p) => p.status)
+          .join(", ")}`
+      );
+      return;
+    }
+
+    console.log(`✅ All segments delivered/closed, getting user details...`);
+
+    const [manufacturerData, consumerData] = await Promise.all([
+      getUserByIdentifier(query, shipment.manufacturer_uuid),
+      getUserByIdentifier(query, shipment.consumer_uuid),
+    ]);
+
+    console.log(`👥 User lookup results:`, {
+      manufacturerFound: !!manufacturerData,
+      consumerFound: !!consumerData,
+      manufacturerId: manufacturerData?.id,
+      consumerId: consumerData?.id,
+    });
 
     const recipients = [manufacturerData?.id, consumerData?.id].filter(Boolean);
 
-    if (recipients.length === 0 || segments.length === 0) return;
+    if (recipients.length === 0) {
+      console.log(`❌ No valid recipients found for shipment ${shipmentId}`);
+      return;
+    }
 
-    // Get first and last segment details
-    const firstSegment = segments[0];
-    const lastSegment = segments[segments.length - 1];
-
-    const startCheckpoint = firstSegment.start_name
-      ? `${firstSegment.start_name}${
-          firstSegment.start_state ? ", " + firstSegment.start_state : ""
-        }`
-      : "Start Location";
-
-    const endCheckpoint = lastSegment.end_name
-      ? `${lastSegment.end_name}${
-          lastSegment.end_state ? ", " + lastSegment.end_state : ""
-        }`
-      : "End Location";
+    console.log(
+      `📨 Sending notification to ${recipients.length} recipients:`,
+      recipients
+    );
 
     await notificationService.createBulkNotifications(recipients, {
       type: notificationService.NotificationType.SHIPMENT_DELIVERED,
@@ -344,15 +392,13 @@ export async function notifyShipmentDelivered(shipmentId) {
       message: `Shipment #${shipmentId} has been successfully delivered`,
       shipmentId,
       metadata: {
-        shipment_id: shipmentId,
-        start_checkpoint: startCheckpoint,
-        end_checkpoint: endCheckpoint,
-        expected_ship_date: firstSegment.expected_ship_date,
-        estimated_arrival_date: lastSegment.estimated_arrival_date,
+        total_segments: allSegments.length,
       },
     });
+
+    console.log(`✅ Shipment delivered notification sent for ${shipmentId}`);
   } catch (error) {
-    console.error("Failed to send shipment delivered notification:", error);
+    console.error("❌ Failed to send shipment delivered notification:", error);
   }
 }
 
@@ -421,10 +467,10 @@ export async function notifySegmentAccepted(segmentId, supplierId) {
       supplierResult,
       checkpointsResult,
     ] = await Promise.all([
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.manufacturer_uuid,
       ]),
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.consumer_uuid,
       ]),
       query(`SELECT payload FROM users WHERE id = $1`, [supplierId]),
@@ -443,11 +489,6 @@ export async function notifySegmentAccepted(segmentId, supplierId) {
         [segmentId]
       ),
     ]);
-
-    const stakeholderRecipients = [
-      manufacturerResult.rows[0]?.id,
-      consumerResult.rows[0]?.id,
-    ].filter(Boolean);
 
     // Get supplier name
     const supplierName =
@@ -468,13 +509,15 @@ export async function notifySegmentAccepted(segmentId, supplierId) {
         }`
       : `Checkpoint ${segment.segment_order + 1}`;
 
-    // Notify shipment stakeholders (manufacturer & consumer)
-    if (stakeholderRecipients.length > 0) {
-      await notificationService.createBulkNotifications(stakeholderRecipients, {
+    // Notify manufacturer (shipment owner)
+    const manufacturerId = manufacturerResult.rows[0]?.id;
+    if (manufacturerId) {
+      await notificationService.createNotification({
+        userId: manufacturerId,
         type: notificationService.NotificationType.SEGMENT_ACCEPTED,
         severity: notificationService.NotificationSeverity.SUCCESS,
-        title: "Segment Accepted",
-        message: `Segment #${segmentId} (${startLocation} → ${endLocation}) has been accepted by ${supplierName}`,
+        title: "Segment Acceptance Confirmed",
+        message: `Shipment Segment #${segmentId} has been accepted and is ready for transit`,
         segmentId,
         shipmentId: segment.shipment_id,
         metadata: {
@@ -489,21 +532,28 @@ export async function notifySegmentAccepted(segmentId, supplierId) {
       });
     }
 
-    // Notify the supplier who accepted (confirmation)
-    await notificationService.createBulkNotifications([supplierId], {
-      type: notificationService.NotificationType.SEGMENT_ACCEPTED,
-      severity: notificationService.NotificationSeverity.SUCCESS,
-      title: "Segment Acceptance Confirmed",
-      message: `Segment #${segmentId} accepted: ${startLocation} → ${endLocation}`,
-      segmentId,
-      shipmentId: segment.shipment_id,
-      metadata: {
-        start_checkpoint: startLocation,
-        end_checkpoint: endLocation,
-        expected_ship_date: segment.expected_ship_date,
-        estimated_arrival_date: segment.estimated_arrival_date,
-      },
-    });
+    // Notify consumer
+    const consumerId = consumerResult.rows[0]?.id;
+    if (consumerId && consumerId !== manufacturerId) {
+      await notificationService.createNotification({
+        userId: consumerId,
+        type: notificationService.NotificationType.SEGMENT_ACCEPTED,
+        severity: notificationService.NotificationSeverity.SUCCESS,
+        title: "Segment Acceptance Confirmed",
+        message: `Shipment Segment #${segmentId} has been accepted and is ready for transit`,
+        segmentId,
+        shipmentId: segment.shipment_id,
+        metadata: {
+          supplier_id: supplierId,
+          supplier_name: supplierName,
+          segment_order: segment.segment_order,
+          start_checkpoint: startLocation,
+          end_checkpoint: endLocation,
+          expected_ship_date: segment.expected_ship_date,
+          estimated_arrival_date: segment.estimated_arrival_date,
+        },
+      });
+    }
   } catch (error) {
     console.error("Failed to send segment accepted notification:", error);
   }
@@ -529,10 +579,10 @@ export async function notifySegmentTakeover(segmentId, supplierId) {
       supplierResult,
       checkpointsResult,
     ] = await Promise.all([
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.manufacturer_uuid,
       ]),
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.consumer_uuid,
       ]),
       query(`SELECT payload FROM users WHERE id = $1`, [supplierId]),
@@ -581,29 +631,12 @@ export async function notifySegmentTakeover(segmentId, supplierId) {
       type: notificationService.NotificationType.SEGMENT_TAKEOVER,
       severity: notificationService.NotificationSeverity.INFO,
       title: "Segment Picked Up",
-      message: `Segment #${segmentId} (${startLocation} → ${endLocation}) has been picked up by ${supplierName}`,
+      message: `Shipment Segment #${segmentId} has been picked up and is in transit`,
       segmentId,
       shipmentId: segment.shipment_id,
       metadata: {
         supplier_id: supplierId,
         supplier_name: supplierName,
-        start_checkpoint: startLocation,
-        end_checkpoint: endLocation,
-        expected_ship_date: segment.expected_ship_date,
-        estimated_arrival_date: segment.estimated_arrival_date,
-      },
-    });
-
-    // Notify the supplier who picked up the segment
-    await notificationService.createNotification({
-      userId: supplierId,
-      type: notificationService.NotificationType.SEGMENT_TAKEOVER,
-      severity: notificationService.NotificationSeverity.INFO,
-      title: "Segment Picked Up",
-      message: `Segment #${segmentId} picked up: ${startLocation} → ${endLocation}`,
-      segmentId,
-      shipmentId: segment.shipment_id,
-      metadata: {
         start_checkpoint: startLocation,
         end_checkpoint: endLocation,
         expected_ship_date: segment.expected_ship_date,
@@ -635,10 +668,10 @@ export async function notifySegmentHandover(segmentId, supplierId) {
       supplierResult,
       checkpointsResult,
     ] = await Promise.all([
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.manufacturer_uuid,
       ]),
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.consumer_uuid,
       ]),
       query(`SELECT payload FROM users WHERE id = $1`, [supplierId]),
@@ -687,29 +720,12 @@ export async function notifySegmentHandover(segmentId, supplierId) {
       type: notificationService.NotificationType.SEGMENT_HANDOVER,
       severity: notificationService.NotificationSeverity.INFO,
       title: "Segment Handed Over",
-      message: `Segment #${segmentId} (${startLocation} → ${endLocation}) has been handed over to ${supplierName}`,
+      message: `Shipment Segment #${segmentId} has been handed over to the next supplier`,
       segmentId,
       shipmentId: segment.shipment_id,
       metadata: {
         supplier_id: supplierId,
         supplier_name: supplierName,
-        start_checkpoint: startLocation,
-        end_checkpoint: endLocation,
-        expected_ship_date: segment.expected_ship_date,
-        estimated_arrival_date: segment.estimated_arrival_date,
-      },
-    });
-
-    // Notify the supplier who received the handover
-    await notificationService.createNotification({
-      userId: supplierId,
-      type: notificationService.NotificationType.SEGMENT_HANDOVER,
-      severity: notificationService.NotificationSeverity.INFO,
-      title: "Segment Handed Over",
-      message: `Segment #${segmentId} handed over: ${startLocation} → ${endLocation}`,
-      segmentId,
-      shipmentId: segment.shipment_id,
-      metadata: {
         start_checkpoint: startLocation,
         end_checkpoint: endLocation,
         expected_ship_date: segment.expected_ship_date,
@@ -741,10 +757,10 @@ export async function notifySegmentDelivered(segmentId, supplierId) {
       supplierResult,
       checkpointsResult,
     ] = await Promise.all([
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.manufacturer_uuid,
       ]),
-      query(`SELECT id, payload FROM users WHERE public_key = $1`, [
+      query(`SELECT id, payload FROM users WHERE id = $1`, [
         shipment.consumer_uuid,
       ]),
       supplierId
@@ -771,67 +787,8 @@ export async function notifySegmentDelivered(segmentId, supplierId) {
 
     if (stakeholderRecipients.length === 0) return;
 
-    // Get supplier name if available
-    const supplierName =
-      supplierResult.rows[0]?.payload?.identification?.legalName ||
-      supplierResult.rows[0]?.payload?.identification?.companyName ||
-      "Supplier";
-
-    // Get checkpoint details
-    const checkpointData = checkpointsResult.rows[0];
-    const startLocation = checkpointData?.start_name
-      ? `${checkpointData.start_name}${
-          checkpointData.start_state ? ", " + checkpointData.start_state : ""
-        }`
-      : `Checkpoint ${segment.segment_order}`;
-    const endLocation = checkpointData?.end_name
-      ? `${checkpointData.end_name}${
-          checkpointData.end_state ? ", " + checkpointData.end_state : ""
-        }`
-      : `Checkpoint ${segment.segment_order + 1}`;
-
-    // Notify stakeholders (manufacturer and consumer)
-    const stakeholderMessage = supplierId
-      ? `Segment #${segmentId} (${startLocation} → ${endLocation}) has been delivered by ${supplierName}`
-      : `Segment #${segmentId} (${startLocation} → ${endLocation}) has been delivered`;
-
-    await notificationService.createBulkNotifications(stakeholderRecipients, {
-      type: notificationService.NotificationType.SEGMENT_DELIVERED,
-      severity: notificationService.NotificationSeverity.SUCCESS,
-      title: "Segment Delivered",
-      message: stakeholderMessage,
-      segmentId,
-      shipmentId: segment.shipment_id,
-      metadata: {
-        ...(supplierId && {
-          supplier_id: supplierId,
-          supplier_name: supplierName,
-        }),
-        start_checkpoint: startLocation,
-        end_checkpoint: endLocation,
-        expected_ship_date: segment.expected_ship_date,
-        estimated_arrival_date: segment.estimated_arrival_date,
-      },
-    });
-
-    // Notify the supplier who delivered (if supplierId provided)
-    if (supplierId) {
-      await notificationService.createNotification({
-        userId: supplierId,
-        type: notificationService.NotificationType.SEGMENT_DELIVERED,
-        severity: notificationService.NotificationSeverity.SUCCESS,
-        title: "Segment Delivered",
-        message: `Segment #${segmentId} delivered: ${startLocation} → ${endLocation}`,
-        segmentId,
-        shipmentId: segment.shipment_id,
-        metadata: {
-          start_checkpoint: startLocation,
-          end_checkpoint: endLocation,
-          expected_ship_date: segment.expected_ship_date,
-          estimated_arrival_date: segment.estimated_arrival_date,
-        },
-      });
-    }
+    // No notification needed - already notified via "Segment Handed Over"
+    // Segment Delivered is the same as Segment Handed Over to next supplier
   } catch (error) {
     console.error("Failed to send segment delivered notification:", error);
   }

@@ -300,13 +300,28 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
     // Send notification for shipment status change
     const previousStatus = shipmentRecord.status?.toUpperCase();
     const newStatus = computedShipmentStatus;
+    console.log(
+      `[SHIPMENT_STATUS_CHANGE] Previous: ${previousStatus}, New: ${newStatus}, Changed: ${
+        previousStatus !== newStatus
+      }`
+    );
     if (previousStatus !== newStatus) {
       if (newStatus === "ACCEPTED") {
+        console.log(
+          `[NOTIFICATION] Calling notifyShipmentAccepted for ${shipmentId}`
+        );
         notifyShipmentAccepted(shipmentId).catch(console.error);
       } else if (newStatus === "IN_TRANSIT") {
+        console.log(
+          `[NOTIFICATION] Calling notifyShipmentInTransit for ${shipmentId}`
+        );
         notifyShipmentInTransit(shipmentId).catch(console.error);
       } else if (newStatus === "DELIVERED") {
-        notifyShipmentDelivered(shipmentId).catch(console.error);
+        console.log(
+          `[NOTIFICATION] Calling notifyShipmentDelivered for ${shipmentId} with ${segments.length} segments`
+        );
+        // Pass segments directly to avoid transaction timing issues
+        notifyShipmentDelivered(shipmentId, segments).catch(console.error);
       }
     }
 
@@ -1092,23 +1107,23 @@ export async function listSupplierShipmentSegments({
       timeTolerance: row.time_tolerance ?? null,
       shipment: {
         id: row.shipment_id ?? null,
-      consumer: {
-        id: row.consumer_uuid ?? null,
-        legalName: row.consumer_legal_name ?? null,
+        consumer: {
+          id: row.consumer_uuid ?? null,
+          legalName: row.consumer_legal_name ?? null,
+        },
       },
-    },
-    startCheckpoint: {
-      id: row.start_checkpoint_id ?? null,
-      name: row.start_name ?? null,
-      state: row.start_state ?? null,
-      country: row.start_country ?? null,
-    },
-    endCheckpoint: {
-      id: row.end_checkpoint_id ?? null,
-      name: row.end_name ?? null,
-      state: row.end_state ?? null,
-      country: row.end_country ?? null,
-    },
+      startCheckpoint: {
+        id: row.start_checkpoint_id ?? null,
+        name: row.start_name ?? null,
+        state: row.start_state ?? null,
+        country: row.start_country ?? null,
+      },
+      endCheckpoint: {
+        id: row.end_checkpoint_id ?? null,
+        name: row.end_name ?? null,
+        state: row.end_state ?? null,
+        country: row.end_country ?? null,
+      },
       actions: {
         canAccept,
         canTakeover,
