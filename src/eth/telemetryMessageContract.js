@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import TelemetryMessageRegistryArtifact from "../../blockchain/artifacts/contracts/TelemetryMessageRegistry.sol/TelemetryMessageRegistry.json" with { type: "json" };
 import { operatorWallet, contracts } from "../config.js";
 import { getNonceManagedWallet } from "./walletManager.js";
+import { retryOperation } from "../utils/retry.js";
 
 const wallet = getNonceManagedWallet(operatorWallet.privateKey);
 
@@ -51,22 +52,26 @@ export async function registerTelemetryMessageOnChain(
 ) {
   const payloadHash = ethers.keccak256(ethers.toUtf8Bytes(canonicalPayload));
 
-  const estimatedGas = await telemetryMessageRegistry.registerTelemetryMessage.estimateGas(
-    messageId,
-    packageId,
-    manufacturerId,
-    payloadHash
-  );
+  const tx = await retryOperation(async () => {
+    const estimatedGas = await telemetryMessageRegistry.registerTelemetryMessage.estimateGas(
+      messageId,
+      packageId,
+      manufacturerId,
+      payloadHash
+    );
 
-  const tx = await telemetryMessageRegistry.registerTelemetryMessage(
-    messageId,
-    packageId,
-    manufacturerId,
-    payloadHash,
-    { gasLimit: withSafetyMargin(estimatedGas) }
-  );
+    return await telemetryMessageRegistry.registerTelemetryMessage(
+      messageId,
+      packageId,
+      manufacturerId,
+      payloadHash,
+      { gasLimit: withSafetyMargin(estimatedGas) }
+    );
+  });
 
-  const receipt = await tx.wait();
+  const receipt = await retryOperation(async () => {
+    return await tx.wait();
+  });
 
   const targetAddress = contracts.telemetryMessageRegistry.toLowerCase();
   const event = receipt.logs
@@ -97,7 +102,9 @@ export async function registerTelemetryMessageOnChain(
  * @returns {Object} Message details
  */
 export async function getTelemetryMessageFromChain(messageId) {
-  const result = await telemetryMessageRegistry.getTelemetryMessage(messageId);
+  const result = await retryOperation(async () => {
+    return await telemetryMessageRegistry.getTelemetryMessage(messageId);
+  });
   
   return {
     messageId: result.messageId,
