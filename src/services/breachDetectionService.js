@@ -71,6 +71,7 @@ async function saveBreachRecord(breach, context, dbClient) {
     shipmentId,
     shipmentStatus,
     wallet,
+    segmentId,
   } = context;
 
   const breachId = randomUUID();
@@ -110,6 +111,7 @@ async function saveBreachRecord(breach, context, dbClient) {
     locationLatitude: breach.readings[0].latitude,
     locationLongitude: breach.readings[0].longitude,
     shipmentId: shipmentId ?? null,
+    segmentId: segmentId ?? null,
     shipmentStatus: shipmentStatus ?? null,
     notes: generateBreachNotes(breach),
   };
@@ -189,7 +191,7 @@ export async function detectTemperatureBreaches(
   context,
   dbClient
 ) {
-  const { messageId, shipmentId, shipmentStatus, wallet } = context;
+  const { messageId, shipmentId, shipmentStatus, wallet, segmentId } = context;
 
   const minTemp = parseFloat(productRequirements.required_start_temp);
   const maxTemp = parseFloat(productRequirements.required_end_temp);
@@ -256,6 +258,7 @@ export async function detectTemperatureBreaches(
               sensorType: "Temperature",
               shipmentId,
               shipmentStatus,
+              segmentId,
               wallet,
               assumedEnd: true,
               gapSize: timeGap,
@@ -306,6 +309,7 @@ export async function detectTemperatureBreaches(
             sensorType: "Temperature",
             shipmentId,
             shipmentStatus,
+            segmentId,
             wallet,
           },
           dbClient
@@ -329,6 +333,7 @@ export async function detectTemperatureBreaches(
         sensorType: "Temperature",
         shipmentId,
         shipmentStatus,
+        segmentId,
         wallet,
       },
       dbClient
@@ -350,7 +355,7 @@ export async function detectDoorTamperBreaches(
   context,
   dbClient
 ) {
-  const { messageId, wallet } = context;
+  const { messageId, wallet, segmentId } = context;
   const { id: shipmentId, status: shipmentStatus } = shipmentInfo || {};
 
   // Only check for door breaches when shipment is IN_TRANSIT
@@ -387,6 +392,7 @@ export async function detectDoorTamperBreaches(
         locationLatitude: reading.latitude,
         locationLongitude: reading.longitude,
         shipmentId: shipmentId ?? null,
+        segmentId: segmentId ?? null,
         shipmentStatus: shipmentStatus ?? null,
         notes: `Door opened during transit (shipment status: ${shipmentStatus})`,
       };

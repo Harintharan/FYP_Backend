@@ -31,6 +31,7 @@ export async function insertConditionBreach(
     locationLongitude,
     checkpointId,
     shipmentId,
+    segmentId,
     shipmentStatus,
     payloadHash,
     txHash,
@@ -52,7 +53,7 @@ export async function insertConditionBreach(
        severity, breach_start_time, breach_end_time, duration_seconds, has_data_gaps,
        total_gap_duration_seconds, gap_details, breach_certainty, measured_min_value, measured_max_value,
        measured_avg_value, expected_min_value, expected_max_value, location_latitude, location_longitude,
-       checkpoint_id, shipment_id, shipment_status, payload_hash, tx_hash,
+       checkpoint_id, shipment_id, segment_id, shipment_status, payload_hash, tx_hash,
        pinata_cid, pinata_pinned_at, notes, resolved, resolved_at,
        resolved_by, created_by, created_at
      )
@@ -61,9 +62,9 @@ export async function insertConditionBreach(
        $6, $7, $8, $9, $10,
        $11, $12, $13, $14, $15,
        $16, $17, $18, $19, $20,
-       $21, $22, $23, $24, $25,
-       $26, $27, $28, $29, $30,
-       $31, $32, COALESCE($33, NOW())
+       $21, $22, $23, $24, $25, $26,
+       $27, $28, $29, $30, $31,
+       $32, $33, COALESCE($34, NOW())
      )
      RETURNING *`,
     [
@@ -89,6 +90,7 @@ export async function insertConditionBreach(
       locationLongitude ?? null,
       checkpointId ?? null,
       shipmentId ?? null,
+      segmentId ?? null,
       shipmentStatus ?? null,
       payloadHash,
       txHash,

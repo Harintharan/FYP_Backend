@@ -99,8 +99,6 @@ export async function createNotification({
       data: notification,
     });
 
-    console.log(`✅ Notification created for user ${userId}: ${type}`);
-
     return notification;
   } catch (error) {
     console.error("Error creating notification:", error);
