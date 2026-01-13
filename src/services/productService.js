@@ -25,8 +25,9 @@ import {
   updateProductOnChain as updateProductRegistryOnChain,
 } from "../eth/productContract.js";
 import { normalizeHash } from "../utils/hash.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
+import { runInTransaction } from "../utils/dbTransactions.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 
 function ensureRegistration(registration) {
   if (!registration?.id) {
@@ -115,39 +116,47 @@ export async function createProductRecord({ payload, registration, wallet }) {
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "product",
-    record: {
-      id: productId,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "create",
-    identifier: productId,
-    errorMessage: "⚠️ Failed to back up product to Pinata:",
-  });
-
-  await createProduct({
+  const pinataRecord = {
     id: productId,
-    name: normalized.productName,
-    productCategoryId: normalized.productCategoryId,
-    manufacturerUuid: normalized.manufacturerUuid,
-    requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
-    requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
-    handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
-    productHash: payloadHash,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
     txHash,
-    createdBy: manufacturerUuid,
-    pinataCid: pinataBackup?.IpfsHash ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : null,
-  });
+  };
 
-  const record = await findProductById(productId);
+  const record = await runInTransaction(async (client) => {
+    const created = await createProduct(
+      {
+        id: productId,
+        name: normalized.productName,
+        productCategoryId: normalized.productCategoryId,
+        manufacturerUuid: normalized.manufacturerUuid,
+        requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
+        requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
+        handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
+        productHash: payloadHash,
+        txHash,
+        createdBy: manufacturerUuid,
+        pinataCid: null,
+        pinataPinnedAt: null,
+      },
+      client
+    );
+
+    await enqueuePinataBackup(
+      {
+        entity: "product",
+        recordId: productId,
+        identifier: productId,
+        operation: "create",
+        record: pinataRecord,
+        walletAddress: wallet?.walletAddress ?? null,
+      },
+      client
+    );
+
+    return created;
+  });
   return {
     statusCode: 201,
     body: {
@@ -202,41 +211,47 @@ export async function updateProductRecord({
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "product",
-    record: {
-      id,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "update",
-    identifier: id,
-    errorMessage: "⚠️ Failed to back up product update to Pinata:",
-  });
-
-  await updateProduct(
+  const pinataRecord = {
     id,
-    {
-      name: normalized.productName,
-      productCategoryId: normalized.productCategoryId,
-      manufacturerUuid: normalized.manufacturerUuid,
-      requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
-      requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
-      handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
-      productHash: payloadHash,
-      txHash,
-      updatedBy: registration.id,
-      pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-      pinataPinnedAt: pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : existing.pinata_pinned_at ?? null,
-    }
-  );
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
+    txHash,
+  };
 
-  const record = await findProductById(id);
+  const record = await runInTransaction(async (client) => {
+    const updated = await updateProduct(
+      id,
+      {
+        name: normalized.productName,
+        productCategoryId: normalized.productCategoryId,
+        manufacturerUuid: normalized.manufacturerUuid,
+        requiredStartTemp: sanitizeOptional(normalized.requiredStartTemp),
+        requiredEndTemp: sanitizeOptional(normalized.requiredEndTemp),
+        handlingInstructions: sanitizeOptional(normalized.handlingInstructions),
+        productHash: payloadHash,
+        txHash,
+        updatedBy: registration.id,
+        pinataCid: null,
+        pinataPinnedAt: null,
+      },
+      client
+    );
+
+    await enqueuePinataBackup(
+      {
+        entity: "product",
+        recordId: id,
+        identifier: id,
+        operation: "update",
+        record: pinataRecord,
+        walletAddress: wallet?.walletAddress ?? null,
+      },
+      client
+    );
+
+    return updated;
+  });
   return {
     statusCode: 200,
     body: {

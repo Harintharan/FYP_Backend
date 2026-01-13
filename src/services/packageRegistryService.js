@@ -25,7 +25,8 @@ import {
   updateProductOnChain,
 } from "../eth/packageContract.js";
 import { normalizeHash } from "../utils/hash.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
+import { runInTransaction } from "../utils/dbTransactions.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
 function ensureManufacturerAccess(registration, manufacturerUUID) {
@@ -108,21 +109,13 @@ async function applyPackageUpdate({
       computed: normalizedComputed,
     });
   }
-
-  const pinataBackup = await backupRecordSafely({
-    entity: "package",
-    record: {
-      id,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "update",
-    identifier: id,
-    errorMessage: pinataErrorMessage,
-  });
+  const pinataRecord = {
+    id,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
+    txHash,
+  };
 
   const record = await updatePackageRecord(
     id,
@@ -143,11 +136,21 @@ async function applyPackageUpdate({
         existing.updated_by ??
         existing.created_by ??
         null,
-      pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-      pinataPinnedAt: pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : existing.pinata_pinned_at ?? null,
+      pinataCid: null,
+      pinataPinnedAt: null,
       status: normalized.status ?? null,
+    },
+    dbClient,
+  );
+
+  await enqueuePinataBackup(
+    {
+      entity: "package",
+      recordId: id,
+      identifier: id,
+      operation: "update",
+      record: pinataRecord,
+      walletAddress: wallet?.walletAddress ?? null,
     },
     dbClient,
   );
@@ -158,7 +161,7 @@ async function applyPackageUpdate({
     canonical,
     payloadHash,
     txHash,
-    pinataBackup,
+    pinataBackup: null,
     normalizedHash: normalizedComputed,
   };
 }
@@ -205,41 +208,51 @@ export async function createPackage({ payload, registration, wallet }) {
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "package",
-    record: {
-      id: packageId,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "create",
-    identifier: packageId,
-    errorMessage: "⚠️ Failed to back up package to Pinata:",
-  });
-
-  const record = await insertPackage({
+  const pinataRecord = {
     id: packageId,
-    batchId: normalized.batchId ?? null,
-    shipmentId: normalized.shipmentId ?? null,
-    quantity: normalized.quantity ?? null,
-    microprocessorMac: normalized.microprocessorMac ?? null,
-    sensorTypes: normalized.sensorTypes ?? null,
-    manufacturerUUID: normalized.manufacturerUUID,
-    productHash: payloadHash,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
     txHash,
-    createdBy:
-      wallet?.walletAddress ??
-      registration?.id ??
-      normalized.manufacturerUUID ??
-      "unknown",
-    pinataCid: pinataBackup?.IpfsHash ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : null,
-    status: normalized.status ?? defaultStatus,
+  };
+
+  const record = await runInTransaction(async (client) => {
+    const created = await insertPackage(
+      {
+        id: packageId,
+        batchId: normalized.batchId ?? null,
+        shipmentId: normalized.shipmentId ?? null,
+        quantity: normalized.quantity ?? null,
+        microprocessorMac: normalized.microprocessorMac ?? null,
+        sensorTypes: normalized.sensorTypes ?? null,
+        manufacturerUUID: normalized.manufacturerUUID,
+        productHash: payloadHash,
+        txHash,
+        createdBy:
+          wallet?.walletAddress ??
+          registration?.id ??
+          normalized.manufacturerUUID ??
+          "unknown",
+        pinataCid: null,
+        pinataPinnedAt: null,
+        status: normalized.status ?? defaultStatus,
+      },
+      client
+    );
+
+    await enqueuePinataBackup(
+      {
+        entity: "package",
+        recordId: packageId,
+        identifier: packageId,
+        operation: "create",
+        record: pinataRecord,
+        walletAddress: wallet?.walletAddress ?? null,
+      },
+      client
+    );
+
+    return created;
   });
 
   const formatted = formatPackageRecord(record);
@@ -379,7 +392,7 @@ export async function syncPackageShipmentState({
     overrides.quantity = Math.trunc(quantity);
   }
 
-  const { txHash, normalizedHash, pinataBackup } =
+  const { record, txHash, normalizedHash } =
     await applyPackageUpdate({
       existing,
       payload: {},
@@ -397,7 +410,7 @@ export async function syncPackageShipmentState({
   return {
     txHash,
     hash: normalizedHash,
-    pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
+    pinataCid: record?.pinata_cid ?? existing.pinata_cid ?? null,
   };
 }
 
@@ -438,7 +451,7 @@ export async function updatePackageStatusForShipment({
     };
   }
 
-  const { record, normalizedHash, txHash, pinataBackup } =
+  const { record, normalizedHash, txHash } =
     await applyPackageUpdate({
       existing,
       payload: {},
@@ -456,6 +469,7 @@ export async function updatePackageStatusForShipment({
     record: formatPackageRecord(record),
     txHash,
     hash: normalizedHash,
-    pinataCid: pinataBackup?.IpfsHash ?? record.pinata_cid ?? null,
+    pinataCid: record?.pinata_cid ?? null,
   };
 }
+

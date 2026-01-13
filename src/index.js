@@ -77,7 +77,14 @@ httpServer.listen(port, host, async () => {
     console.log("✅ Database setup completed successfully");
     startAutomaticCleanup(24);
     // console.log("✅ Automatic token cleanup started");
+    try {
+      await import("./workers/pinataWorker.js");
+    } catch (workerErr) {
+      console.error("? Failed to start Pinata worker:", workerErr);
+    }
   } catch (err) {
     console.error("❌ Error setting up database:", err);
   }
 });
+
+

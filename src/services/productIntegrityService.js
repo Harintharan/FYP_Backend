@@ -27,6 +27,37 @@ function toOptionalString(value) {
   return value.trim();
 }
 
+function normalizeTemperature(value, { appendUnit }) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  if (typeof value !== "string") {
+    value = String(value);
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  if (!appendUnit) {
+    return trimmed;
+  }
+
+  const numericOnly = /^-?\d+(?:\.\d+)?$/.test(trimmed);
+  if (numericOnly) {
+    return `${trimmed}C`;
+  }
+
+  const numericWithC = /^(-?\d+(?:\.\d+)?)[\s]*[cC]$/.exec(trimmed);
+  if (numericWithC) {
+    return `${numericWithC[1]}C`;
+  }
+
+  return trimmed;
+}
+
 function fromRecord(value) {
   if (value === undefined || value === null) {
     return undefined;
@@ -38,13 +69,20 @@ function fromRecord(value) {
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
-export function normalizeProductPayload(payload) {
+export function normalizeProductPayload(
+  payload,
+  { appendTempUnit = true } = {}
+) {
   return {
     productName: ensureString(payload.productName, "productName"),
     productCategoryId: ensureString(payload.productCategoryId, "productCategoryId").toLowerCase(),
     manufacturerUuid: ensureString(payload.manufacturerUuid, "manufacturerUuid").toLowerCase(),
-    requiredStartTemp: toOptionalString(payload.requiredStartTemp),
-    requiredEndTemp: toOptionalString(payload.requiredEndTemp),
+    requiredStartTemp: normalizeTemperature(payload.requiredStartTemp, {
+      appendUnit: appendTempUnit,
+    }),
+    requiredEndTemp: normalizeTemperature(payload.requiredEndTemp, {
+      appendUnit: appendTempUnit,
+    }),
     handlingInstructions: toOptionalString(payload.handlingInstructions),
   };
 }
@@ -77,7 +115,9 @@ export function prepareProductPersistence(
   overrides = {}
 ) {
   const merged = { ...defaults, ...payload, ...overrides };
-  const normalized = normalizeProductPayload(merged);
+  const normalized = normalizeProductPayload(merged, {
+    appendTempUnit: true,
+  });
   const canonical = buildProductCanonicalPayload(productId, normalized);
   const payloadHash = computeProductHashFromCanonical(canonical);
   return {

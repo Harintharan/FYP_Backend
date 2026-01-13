@@ -11,7 +11,7 @@ import {
 import { insertConditionBreach } from "../models/ConditionBreachModel.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { registerConditionBreachOnChain } from "../eth/conditionBreachContract.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 import { prepareSensorDataBreachPersistence } from "./sensorDataBreachIntegrityService.js";
 import { stableStringify } from "../utils/canonicalize.js";
 import { notifyConditionBreach } from "./notificationTriggers.js";
@@ -136,20 +136,25 @@ async function saveBreachRecord(breach, context, dbClient) {
   );
 
   // Backup to Pinata
-  const pinataBackup = await backupRecordSafely({
-    entity: "condition_breach",
-    record: {
-      id: breachId,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
+  const pinataRecord = {
+    id: breachId,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
+    txHash,
+  };
+
+  await enqueuePinataBackup(
+    {
+      entity: "condition_breach",
+      recordId: breachId,
+      identifier: breachId,
+      operation: "create",
+      record: pinataRecord,
+      walletAddress: wallet?.walletAddress ?? null,
     },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "create",
-    identifier: breachId,
-    errorMessage: "⚠️ Failed to back up condition breach to Pinata:",
-  });
+    dbClient
+  );
 
   // Save to database
   const savedBreach = await insertConditionBreach(
@@ -158,10 +163,8 @@ async function saveBreachRecord(breach, context, dbClient) {
       ...breachData,
       payloadHash,
       txHash,
-      pinataCid: pinataBackup?.IpfsHash ?? null,
-      pinataPinnedAt: pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : null,
+      pinataCid: null,
+      pinataPinnedAt: null,
       createdBy: wallet?.walletAddress ?? null,
     },
     dbClient
@@ -417,20 +420,25 @@ export async function detectDoorTamperBreaches(
       );
 
       // Backup to Pinata
-      const pinataBackup = await backupRecordSafely({
-        entity: "condition_breach",
-        record: {
-          id: breachId,
-          payloadCanonical: canonical,
-          payloadHash,
-          payload: normalized,
-          txHash,
+      const pinataRecord = {
+        id: breachId,
+        payloadCanonical: canonical,
+        payloadHash,
+        payload: normalized,
+        txHash,
+      };
+
+      await enqueuePinataBackup(
+        {
+          entity: "condition_breach",
+          recordId: breachId,
+          identifier: breachId,
+          operation: "create",
+          record: pinataRecord,
+          walletAddress: wallet?.walletAddress ?? null,
         },
-        walletAddress: wallet?.walletAddress ?? null,
-        operation: "create",
-        identifier: breachId,
-        errorMessage: "⚠️ Failed to back up door tamper breach to Pinata:",
-      });
+        dbClient
+      );
 
       // Save to database
       const savedBreach = await insertConditionBreach(
@@ -439,10 +447,8 @@ export async function detectDoorTamperBreaches(
           ...breachData,
           payloadHash,
           txHash,
-          pinataCid: pinataBackup?.IpfsHash ?? null,
-          pinataPinnedAt: pinataBackup?.Timestamp
-            ? new Date(pinataBackup.Timestamp)
-            : null,
+          pinataCid: null,
+          pinataPinnedAt: null,
           createdBy: wallet?.walletAddress ?? null,
         },
         dbClient

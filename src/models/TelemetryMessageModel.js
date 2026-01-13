@@ -101,3 +101,21 @@ export async function updateTelemetryMessageReadingCount(id, count, dbClient) {
   );
   return rows[0] ?? null;
 }
+
+export async function updateTelemetryMessagePinataFields(
+  { id, payloadHash, pinataCid, pinataPinnedAt },
+  dbClient
+) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `UPDATE telemetry_messages
+        SET pinata_cid = $3,
+            pinata_pinned_at = $4
+      WHERE id = $1::uuid
+        AND payload_hash = $2
+      RETURNING id`,
+    [id, payloadHash, pinataCid ?? null, pinataPinnedAt ?? null]
+  );
+
+  return rows[0] ?? null;
+}

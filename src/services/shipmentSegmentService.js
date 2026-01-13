@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { normalizeHash } from "../utils/hash.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 import { runInTransaction } from "../utils/dbTransactions.js";
 import {
   insertShipmentSegment,
@@ -259,26 +259,31 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
       });
     }
 
-    const pinataBackup = await backupRecordSafely({
-      entity: "shipment",
-      record: {
-        id: shipmentId,
-        manufacturerUUID: normalized.manufacturerUUID, // Use UUID for Pinata
-        consumerUUID: normalized.consumerUUID, // Use UUID for Pinata
-        payloadCanonical: canonical,
-        payloadHash,
-        payload: {
-          ...normalized,
-          shipmentItems: normalizedItems,
-          checkpoints: normalizedCheckpoints,
-        },
-        txHash,
+    const pinataRecord = {
+      id: shipmentId,
+      manufacturerUUID: normalized.manufacturerUUID, // Use UUID for Pinata
+      consumerUUID: normalized.consumerUUID, // Use UUID for Pinata
+      payloadCanonical: canonical,
+      payloadHash,
+      payload: {
+        ...normalized,
+        shipmentItems: normalizedItems,
+        checkpoints: normalizedCheckpoints,
       },
-      walletAddress,
-      operation: "update",
-      identifier: shipmentId,
-      errorMessage: "⚠️ Failed to back up shipment status update to Pinata:",
-    });
+      txHash,
+    };
+
+    await enqueuePinataBackup(
+      {
+        entity: "shipment",
+        recordId: shipmentId,
+        identifier: shipmentId,
+        operation: "update",
+        record: pinataRecord,
+        walletAddress,
+      },
+      client
+    );
 
     const updatedShipmentRecord = await updateShipmentRecord(
       shipmentId,
@@ -289,10 +294,8 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
         shipment_hash: payloadHash,
         tx_hash: txHash,
         updated_by: resolveShipmentUpdatedBy(walletAddress),
-        pinata_cid: pinataBackup?.IpfsHash ?? shipmentRecord.pinata_cid ?? null,
-        pinata_pinned_at: pinataBackup?.Timestamp
-          ? new Date(pinataBackup.Timestamp)
-          : shipmentRecord.pinata_pinned_at ?? null,
+        pinata_cid: null,
+        pinata_pinned_at: null,
       },
       client
     );
@@ -328,10 +331,8 @@ async function reconcileShipmentState({ shipmentId, walletAddress, client }) {
     const formattedShipment = formatShipmentRecord(updatedShipmentRecord);
     const shipmentResponse = {
       ...formattedShipment,
-      pinataCid: formattedShipment.pinataCid ?? pinataBackup?.IpfsHash ?? null,
-      pinataPinnedAt:
-        formattedShipment.pinataPinnedAt ??
-        (pinataBackup?.Timestamp ? new Date(pinataBackup.Timestamp) : null),
+      pinataCid: formattedShipment.pinataCid ?? null,
+      pinataPinnedAt: formattedShipment.pinataPinnedAt ?? null,
     };
 
     const packageStatusMap = {
@@ -756,20 +757,25 @@ export async function createShipmentSegment({
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: PINATA_ENTITY,
-    record: {
-      id: segmentId,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
+  const pinataRecord = {
+    id: segmentId,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
+    txHash,
+  };
+
+  await enqueuePinataBackup(
+    {
+      entity: PINATA_ENTITY,
+      recordId: segmentId,
+      identifier: segmentId,
+      operation: "create",
+      record: pinataRecord,
+      walletAddress,
     },
-    walletAddress,
-    operation: "create",
-    identifier: segmentId,
-    errorMessage: "⚠️ Failed to back up shipment segment to Pinata:",
-  });
+    dbClient
+  );
 
   const record = await insertShipmentSegment(
     {
@@ -785,10 +791,8 @@ export async function createShipmentSegment({
       status: normalized.status,
       segmentHash: payloadHash,
       txHash,
-      pinataCid: pinataBackup?.IpfsHash ?? null,
-      pinataPinnedAt: pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : null,
+      pinataCid: null,
+      pinataPinnedAt: null,
     },
     dbClient
   );
@@ -859,20 +863,25 @@ export async function updateShipmentSegmentStatus({
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: PINATA_ENTITY,
-    record: {
-      id: segmentId,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
+  const pinataRecord = {
+    id: segmentId,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
+    txHash,
+  };
+
+  await enqueuePinataBackup(
+    {
+      entity: PINATA_ENTITY,
+      recordId: segmentId,
+      identifier: segmentId,
+      operation: "update",
+      record: pinataRecord,
+      walletAddress,
     },
-    walletAddress,
-    operation: "update",
-    identifier: segmentId,
-    errorMessage: "⚠️ Failed to back up shipment segment update to Pinata:",
-  });
+    dbClient
+  );
 
   const updated = await updateShipmentSegmentRecord(
     {
@@ -882,10 +891,8 @@ export async function updateShipmentSegmentStatus({
       segmentOrder: normalized.segmentOrder ?? null,
       segmentHash: payloadHash,
       txHash,
-      pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-      pinataPinnedAt: pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : existing.pinata_pinned_at ?? null,
+      pinataCid: null,
+      pinataPinnedAt: null,
     },
     dbClient
   );

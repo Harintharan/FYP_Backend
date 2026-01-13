@@ -27,7 +27,8 @@ import {
   updateCheckpointOnChain,
 } from "../eth/checkpointContract.js";
 import { normalizeHash } from "../utils/hash.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
+import { runInTransaction } from "../utils/dbTransactions.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 
 function ensureOwnerAccess(registration, ownerUUID) {
@@ -157,26 +158,13 @@ export async function upsertCheckpointForRegistration({
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "checkpoint",
-    record: {
-      id: checkpointId,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash: checkpointTxHash,
-    },
-    walletAddress,
-    operation: existing ? "update" : "create",
-    identifier: checkpointId,
-    errorMessage:
-      "⚠️ Failed to back up checkpoint generated from registration:",
-  });
-
-  const pinataCid = pinataBackup?.IpfsHash ?? existing?.pinata_cid ?? null;
-  const pinataPinnedAt = pinataBackup?.Timestamp
-    ? new Date(pinataBackup.Timestamp)
-    : existing?.pinata_pinned_at ?? null;
+  const pinataRecord = {
+    id: checkpointId,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
+    txHash: checkpointTxHash,
+  };
 
   const actor = resolveCheckpointActor({
     walletAddress,
@@ -184,8 +172,9 @@ export async function upsertCheckpointForRegistration({
     existing,
   });
 
+  let record;
   if (existing) {
-    return updateCheckpointRecord(
+    record = await updateCheckpointRecord(
       checkpointId,
       {
         name: normalized.name,
@@ -198,31 +187,46 @@ export async function upsertCheckpointForRegistration({
         checkpointHash: payloadHash,
         txHash: checkpointTxHash,
         updatedBy: actor,
-        pinataCid,
-        pinataPinnedAt,
+        pinataCid: null,
+        pinataPinnedAt: null,
+      },
+      dbClient
+    );
+  } else {
+    record = await insertCheckpoint(
+      {
+        id: checkpointId,
+        name: normalized.name,
+        address: normalized.address ?? null,
+        latitude: normalized.latitude ?? null,
+        longitude: normalized.longitude ?? null,
+        state: normalized.state ?? null,
+        country: normalized.country ?? null,
+        ownerUUID: normalized.ownerUUID,
+        checkpointHash: payloadHash,
+        txHash: checkpointTxHash,
+        createdBy: actor,
+        pinataCid: null,
+        pinataPinnedAt: null,
       },
       dbClient
     );
   }
 
-  return insertCheckpoint(
+  await enqueuePinataBackup(
     {
-      id: checkpointId,
-      name: normalized.name,
-      address: normalized.address ?? null,
-      latitude: normalized.latitude ?? null,
-      longitude: normalized.longitude ?? null,
-      state: normalized.state ?? null,
-      country: normalized.country ?? null,
-      ownerUUID: normalized.ownerUUID,
-      checkpointHash: payloadHash,
-      txHash: checkpointTxHash,
-      createdBy: actor,
-      pinataCid,
-      pinataPinnedAt,
+      entity: "checkpoint",
+      recordId: checkpointId,
+      identifier: checkpointId,
+      operation: existing ? "update" : "create",
+      record: pinataRecord,
+      walletAddress,
     },
     dbClient
   );
+
+  return record;
+
 }
 
 export async function createCheckpoint({ payload, registration, wallet }) {
@@ -253,41 +257,51 @@ export async function createCheckpoint({ payload, registration, wallet }) {
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "checkpoint",
-    record: {
-      id: checkpointId,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "create",
-    identifier: checkpointId,
-    errorMessage: "⚠️ Failed to back up checkpoint to Pinata:",
-  });
-
-  const record = await insertCheckpoint({
+  const pinataRecord = {
     id: checkpointId,
-    name: normalized.name,
-    address: normalized.address ?? null,
-    latitude: normalized.latitude ?? null,
-    longitude: normalized.longitude ?? null,
-    state: normalized.state ?? null,
-    country: normalized.country ?? null,
-    ownerUUID: normalized.ownerUUID,
-    checkpointHash: payloadHash,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
     txHash,
-    createdBy:
-      wallet?.walletAddress ??
-      registration?.id ??
-      normalized.ownerUUID ??
-      "unknown",
-    pinataCid: pinataBackup?.IpfsHash ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : null,
+  };
+
+  const record = await runInTransaction(async (client) => {
+    const created = await insertCheckpoint(
+      {
+        id: checkpointId,
+        name: normalized.name,
+        address: normalized.address ?? null,
+        latitude: normalized.latitude ?? null,
+        longitude: normalized.longitude ?? null,
+        state: normalized.state ?? null,
+        country: normalized.country ?? null,
+        ownerUUID: normalized.ownerUUID,
+        checkpointHash: payloadHash,
+        txHash,
+        createdBy:
+          wallet?.walletAddress ??
+          registration?.id ??
+          normalized.ownerUUID ??
+          "unknown",
+        pinataCid: null,
+        pinataPinnedAt: null,
+      },
+      client
+    );
+
+    await enqueuePinataBackup(
+      {
+        entity: "checkpoint",
+        recordId: checkpointId,
+        identifier: checkpointId,
+        operation: "create",
+        record: pinataRecord,
+        walletAddress: wallet?.walletAddress ?? null,
+      },
+      client
+    );
+
+    return created;
   });
 
   const formatted = formatCheckpointRecord(record);
@@ -344,41 +358,52 @@ export async function updateCheckpointDetails({
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "checkpoint",
-    record: {
-      id,
-      payloadCanonical: canonical,
-      payloadHash,
-      payload: normalized,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "update",
-    identifier: id,
-    errorMessage: "⚠️ Failed to back up checkpoint update to Pinata:",
-  });
-
-  const record = await updateCheckpointRecord(id, {
-    name: normalized.name,
-    address: normalized.address ?? null,
-    latitude: normalized.latitude ?? null,
-    longitude: normalized.longitude ?? null,
-    state: normalized.state ?? null,
-    country: normalized.country ?? null,
-    ownerUUID: normalized.ownerUUID,
-    checkpointHash: payloadHash,
+  const pinataRecord = {
+    id,
+    payloadCanonical: canonical,
+    payloadHash,
+    payload: normalized,
     txHash,
-    updatedBy:
-      wallet?.walletAddress ??
-      registration?.id ??
-      normalized.ownerUUID ??
-      existing.owner_uuid ??
-      null,
-    pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : existing.pinata_pinned_at ?? null,
+  };
+
+  const record = await runInTransaction(async (client) => {
+    const updated = await updateCheckpointRecord(
+      id,
+      {
+        name: normalized.name,
+        address: normalized.address ?? null,
+        latitude: normalized.latitude ?? null,
+        longitude: normalized.longitude ?? null,
+        state: normalized.state ?? null,
+        country: normalized.country ?? null,
+        ownerUUID: normalized.ownerUUID,
+        checkpointHash: payloadHash,
+        txHash,
+        updatedBy:
+          wallet?.walletAddress ??
+          registration?.id ??
+          normalized.ownerUUID ??
+          existing.owner_uuid ??
+          null,
+        pinataCid: null,
+        pinataPinnedAt: null,
+      },
+      client
+    );
+
+    await enqueuePinataBackup(
+      {
+        entity: "checkpoint",
+        recordId: id,
+        identifier: id,
+        operation: "update",
+        record: pinataRecord,
+        walletAddress: wallet?.walletAddress ?? null,
+      },
+      client
+    );
+
+    return updated;
   });
 
   const formatted = formatCheckpointRecord(record);

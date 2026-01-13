@@ -19,8 +19,10 @@ const {
   checkpointRangeKm,
 } = buildConfig(process.env);
 
+const pinataEnabled = pinata?.enabled !== false;
+
 export { host, port, dbUrl, jwtPrivateKey, jwtPublicKey };
-export { chain, operatorWallet, contracts, pinata };
+export { chain, operatorWallet, contracts, pinata, pinataEnabled };
 export {
   registrationPayloadMaxBytes,
   accessTokenExpiry,

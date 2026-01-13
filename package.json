@@ -8,7 +8,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "migrate": "node migrations/index.js"
+    "migrate": "node migrations/index.js",
+    "pinata-worker": "node src/workers/pinataWorker.js"
   },
   "keywords": [],
   "author": "",

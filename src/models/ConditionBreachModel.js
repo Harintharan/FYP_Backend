@@ -164,3 +164,21 @@ export async function updateConditionBreachResolved(
   );
   return rows[0] ?? null;
 }
+
+export async function updateConditionBreachPinataFields(
+  { id, payloadHash, pinataCid, pinataPinnedAt },
+  dbClient
+) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `UPDATE condition_breaches
+        SET pinata_cid = $3,
+            pinata_pinned_at = $4
+      WHERE id = $1::uuid
+        AND payload_hash = $2
+      RETURNING id`,
+    [id, payloadHash, pinataCid ?? null, pinataPinnedAt ?? null]
+  );
+
+  return rows[0] ?? null;
+}

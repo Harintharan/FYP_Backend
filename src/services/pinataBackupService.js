@@ -1,16 +1,22 @@
 import { PinataSDK } from "pinata";
 import { setGlobalDispatcher, ProxyAgent } from "undici";
-import { pinata as pinataConfig } from "../config.js";
+import { pinata as pinataConfig, pinataEnabled } from "../config.js";
 
 const pinata = createPinataClient(pinataConfig);
 
 function createPinataClient(config) {
+  if (!config || config.enabled === false) {
+    return null;
+  }
   configureProxy(config);
   ensureJwt(config.jwtKey);
   return new PinataSDK({ pinataJwt: config.jwtKey });
 }
 
 function configureProxy(config) {
+  if (!config || config.enabled === false) {
+    return;
+  }
   if (config.useProxy && config.proxyUrl) {
     setGlobalDispatcher(new ProxyAgent(config.proxyUrl));
     console.log(`🌐 Pinata proxy enabled: ${config.proxyUrl}`);
@@ -25,7 +31,7 @@ function configureProxy(config) {
 }
 
 function ensureJwt(jwtKey) {
-  if (!jwtKey) {
+  if (pinataEnabled && !jwtKey) {
     throw new Error("PINATA_JWT_KEY is required to use Pinata");
   }
 }
@@ -94,6 +100,9 @@ function buildMetadata({ entity, operation, identifier }, metadata = {}, pinataO
 export async function backupRecord(entity, record, options = {}) {
   assertEntity(entity);
   assertRecord(record);
+  if (!pinata) {
+    throw new Error("Pinata is disabled");
+  }
 
   const {
     operation = "create",
@@ -156,7 +165,8 @@ function logPinataFailure(error) {
     message: error.message,
     stack: error.stack,
     cause: error.cause,
-    proxyConfigured: !!pinataConfig.proxyUrl,
+    proxyConfigured: !!pinataConfig?.proxyUrl,
+    enabled: pinataEnabled,
   });
 }
 

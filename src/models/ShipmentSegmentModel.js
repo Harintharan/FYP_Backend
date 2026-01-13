@@ -302,3 +302,22 @@ export async function deleteShipmentSegmentsByShipmentId(
     [shipmentId]
   );
 }
+
+export async function updateShipmentSegmentPinataFields(
+  { id, payloadHash, pinataCid, pinataPinnedAt },
+  dbClient
+) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `UPDATE shipment_segment
+        SET pinata_cid = $3,
+            pinata_pinned_at = $4,
+            updated_at = NOW()
+      WHERE id = $1::uuid
+        AND segment_hash = $2
+      RETURNING id`,
+    [id, payloadHash, pinataCid ?? null, pinataPinnedAt ?? null]
+  );
+
+  return rows[0] ?? null;
+}

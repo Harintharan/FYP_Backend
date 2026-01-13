@@ -3,7 +3,7 @@ import { stableStringify } from "../utils/canonicalize.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { submitOnChain, registry } from "../eth/contract.js";
 import { allocateRegistrationUuid } from "./registrationIdAllocator.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 import { normalizeHash } from "../utils/hash.js";
 import {
   ensureHashMatches,
@@ -24,9 +24,6 @@ import {
   DuplicateRegistrationError,
   RegistrationOnChainDuplicateError,
 } from "../errors/registrationErrors.js";
-
-const toDateOrNull = (timestamp) =>
-  timestamp ? new Date(timestamp) : null;
 
 const withPayloadUuid = (payload, uuid) => ({
   ...payload,
@@ -97,14 +94,9 @@ export async function createRegistrationRecord({
     submitterAddress: walletAddress ?? null,
   };
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "user_registration",
-    record: dbPayload,
-    walletAddress,
-    operation: "create",
-    identifier: registrationId,
-    errorMessage: "⚠️ Failed to back up registration to Pinata.",
-  });
+  const pinataRecord = {
+    ...dbPayload,
+  };
 
   const record = await runWithPersistenceGuard(
     () =>
@@ -112,11 +104,23 @@ export async function createRegistrationRecord({
         const row = await insertRegistration(
           {
             ...dbPayload,
-            pinataCid: pinataBackup?.IpfsHash ?? null,
-            pinataPinnedAt: toDateOrNull(pinataBackup?.Timestamp),
+            pinataCid: null,
+            pinataPinnedAt: null,
           },
           client
         );
+        await enqueuePinataBackup(
+          {
+            entity: "user_registration",
+            recordId: registrationId,
+            identifier: registrationId,
+            operation: "create",
+            record: pinataRecord,
+            walletAddress,
+          },
+          client
+        );
+
 
         await upsertCheckpointForRegistration({
           registrationId,
@@ -188,29 +192,32 @@ export async function updateRegistrationRecord({
     submitterAddress: walletAddress ?? null,
   };
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "user_registration",
-    record: {
-      ...existing,
-      ...updatePayload,
-    },
-    walletAddress,
-    operation: "update",
-    identifier: existing.id,
-    errorMessage: "⚠️ Failed to back up registration update to Pinata:",
-  });
+  const pinataRecord = {
+    ...existing,
+    ...updatePayload,
+  };
 
-  updatePayload.pinataCid =
-    pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null;
-  updatePayload.pinataPinnedAt =
-    toDateOrNull(pinataBackup?.Timestamp) ??
-    existing.pinata_pinned_at ??
-    null;
-
+  const updatePayloadWithPinata = {
+    ...updatePayload,
+    pinataCid: null,
+    pinataPinnedAt: null,
+  };
   const updated = await runWithPersistenceGuard(
     () =>
       runInTransaction(async (client) => {
-        const row = await updateRegistration(updatePayload, client);
+        const row = await updateRegistration(updatePayloadWithPinata, client);
+        await enqueuePinataBackup(
+          {
+            entity: "user_registration",
+            recordId: existing.id,
+            identifier: existing.id,
+            operation: "update",
+            record: pinataRecord,
+            walletAddress,
+          },
+          client
+        );
+
 
         await upsertCheckpointForRegistration({
           registrationId: existing.id,
@@ -238,3 +245,4 @@ export async function updateRegistrationRecord({
     },
   };
 }
+

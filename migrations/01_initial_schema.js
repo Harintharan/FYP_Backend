@@ -566,6 +566,63 @@ export const migrate = async (pool) => {
       EXECUTE FUNCTION update_daily_summary_timestamp()
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pinata_jobs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        entity TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        identifier TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload JSONB NOT NULL,
+        metadata JSONB,
+        pinata_options JSONB,
+        status TEXT NOT NULL DEFAULT 'PENDING'
+          CHECK (status IN ('PENDING', 'IN_PROGRESS', 'SUCCESS', 'FAILED', 'SKIPPED')),
+        attempts INT NOT NULL DEFAULT 0,
+        next_run_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pinata_jobs_status_run
+        ON pinata_jobs (status, next_run_at)
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pinata_jobs_entity_record
+        ON pinata_jobs (entity, record_id)
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pinata_jobs_created_at
+        ON pinata_jobs (created_at)
+    `);
+
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION notify_pinata_job()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        PERFORM pg_notify('pinata_jobs', NEW.id::text);
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    await pool.query(
+      "DROP TRIGGER IF EXISTS pinata_jobs_notify ON pinata_jobs"
+    );
+
+    await pool.query(`
+      CREATE TRIGGER pinata_jobs_notify
+      AFTER INSERT ON pinata_jobs
+      FOR EACH ROW
+      WHEN (NEW.status = 'PENDING')
+      EXECUTE FUNCTION notify_pinata_job();
+    `);
+
     // sensor_data_breach table creation removed - legacy table
 
     await pool.query("COMMIT");

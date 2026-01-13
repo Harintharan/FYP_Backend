@@ -238,3 +238,22 @@ export async function listShipmentsByManufacturerId(
   );
   return rows;
 }
+
+export async function updateShipmentPinataFields(
+  { id, payloadHash, pinataCid, pinataPinnedAt },
+  dbClient
+) {
+  const exec = resolveExecutor(dbClient);
+  const { rows } = await exec(
+    `UPDATE shipment_registry
+        SET pinata_cid = $3,
+            pinata_pinned_at = $4,
+            updated_at = NOW()
+      WHERE id = $1::uuid
+        AND shipment_hash = $2
+      RETURNING id`,
+    [id, payloadHash, pinataCid ?? null, pinataPinnedAt ?? null]
+  );
+
+  return rows[0] ?? null;
+}

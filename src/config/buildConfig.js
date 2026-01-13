@@ -32,6 +32,9 @@ const SUPPORTED_KEYS = [
   "PINATA_JWT",
   "PINATA_PROXY_URL",
   "PINATA_USE_PROXY",
+  "PINATA_ENABLED",
+  "PINATA_QUEUE_MODE",
+  "PINATA_QUEUE_POLL_MS",
   "DEFAULT_MAX_PAYLOAD_BYTES",
   "ACCESS_TOKEN_EXPIRY",
   "REFRESH_TOKEN_EXPIRY_DAYS",
@@ -144,6 +147,14 @@ function resolveHost(baseEnvVars) {
 }
 
 function resolvePinataConfig(baseEnvVars) {
+  const pinataEnabled =
+    baseEnvVars.PINATA_ENABLED === undefined ||
+    baseEnvVars.PINATA_ENABLED === null ||
+    baseEnvVars.PINATA_ENABLED.trim() === ""
+      ? true
+      : baseEnvVars.PINATA_ENABLED === "true" ||
+        baseEnvVars.PINATA_ENABLED === "1";
+
   const pinataApiKey = baseEnvVars.PINATA_API_KEY
     ? baseEnvVars.PINATA_API_KEY.trim()
     : "";
@@ -155,13 +166,14 @@ function resolvePinataConfig(baseEnvVars) {
     return jwtKey ? jwtKey.trim() : "";
   })();
 
-  if (!pinataJwtKey) {
+  if (pinataEnabled && !pinataJwtKey) {
     throw new Error(
       "PINATA_JWT_KEY (or PINATA_JWT) is required for the new Pinata SDK"
     );
   }
 
   return {
+    enabled: pinataEnabled,
     apiKey: pinataApiKey || null,
     secretApiKey: pinataSecretApiKey || null,
     jwtKey: pinataJwtKey || null,

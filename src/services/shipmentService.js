@@ -19,7 +19,7 @@ import {
   deleteShipmentSegmentsByShipmentId,
 } from "./shipmentSegmentService.js";
 import { listShipmentSegmentsByShipmentId as listShipmentSegmentsRawByShipmentId } from "../models/ShipmentSegmentModel.js";
-import { backupRecord } from "./pinataBackupService.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { runInTransaction } from "../utils/dbTransactions.js";
 import { normalizeHash } from "../utils/hash.js";
@@ -333,13 +333,11 @@ function mapAssignedProductsToShipmentItems(assignedProducts) {
   }));
 }
 
-function appendPinataMetadata(record, pinataBackup) {
+function appendPinataMetadata(record) {
   return {
     ...record,
-    pinataCid: pinataBackup?.IpfsHash ?? record.pinataCid ?? null,
-    pinataTimestamp: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : record.pinataPinnedAt ?? null,
+    pinataCid: record.pinataCid ?? null,
+    pinataTimestamp: record.pinataPinnedAt ?? null,
   };
 }
 
@@ -458,30 +456,18 @@ export async function registerShipment({ payload, wallet }) {
       created_by: normalizeRegistrationWallet(wallet),
     };
 
-    let pinataBackup = null;
-    try {
-      pinataBackup = await backupRecord(
-        "shipment",
-        {
-          ...createPayload,
-          manufacturerUUID: normalized.manufacturerUUID, // Use UUID for Pinata
-          consumerUUID: normalized.consumerUUID, // Use UUID for Pinata
-          payloadCanonical: canonical,
-          payloadHash,
-          payload: {
-            ...normalized,
-            shipmentItems: canonicalItems,
-            checkpoints: normalizedCheckpoints,
-          },
-        },
-        {
-          operation: "create",
-          identifier: shipmentId,
-        }
-      );
-    } catch (backupErr) {
-      console.error("⚠️ Failed to back up shipment to Pinata:", backupErr);
-    }
+    const pinataRecord = {
+      ...createPayload,
+      manufacturerUUID: normalized.manufacturerUUID,
+      consumerUUID: normalized.consumerUUID,
+      payloadCanonical: canonical,
+      payloadHash,
+      payload: {
+        ...normalized,
+        shipmentItems: canonicalItems,
+        checkpoints: normalizedCheckpoints,
+      },
+    };
 
     let persistedShipment = null;
     try {
@@ -489,11 +475,24 @@ export async function registerShipment({ payload, wallet }) {
         const saved = await createShipment(
           {
             ...createPayload,
-            pinata_cid: pinataBackup?.IpfsHash ?? null,
-            pinata_pinned_at: pinataBackup?.Timestamp ?? null,
+            pinata_cid: null,
+            pinata_pinned_at: null,
           },
           client
         );
+
+        await enqueuePinataBackup(
+          {
+            entity: "shipment",
+            recordId: shipmentId,
+            identifier: shipmentId,
+            operation: "create",
+            record: pinataRecord,
+            walletAddress: wallet?.walletAddress ?? null,
+          },
+          client
+        );
+
 
         for (const item of normalizedItems) {
           const packageId = item.packageUUID ?? item.package_uuid ?? null;
@@ -553,28 +552,19 @@ export async function registerShipment({ payload, wallet }) {
       mapAssignedProductsToShipmentItems(assignedProducts);
 
     const responsePayload = normalizeShipmentResponse(
-      appendPinataMetadata(
-        {
-          ...formattedShipment,
-          handover_checkpoints: savedCheckpoints,
-          shipmentItems: shipmentItemsPayload,
-          shipmentSegments,
-          blockchainTx: txHash,
-          dbHash: payloadHash,
-          blockchainHash: normalizedOnChain,
-        },
-        {
-          IpfsHash: pinataBackup?.IpfsHash ?? null,
-          Timestamp: pinataBackup?.Timestamp ?? null,
-        }
-      )
+      appendPinataMetadata({
+        ...formattedShipment,
+        handover_checkpoints: savedCheckpoints,
+        shipmentItems: shipmentItemsPayload,
+        shipmentSegments,
+        blockchainTx: txHash,
+        dbHash: payloadHash,
+        blockchainHash: normalizedOnChain,
+      })
     );
 
-    responsePayload.pinataCid =
-      formattedShipment.pinataCid ?? pinataBackup?.IpfsHash ?? null;
-    responsePayload.pinataTimestamp =
-      formattedShipment.pinataPinnedAt ??
-      (pinataBackup?.Timestamp ? new Date(pinataBackup.Timestamp) : null);
+    responsePayload.pinataCid = formattedShipment.pinataCid ?? null;
+    responsePayload.pinataTimestamp = formattedShipment.pinataPinnedAt ?? null;
 
     // Send notification to manufacturer and consumer
     const creatorUserId = wallet?.registration?.id || null;
@@ -691,34 +681,20 @@ export async function updateShipment({ id, payload, wallet }) {
       });
     }
 
-    let pinataBackup = null;
-    try {
-      pinataBackup = await backupRecord(
-        "shipment",
-        {
-          id,
-          manufacturerUUID: normalized.manufacturerUUID,
-          consumerUUID: normalized.consumerUUID,
-          payloadCanonical: canonical,
-          payloadHash,
-          payload: {
-            ...normalized,
-            shipmentItems: canonicalItems,
-            checkpoints: normalizedCheckpoints,
-          },
-          txHash,
-        },
-        {
-          operation: "update",
-          identifier: id,
-        }
-      );
-    } catch (backupErr) {
-      console.error(
-        "⚠️ Failed to back up shipment update to Pinata:",
-        backupErr
-      );
-    }
+    const pinataRecord = {
+      id,
+      manufacturerUUID: normalized.manufacturerUUID,
+      consumerUUID: normalized.consumerUUID,
+      payloadCanonical: canonical,
+      payloadHash,
+      payload: {
+        ...normalized,
+        shipmentItems: canonicalItems,
+        checkpoints: normalizedCheckpoints,
+      },
+      txHash,
+    };
+
 
     let updatedShipment = null;
     try {
@@ -732,13 +708,24 @@ export async function updateShipment({ id, payload, wallet }) {
             shipment_hash: payloadHash,
             tx_hash: txHash,
             updated_by: normalizeRegistrationWallet(wallet),
-            pinata_cid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-            pinata_pinned_at: pinataBackup?.Timestamp
-              ? new Date(pinataBackup.Timestamp)
-              : existing.pinata_pinned_at ?? null,
+            pinata_cid: null,
+            pinata_pinned_at: null,
           },
           client
         );
+
+        await enqueuePinataBackup(
+          {
+            entity: "shipment",
+            recordId: id,
+            identifier: id,
+            operation: "update",
+            record: pinataRecord,
+            walletAddress: wallet?.walletAddress ?? null,
+          },
+          client
+        );
+
 
         const existingAssignments = await listPackagesByShipmentUuid(
           id,
@@ -813,28 +800,19 @@ export async function updateShipment({ id, payload, wallet }) {
       mapAssignedProductsToShipmentItems(assignedProducts);
 
     const responsePayload = normalizeShipmentResponse(
-      appendPinataMetadata(
-        {
-          ...formattedShipment,
-          handover_checkpoints: savedCheckpoints,
-          shipmentItems: shipmentItemsPayload,
-          shipmentSegments,
-          blockchainTx: txHash,
-          dbHash: payloadHash,
-          blockchainHash: normalizedOnChain,
-        },
-        {
-          IpfsHash: pinataBackup?.IpfsHash ?? null,
-          Timestamp: pinataBackup?.Timestamp ?? null,
-        }
-      )
+      appendPinataMetadata({
+        ...formattedShipment,
+        handover_checkpoints: savedCheckpoints,
+        shipmentItems: shipmentItemsPayload,
+        shipmentSegments,
+        blockchainTx: txHash,
+        dbHash: payloadHash,
+        blockchainHash: normalizedOnChain,
+      })
     );
 
-    responsePayload.pinataCid =
-      formattedShipment.pinataCid ?? pinataBackup?.IpfsHash ?? null;
-    responsePayload.pinataTimestamp =
-      formattedShipment.pinataPinnedAt ??
-      (pinataBackup?.Timestamp ? new Date(pinataBackup.Timestamp) : null);
+    responsePayload.pinataCid = formattedShipment.pinataCid ?? null;
+    responsePayload.pinataTimestamp = formattedShipment.pinataPinnedAt ?? null;
 
     return {
       statusCode: 200,

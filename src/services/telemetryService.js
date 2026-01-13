@@ -23,7 +23,6 @@ import { prepareSensorDataPersistence } from "./sensorDataIntegrityService.js";
 import { registerTelemetryMessageOnChain } from "../eth/telemetryMessageContract.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { normalizeHash } from "../utils/hash.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
 import {
   populateGPSCoordinates,
   parseSensorValue,
@@ -305,22 +304,6 @@ export async function processTelemetryPayload({ payload, wallet }) {
       throw new Error("On-chain sensor data hash mismatch");
     }
 
-    // Backup to Pinata
-    const pinataBackup = await backupRecordSafely({
-      entity: "telemetry_message",
-      record: {
-        id: telemetryMessageId,
-        payloadCanonical: canonical,
-        payloadHash,
-        payload: normalized,
-        txHash,
-      },
-      walletAddress: wallet?.walletAddress ?? null,
-      operation: "create",
-      identifier: telemetryMessageId,
-      errorMessage: "⚠️ Failed to back up telemetry message to Pinata:",
-    });
-
     // Insert telemetry message
     const telemetryMessage = await insertTelemetryMessage(
       {
@@ -332,10 +315,8 @@ export async function processTelemetryPayload({ payload, wallet }) {
         requestReceivedTimestamp,
         payloadHash,
         txHash,
-        pinataCid: pinataBackup?.IpfsHash ?? null,
-        pinataPinnedAt: pinataBackup?.Timestamp
-          ? new Date(pinataBackup.Timestamp)
-          : null,
+        pinataCid: null,
+        pinataPinnedAt: null,
         createdBy: wallet?.walletAddress ?? null,
         readingCount: acceptedReadings.length,
       },

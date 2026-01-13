@@ -18,7 +18,8 @@ import {
 import { findProductById } from "../models/ProductModel.js";
 import { normalizeHash } from "../utils/hash.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
-import { backupRecordSafely } from "./pinataBackupService.js";
+import { runInTransaction } from "../utils/dbTransactions.js";
+import { enqueuePinataBackup } from "./pinataQueueService.js";
 import * as batchErrors from "../errors/batchErrors.js";
 import { productNotFound } from "../errors/productErrors.js";
 
@@ -148,40 +149,49 @@ export async function createBatch({ payload, registration, wallet }) {
       normalizedComputed,
     });
   }
-
-  const pinataBackup = await backupRecordSafely({
-    entity: "batch",
-    record: {
-      id: batchId,
-      ...normalized,
-      payloadCanonical: canonical,
-      payloadHash,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "create",
-    identifier: batchId,
-    errorMessage: "⚠️ Failed to back up batch to Pinata:",
-  });
-
-  const record = await insertBatch({
+  const pinataRecord = {
     id: batchId,
-    manufacturerUUID: normalized.manufacturerUUID,
-    facility: normalized.facility,
-    productId: normalized.productId,
-    productionStartTime: sanitizeOptionalTimestamp(
-      normalized.productionStartTime
-    ),
-    productionEndTime: sanitizeOptionalTimestamp(normalized.productionEndTime),
-    quantityProduced: normalized.quantityProduced,
-    expiryDate: sanitizeOptionalString(normalized.expiryDate),
-    batchHash: payloadHash,
+    ...normalized,
+    payloadCanonical: canonical,
+    payloadHash,
     txHash,
-    createdBy: wallet?.walletAddress ?? manufacturerUuid,
-    pinataCid: pinataBackup?.IpfsHash ?? null,
-    pinataPinnedAt: pinataBackup?.Timestamp
-      ? new Date(pinataBackup.Timestamp)
-      : null,
+  };
+
+  const record = await runInTransaction(async (client) => {
+    const created = await insertBatch(
+      {
+        id: batchId,
+        manufacturerUUID: normalized.manufacturerUUID,
+        facility: normalized.facility,
+        productId: normalized.productId,
+        productionStartTime: sanitizeOptionalTimestamp(
+          normalized.productionStartTime
+        ),
+        productionEndTime: sanitizeOptionalTimestamp(normalized.productionEndTime),
+        quantityProduced: normalized.quantityProduced,
+        expiryDate: sanitizeOptionalString(normalized.expiryDate),
+        batchHash: payloadHash,
+        txHash,
+        createdBy: wallet?.walletAddress ?? manufacturerUuid,
+        pinataCid: null,
+        pinataPinnedAt: null,
+      },
+      client
+    );
+
+    await enqueuePinataBackup(
+      {
+        entity: "batch",
+        recordId: batchId,
+        identifier: batchId,
+        operation: "create",
+        record: pinataRecord,
+        walletAddress: wallet?.walletAddress ?? null,
+      },
+      client
+    );
+
+    return created;
   });
 
   return {
@@ -260,42 +270,51 @@ export async function updateBatchDetails({
     });
   }
 
-  const pinataBackup = await backupRecordSafely({
-    entity: "batch",
-    record: {
-      id,
-      ...normalized,
-      payloadCanonical: canonical,
-      payloadHash,
-      txHash,
-    },
-    walletAddress: wallet?.walletAddress ?? null,
-    operation: "update",
-    identifier: id,
-    errorMessage: "⚠️ Failed to back up batch update to Pinata:",
-  });
-
-  const record = await updateBatchRecord({
+  const pinataRecord = {
     id,
-    productId: normalized.productId,
-    manufacturerUUID: normalized.manufacturerUUID,
-    facility: normalized.facility,
-    productionStartTime: sanitizeOptionalTimestamp(
-      normalized.productionStartTime
-    ),
-    productionEndTime: sanitizeOptionalTimestamp(
-      normalized.productionEndTime
-    ),
-    quantityProduced: normalized.quantityProduced,
-    expiryDate: sanitizeOptionalString(normalized.expiryDate),
-    batchHash: payloadHash,
+    ...normalized,
+    payloadCanonical: canonical,
+    payloadHash,
     txHash,
-    updatedBy: wallet?.walletAddress ?? null,
-    pinataCid: pinataBackup?.IpfsHash ?? existing.pinata_cid ?? null,
-    pinataPinnedAt:
-      pinataBackup?.Timestamp
-        ? new Date(pinataBackup.Timestamp)
-        : existing.pinata_pinned_at ?? null,
+  };
+
+  const record = await runInTransaction(async (client) => {
+    const updated = await updateBatchRecord(
+      {
+        id,
+        productId: normalized.productId,
+        manufacturerUUID: normalized.manufacturerUUID,
+        facility: normalized.facility,
+        productionStartTime: sanitizeOptionalTimestamp(
+          normalized.productionStartTime
+        ),
+        productionEndTime: sanitizeOptionalTimestamp(
+          normalized.productionEndTime
+        ),
+        quantityProduced: normalized.quantityProduced,
+        expiryDate: sanitizeOptionalString(normalized.expiryDate),
+        batchHash: payloadHash,
+        txHash,
+        updatedBy: wallet?.walletAddress ?? null,
+        pinataCid: null,
+        pinataPinnedAt: null,
+      },
+      client
+    );
+
+    await enqueuePinataBackup(
+      {
+        entity: "batch",
+        recordId: id,
+        identifier: id,
+        operation: "update",
+        record: pinataRecord,
+        walletAddress: wallet?.walletAddress ?? null,
+      },
+      client
+    );
+
+    return updated;
   });
 
   const formatted = formatBatchRecord(record);
