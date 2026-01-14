@@ -136,11 +136,15 @@ async function saveBreachRecord(breach, context, dbClient) {
   );
 
   // Backup to Pinata
+  const pinataPayload = {
+    id: breachId,
+    ...breachData,
+  };
   const pinataRecord = {
     id: breachId,
     payloadCanonical: canonical,
     payloadHash,
-    payload: normalized,
+    payload: pinataPayload,
     txHash,
   };
 
@@ -420,11 +424,15 @@ export async function detectDoorTamperBreaches(
       );
 
       // Backup to Pinata
+      const pinataPayload = {
+        id: breachId,
+        ...breachData,
+      };
       const pinataRecord = {
         id: breachId,
         payloadCanonical: canonical,
         payloadHash,
-        payload: normalized,
+        payload: pinataPayload,
         txHash,
       };
 
