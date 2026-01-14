@@ -245,6 +245,20 @@ export async function processTelemetryPayload({ payload, wallet }) {
     shipmentInfo = await getShipmentById(packageRecord.shipment_id);
   }
 
+  // Get current segment info if shipment is IN_TRANSIT
+  let segmentInfo = null;
+  if (shipmentInfo && shipmentInfo.status === "IN_TRANSIT") {
+    const { rows: segments } = await query(
+      `SELECT id FROM shipment_segment 
+       WHERE shipment_id = $1 AND status = 'IN_TRANSIT' 
+       ORDER BY created_at DESC LIMIT 1`,
+      [shipmentInfo.id]
+    );
+    if (segments.length > 0) {
+      segmentInfo = segments[0];
+    }
+  }
+
   // Start transaction
   const client = await pool.connect();
 
@@ -393,6 +407,7 @@ export async function processTelemetryPayload({ payload, wallet }) {
           messageId: telemetryMessageId,
           shipmentId: shipmentInfo?.id,
           shipmentStatus: shipmentInfo?.status,
+          segmentId: segmentInfo?.id,
           wallet,
         },
         client
@@ -408,6 +423,7 @@ export async function processTelemetryPayload({ payload, wallet }) {
         shipmentInfo,
         {
           messageId: telemetryMessageId,
+          segmentId: segmentInfo?.id,
           wallet,
         },
         client

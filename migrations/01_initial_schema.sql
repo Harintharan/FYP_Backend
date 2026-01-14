@@ -377,8 +377,11 @@ CREATE INDEX IF NOT EXISTS idx_sensor_readings_lookup ON sensor_readings (
     sensor_timestamp
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sensor_readings_unique
-    ON sensor_readings (package_id, sensor_type, sensor_timestamp_unix);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sensor_readings_unique ON sensor_readings (
+    package_id,
+    sensor_type,
+    sensor_timestamp_unix
+);
 
 -- 3. Condition Breaches (detected violations)
 CREATE TABLE IF NOT EXISTS condition_breaches (
@@ -404,6 +407,7 @@ CREATE TABLE IF NOT EXISTS condition_breaches (
     location_longitude NUMERIC(10, 7),
     checkpoint_id UUID REFERENCES checkpoint_registry (id) ON DELETE SET NULL,
     shipment_id UUID REFERENCES shipment_registry (id) ON DELETE SET NULL,
+    segment_id UUID REFERENCES shipment_segment (id),
     shipment_status TEXT,
     payload_hash TEXT NOT NULL,
     tx_hash TEXT NOT NULL,
@@ -427,9 +431,11 @@ WHERE
 
 CREATE INDEX IF NOT EXISTS idx_breaches_time ON condition_breaches (breach_start_time);
 
-CREATE INDEX IF NOT EXISTS idx_breaches_shipment ON condition_breaches (shipment_id)
-WHERE
-    shipment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_breaches_shipment ON condition_breaches (shipment_id);
+
+CREATE INDEX IF NOT EXISTS idx_breaches_segment ON condition_breaches (segment_id);
+
+WHERE shipment_id IS NOT NULL;
 
 -- 4. Daily Condition Summary (analytics aggregation)
 CREATE TABLE IF NOT EXISTS daily_condition_summary (
@@ -534,6 +540,7 @@ $$;
 
 -- Create notifications table
 
+
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -604,13 +611,13 @@ email_enabled BOOLEAN DEFAULT FALSE,
 push_enabled BOOLEAN DEFAULT FALSE,
 
 -- Type preferences (JSONB for flexibility)
-enabled_types JSONB DEFAULT '[]',
-disabled_types JSONB DEFAULT '[]',
+enabled_types JSONB DEFAULT '[]', disabled_types JSONB DEFAULT '[]',
 
 -- Severity filters
 min_severity notification_severity DEFAULT 'INFO',
 
 -- Quiet hours
+
 quiet_hours_enabled BOOLEAN DEFAULT FALSE,
   quiet_hours_start TIME,
   quiet_hours_end TIME,

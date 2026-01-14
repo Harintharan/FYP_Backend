@@ -19,14 +19,6 @@ const client = mqtt.connect(connectUrl, {
   connectTimeout: 30 * 1000,
 });
 
-client.on("connect", () => {
-  console.log("WiFi Controller: Connected to MQTT Broker");
-});
-
-client.on("reconnect", () => {
-  console.log("WiFi Controller: Reconnecting to MQTT Broker...");
-});
-
 client.on("offline", () => {
   console.log("WiFi Controller: MQTT Client is offline");
 });

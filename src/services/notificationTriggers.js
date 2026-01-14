@@ -16,11 +16,8 @@ import { findShipmentSegmentById } from "../models/ShipmentSegmentModel.js";
  */
 async function getUserByIdentifier(query, identifier) {
   if (!identifier) {
-    console.log(`❌ getUserByIdentifier called with null/undefined identifier`);
     return null;
   }
-
-  console.log(`🔍 getUserByIdentifier looking for: ${identifier}`);
 
   // First try as direct UUID (shipment_registry stores UUIDs)
   let result = await query(
@@ -28,21 +25,12 @@ async function getUserByIdentifier(query, identifier) {
     [identifier]
   );
 
-  console.log(`   UUID lookup returned ${result.rows.length} rows`);
-
   if (result.rows.length === 0) {
     // Try as public key (wallet address) as fallback
     result = await query(
       `SELECT id, payload FROM users WHERE public_key = $1`,
       [identifier]
     );
-    console.log(`   Public key lookup returned ${result.rows.length} rows`);
-  }
-
-  if (result.rows.length > 0) {
-    console.log(`   ✅ Found user: ${result.rows[0].id}`);
-  } else {
-    console.log(`   ❌ User not found`);
   }
 
   return result.rows[0] || null;

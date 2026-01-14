@@ -20,8 +20,6 @@ const userConnections = new Map();
  * @param {http.IncomingMessage} request - HTTP request
  */
 export function handleConnection(ws, request) {
-  console.log("🔌 New WebSocket connection attempt");
-
   let userId = null;
   let isAuthenticated = false;
 
@@ -66,7 +64,6 @@ export function handleConnection(ws, request) {
             })
           );
 
-          console.log(`✅ WebSocket authenticated for user: ${userId}`);
         } catch (err) {
           console.error("❌ JWT verification failed:", err.message);
           ws.send(
@@ -93,7 +90,6 @@ export function handleConnection(ws, request) {
       if (userConnections.get(userId).size === 0) {
         userConnections.delete(userId);
       }
-      console.log(`🔌 WebSocket disconnected for user: ${userId}`);
     }
   });
 
@@ -105,7 +101,6 @@ export function handleConnection(ws, request) {
   // Request authentication within 10 seconds
   setTimeout(() => {
     if (!isAuthenticated) {
-      console.log("⏱️ WebSocket authentication timeout");
       ws.send(
         JSON.stringify({
           type: "AUTH_ERROR",
