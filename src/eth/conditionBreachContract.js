@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import ConditionBreachRegistryArtifact from "../../blockchain/artifacts/contracts/ConditionBreachRegistry.sol/ConditionBreachRegistry.json" with { type: "json" };
 import { operatorWallet, contracts } from "../config.js";
 import { getNonceManagedWallet } from "./walletManager.js";
+import { retryOperation } from "../utils/retry.js";
 
 const wallet = getNonceManagedWallet(operatorWallet.privateKey);
 
@@ -53,24 +54,28 @@ export async function registerConditionBreachOnChain(
 ) {
   const payloadHash = ethers.keccak256(ethers.toUtf8Bytes(canonicalPayload));
 
-  const estimatedGas = await conditionBreachRegistry.registerConditionBreach.estimateGas(
-    breachId,
-    packageId,
-    messageId,
-    payloadHash,
-    breachStartTime
-  );
+  const tx = await retryOperation(async () => {
+    const estimatedGas = await conditionBreachRegistry.registerConditionBreach.estimateGas(
+      breachId,
+      packageId,
+      messageId,
+      payloadHash,
+      breachStartTime
+    );
 
-  const tx = await conditionBreachRegistry.registerConditionBreach(
-    breachId,
-    packageId,
-    messageId,
-    payloadHash,
-    breachStartTime,
-    { gasLimit: withSafetyMargin(estimatedGas) }
-  );
+    return await conditionBreachRegistry.registerConditionBreach(
+      breachId,
+      packageId,
+      messageId,
+      payloadHash,
+      breachStartTime,
+      { gasLimit: withSafetyMargin(estimatedGas) }
+    );
+  });
 
-  const receipt = await tx.wait();
+  const receipt = await retryOperation(async () => {
+    return await tx.wait();
+  });
 
   const targetAddress = contracts.conditionBreachRegistry.toLowerCase();
   const event = receipt.logs
@@ -101,7 +106,9 @@ export async function registerConditionBreachOnChain(
  * @returns {Object} Breach details
  */
 export async function getConditionBreachFromChain(breachId) {
-  const result = await conditionBreachRegistry.getConditionBreach(breachId);
+  const result = await retryOperation(async () => {
+    return await conditionBreachRegistry.getConditionBreach(breachId);
+  });
   
   return {
     breachId: result.breachId,

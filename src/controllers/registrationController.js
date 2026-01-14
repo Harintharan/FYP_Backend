@@ -52,7 +52,11 @@ export async function updateRegistrationById(req, res) {
 export async function listPendingRegistrations(_req, res) {
   try {
     const rows = await findPendingRegistrationSummaries();
-    await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
+
+    // Process sequentially to avoid RPC rate limits
+    for (const row of rows) {
+      await ensureOnChainIntegrity(row);
+    }
 
     const sanitized = rows.map(
       ({ payload, payload_canonical, ...rest }) => rest
@@ -66,7 +70,11 @@ export async function listPendingRegistrations(_req, res) {
 export async function listApprovedRegistrations(_req, res) {
   try {
     const rows = await findApprovedRegistrationSummaries();
-    await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
+
+    // Process sequentially to avoid RPC rate limits
+    for (const row of rows) {
+      await ensureOnChainIntegrity(row);
+    }
 
     const sanitized = rows.map(
       ({ payload, payload_canonical, ...rest }) => rest
