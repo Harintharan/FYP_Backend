@@ -50,7 +50,7 @@ function normalizeUuid(value) {
   return str ? str.toLowerCase() : EMPTY;
 }
 
-function normalizeNumber(value) {
+function normalizeNumber(value, preserveStringFormat = false) {
   // CRITICAL: Empty strings should remain empty (not converted to EMPTY string again)
   if (value === EMPTY || value === "") {
     return EMPTY;
@@ -65,6 +65,13 @@ function normalizeNumber(value) {
   if (!str) {
     return EMPTY;
   }
+
+  // For coordinate values, preserve the original string format to maintain precision
+  if (preserveStringFormat && /^\d+\.\d+$/.test(str)) {
+    const numeric = Number(str);
+    return Number.isFinite(numeric) ? str : EMPTY;
+  }
+
   const numeric = Number(str);
   return Number.isFinite(numeric) ? String(numeric) : EMPTY;
 }
@@ -137,7 +144,10 @@ function normalizeJson(value) {
 }
 
 export function normalizeConditionBreachPayload(payload) {
-  return {
+  console.log("🔄 NORMALIZATION DEBUG (BEFORE):");
+  console.log("  payload:", JSON.stringify(payload, null, 2));
+
+  const normalized = {
     packageId: normalizeUuid(payload.packageId),
     messageId: normalizeUuid(payload.messageId),
     sensorReadingId: normalizeUuid(payload.sensorReadingId),
@@ -146,34 +156,83 @@ export function normalizeConditionBreachPayload(payload) {
     breachStartTime: normalizeTimestamp(payload.breachStartTime),
     breachEndTime: normalizeTimestamp(payload.breachEndTime),
     durationSeconds: normalizeNumber(payload.durationSeconds),
-    hasDataGaps: normalizeBoolean(payload.hasDataGaps),
-    totalGapDurationSeconds: normalizeNumber(payload.totalGapDurationSeconds),
-    gapDetails: normalizeJson(payload.gapDetails),
     breachCertainty: toStringValue(payload.breachCertainty),
-    measuredMinValue: normalizeNumber(payload.measuredMinValue),
-    measuredMaxValue: normalizeNumber(payload.measuredMaxValue),
-    measuredAvgValue: normalizeNumber(payload.measuredAvgValue),
-    expectedMinValue: normalizeNumber(payload.expectedMinValue),
-    expectedMaxValue: normalizeNumber(payload.expectedMaxValue),
-    locationLatitude: normalizeNumber(payload.locationLatitude),
-    locationLongitude: normalizeNumber(payload.locationLongitude),
+    locationLatitude: normalizeNumber(payload.locationLatitude, true),
+    locationLongitude: normalizeNumber(payload.locationLongitude, true),
     shipmentId: normalizeUuid(payload.shipmentId),
     segmentId: normalizeUuid(payload.segmentId),
     shipmentStatus: toStringValue(payload.shipmentStatus),
     notes: toStringValue(payload.notes),
   };
+
+  // CRITICAL: Only include hasDataGaps if it was present in the original payload
+  // This prevents the creation vs verification mismatch
+  if ("hasDataGaps" in payload) {
+    normalized.hasDataGaps = normalizeBoolean(payload.hasDataGaps);
+  }
+
+  // Only normalize fields that exist in the input payload
+  // This prevents adding empty fields that weren't in the original
+  if ("totalGapDurationSeconds" in payload) {
+    normalized.totalGapDurationSeconds = normalizeNumber(
+      payload.totalGapDurationSeconds
+    );
+  }
+  if ("gapDetails" in payload) {
+    normalized.gapDetails = normalizeJson(payload.gapDetails);
+  }
+  if ("measuredMinValue" in payload) {
+    normalized.measuredMinValue = normalizeNumber(payload.measuredMinValue);
+  }
+  if ("measuredMaxValue" in payload) {
+    normalized.measuredMaxValue = normalizeNumber(payload.measuredMaxValue);
+  }
+  if ("measuredAvgValue" in payload) {
+    normalized.measuredAvgValue = normalizeNumber(payload.measuredAvgValue);
+  }
+  if ("expectedMinValue" in payload) {
+    normalized.expectedMinValue = normalizeNumber(payload.expectedMinValue);
+  }
+  if ("expectedMaxValue" in payload) {
+    normalized.expectedMaxValue = normalizeNumber(payload.expectedMaxValue);
+  }
+
+  console.log("🔄 NORMALIZATION DEBUG (AFTER):");
+  console.log("  normalized:", JSON.stringify(normalized, null, 2));
+
+  return normalized;
 }
 
 export function buildConditionBreachCanonicalPayload(breachId, payload) {
-  const entries = { id: breachId };
+  const entries = {};
+
+  // Only include fields that exist in the payload
+  // This prevents adding empty values for fields that weren't in the original
+  // NOTE: DO NOT include 'id' because it doesn't exist when original hash is calculated during creation
   for (const field of BREACH_FIELDS) {
-    entries[field] = payload[field] ?? EMPTY;
+    if (field in payload) {
+      entries[field] = payload[field] ?? EMPTY;
+    }
   }
-  return stableStringify(entries);
+
+  const canonicalJson = stableStringify(entries);
+
+  console.log("🔨 HASH CREATION DEBUG:");
+  console.log("  breachId:", breachId);
+  console.log("  payload keys:", Object.keys(payload));
+  console.log("  entries keys:", Object.keys(entries));
+  console.log("  entries:", JSON.stringify(entries, null, 2));
+  console.log("  canonical JSON:", canonicalJson);
+
+  return canonicalJson;
 }
 
 export function computeConditionBreachHashFromCanonical(canonical) {
-  return ethers.keccak256(ethers.toUtf8Bytes(canonical));
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(canonical));
+  console.log("🔐 HASH COMPUTATION:");
+  console.log("  canonical input:", canonical);
+  console.log("  computed hash:", hash);
+  return hash;
 }
 
 export function prepareConditionBreachPersistence(
@@ -192,46 +251,70 @@ export function prepareConditionBreachPersistence(
 export function deriveConditionBreachPayloadFromRecord(record) {
   // CRITICAL: Extract values EXACTLY as they would have been during creation
   // Handle both snake_case (from DB) and camelCase (from JS objects)
-  // Ensure consistent type handling for all fields
 
   const payload = {
-    packageId: record.package_id ?? record.packageId ?? null,
-    messageId: record.message_id ?? record.messageId ?? null,
-    sensorReadingId: record.sensor_reading_id ?? record.sensorReadingId ?? null,
-    breachType: record.breach_type ?? record.breachType ?? null,
-    severity: record.severity ?? null,
-    breachStartTime: record.breach_start_time ?? record.breachStartTime ?? null,
-    breachEndTime: record.breach_end_time ?? record.breachEndTime ?? null,
-    durationSeconds: record.duration_seconds ?? record.durationSeconds ?? null,
-    hasDataGaps:
-      record.has_data_gaps === false
-        ? ""
-        : record.has_data_gaps ?? record.hasDataGaps ?? null,
-    totalGapDurationSeconds:
-      record.total_gap_duration_seconds ??
-      record.totalGapDurationSeconds ??
-      null,
-    gapDetails: record.gap_details ?? record.gapDetails ?? null,
-    breachCertainty: record.breach_certainty ?? record.breachCertainty ?? null,
-    measuredMinValue:
-      record.measured_min_value ?? record.measuredMinValue ?? null,
-    measuredMaxValue:
-      record.measured_max_value ?? record.measuredMaxValue ?? null,
-    measuredAvgValue:
-      record.measured_avg_value ?? record.measuredAvgValue ?? null,
-    expectedMinValue:
-      record.expected_min_value ?? record.expectedMinValue ?? null,
-    expectedMaxValue:
-      record.expected_max_value ?? record.expectedMaxValue ?? null,
-    locationLatitude:
-      record.location_latitude ?? record.locationLatitude ?? null,
-    locationLongitude:
-      record.location_longitude ?? record.locationLongitude ?? null,
-    shipmentId: record.shipment_id ?? record.shipmentId ?? null,
-    segmentId: record.segment_id ?? record.segmentId ?? null,
-    shipmentStatus: record.shipment_status ?? record.shipmentStatus ?? null,
-    notes: record.notes ?? null,
+    packageId: record.package_id ?? record.packageId,
+    messageId: record.message_id ?? record.messageId,
+    sensorReadingId: record.sensor_reading_id ?? record.sensorReadingId,
+    breachType: record.breach_type ?? record.breachType,
+    severity: record.severity,
+    breachStartTime: record.breach_start_time ?? record.breachStartTime,
+    breachEndTime: record.breach_end_time ?? record.breachEndTime,
+    durationSeconds: record.duration_seconds ?? record.durationSeconds,
+    breachCertainty: record.breach_certainty ?? record.breachCertainty,
+    locationLatitude: record.location_latitude ?? record.locationLatitude,
+    locationLongitude: record.location_longitude ?? record.locationLongitude,
+    shipmentId: record.shipment_id ?? record.shipmentId,
+    segmentId: record.segment_id ?? record.segmentId,
+    shipmentStatus: record.shipment_status ?? record.shipmentStatus,
+    notes: record.notes,
   };
+
+  // For TEMPERATURE_EXCURSION breaches, include measurement fields even if they're 0/null
+  // For DOOR_TAMPER breaches, only include measurement fields if they exist and are non-null
+  const breachType = record.breach_type ?? record.breachType;
+
+  if (breachType === "TEMPERATURE_EXCURSION") {
+    // Temperature breaches always have these fields during creation (even if null)
+    payload.hasDataGaps = record.has_data_gaps ?? record.hasDataGaps;
+    payload.totalGapDurationSeconds =
+      record.total_gap_duration_seconds ?? record.totalGapDurationSeconds;
+    payload.gapDetails = record.gap_details;
+    payload.measuredMinValue =
+      record.measured_min_value ?? record.measuredMinValue;
+    payload.measuredMaxValue =
+      record.measured_max_value ?? record.measuredMaxValue;
+    payload.measuredAvgValue =
+      record.measured_avg_value ?? record.measuredAvgValue;
+    payload.expectedMinValue =
+      record.expected_min_value ?? record.expectedMinValue;
+    payload.expectedMaxValue =
+      record.expected_max_value ?? record.expectedMaxValue;
+  } else {
+    // For DOOR_TAMPER breaches, DO NOT include hasDataGaps as it wasn't in original payload
+    // Only include other fields if non-null
+    if (record.total_gap_duration_seconds !== null) {
+      payload.totalGapDurationSeconds = record.total_gap_duration_seconds;
+    }
+    if (record.gap_details !== null) {
+      payload.gapDetails = record.gap_details;
+    }
+    if (record.measured_min_value !== null) {
+      payload.measuredMinValue = record.measured_min_value;
+    }
+    if (record.measured_max_value !== null) {
+      payload.measuredMaxValue = record.measured_max_value;
+    }
+    if (record.measured_avg_value !== null) {
+      payload.measuredAvgValue = record.measured_avg_value;
+    }
+    if (record.expected_min_value !== null) {
+      payload.expectedMinValue = record.expected_min_value;
+    }
+    if (record.expected_max_value !== null) {
+      payload.expectedMaxValue = record.expected_max_value;
+    }
+  }
 
   return payload;
 }

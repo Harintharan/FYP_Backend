@@ -31,8 +31,8 @@ export async function verifyBreachIntegrity(breachRecord) {
   try {
     console.log("Step 4");
     // Skip verification if no stored hash
-      if (!breachRecord.payload_hash) {
-          console.log("Step 5");
+    if (!breachRecord.payload_hash) {
+      console.log("Step 5");
       return {
         isValid: null,
         status: "NO_HASH_STORED",
@@ -48,11 +48,64 @@ export async function verifyBreachIntegrity(breachRecord) {
     // CRITICAL: Normalize the payload the same way it was during save
     // This ensures empty strings from DB (stored as false/null) are handled consistently
     const normalizedPayload = normalizeConditionBreachPayload(payload);
+
     const { payloadHash: computed, canonical } =
       prepareConditionBreachPersistence(breachRecord.id, normalizedPayload);
 
     const stored = breachRecord.payload_hash;
     const isValid = computed === stored;
+
+    // Detailed debugging for all records, focusing on DOOR_TAMPER issues
+    if (breachRecord.breach_type === "DOOR_TAMPER" || !isValid) {
+      console.log(
+        `\n🔍 DETAILED DEBUG for ${breachRecord.breach_type} breach ${breachRecord.id}:`
+      );
+      console.log("📊 RAW DATABASE VALUES:");
+      console.log("  breach_type:", breachRecord.breach_type);
+      console.log("  notes:", JSON.stringify(breachRecord.notes));
+      console.log(
+        "  has_data_gaps:",
+        breachRecord.has_data_gaps,
+        `(type: ${typeof breachRecord.has_data_gaps})`
+      );
+      console.log(
+        "  total_gap_duration_seconds:",
+        breachRecord.total_gap_duration_seconds
+      );
+      console.log("  gap_details:", breachRecord.gap_details);
+
+      console.log("\n🔧 RECONSTRUCTED PAYLOAD:");
+      console.log("  Object.keys(payload):", Object.keys(payload));
+      console.log(
+        "  hasDataGaps:",
+        payload.hasDataGaps,
+        `(type: ${typeof payload.hasDataGaps})`
+      );
+      console.log("  notes:", JSON.stringify(payload.notes));
+
+      console.log("\n✨ NORMALIZED PAYLOAD:");
+      console.log(
+        "  Object.keys(normalizedPayload):",
+        Object.keys(normalizedPayload)
+      );
+      console.log(
+        "  hasDataGaps:",
+        JSON.stringify(normalizedPayload.hasDataGaps)
+      );
+      console.log("  notes:", JSON.stringify(normalizedPayload.notes));
+
+      console.log("\n📝 CANONICAL JSON:");
+      console.log(canonical);
+
+      if (!isValid) {
+        console.log("\n❌ HASH COMPARISON:");
+        console.log("  stored: ", stored);
+        console.log("  computed:", computed);
+      } else {
+        console.log("\n✅ HASH VERIFICATION PASSED");
+      }
+      console.log("=".repeat(80) + "\n");
+    }
 
     console.log(
       `⚠️ Verification using reconstructed payload for breach ${breachRecord.id} (no canonical stored)`
