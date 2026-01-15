@@ -12,7 +12,7 @@ import { insertConditionBreach } from "../models/ConditionBreachModel.js";
 import { uuidToBytes16Hex } from "../utils/uuidHex.js";
 import { registerConditionBreachOnChain } from "../eth/conditionBreachContract.js";
 import { enqueuePinataBackup } from "./pinataQueueService.js";
-import { prepareSensorDataBreachPersistence } from "./sensorDataBreachIntegrityService.js";
+import { prepareConditionBreachPersistence } from "./conditionBreachIntegrityService.js";
 import { stableStringify } from "../utils/canonicalize.js";
 import { notifyConditionBreach } from "./notificationTriggers.js";
 
@@ -89,7 +89,7 @@ async function saveBreachRecord(breach, context, dbClient) {
       sensorType
     ),
     breachStartTime: breach.breach_start_time,
-    breachEndTime: lastReading.sensor_timestamp || lastReading.sensor_timestamp,
+    breachEndTime: lastReading.sensorTimestamp || lastReading.sensor_timestamp,
     durationSeconds:
       (new Date(
         lastReading.sensor_timestamp || lastReading.sensor_timestamp
@@ -118,11 +118,19 @@ async function saveBreachRecord(breach, context, dbClient) {
 
   // Prepare for blockchain
   const { normalized, canonical, payloadHash } =
-    prepareSensorDataBreachPersistence(breachId, breachData);
+    prepareConditionBreachPersistence(breachId, breachData);
+
+  console.log("Payload Hash:", payloadHash);
+
+  const breachRecord = {
+    ...breachData,
+    breachStartTime: normalized.breachStartTime || breachData.breachStartTime,
+    breachEndTime: normalized.breachEndTime || breachData.breachEndTime,
+  };
 
   // Register on blockchain with breach start time
   const breachStartUnix = Math.floor(
-    new Date(breachData.breachStartTime).getTime() / 1000
+    new Date(breachRecord.breachStartTime).getTime() / 1000
   );
 
   const { txHash } = await registerConditionBreachOnChain(
@@ -138,7 +146,7 @@ async function saveBreachRecord(breach, context, dbClient) {
   // Backup to Pinata
   const pinataPayload = {
     id: breachId,
-    ...breachData,
+    ...breachRecord,
   };
   const pinataRecord = {
     id: breachId,
@@ -406,11 +414,18 @@ export async function detectDoorTamperBreaches(
 
       // Prepare for blockchain
       const { normalized, canonical, payloadHash } =
-        prepareSensorDataBreachPersistence(breachId, breachData);
+        prepareConditionBreachPersistence(breachId, breachData);
+
+      const breachRecord = {
+        ...breachData,
+        breachStartTime:
+          normalized.breachStartTime || breachData.breachStartTime,
+        breachEndTime: normalized.breachEndTime || breachData.breachEndTime,
+      };
 
       // Register on blockchain with breach start time
       const breachStartUnix = Math.floor(
-        new Date(breachData.breachStartTime).getTime() / 1000
+        new Date(breachRecord.breachStartTime).getTime() / 1000
       );
 
       const { txHash } = await registerConditionBreachOnChain(
@@ -426,7 +441,7 @@ export async function detectDoorTamperBreaches(
       // Backup to Pinata
       const pinataPayload = {
         id: breachId,
-        ...breachData,
+        ...breachRecord,
       };
       const pinataRecord = {
         id: breachId,
@@ -452,7 +467,7 @@ export async function detectDoorTamperBreaches(
       const savedBreach = await insertConditionBreach(
         {
           id: breachId,
-          ...breachData,
+          ...breachRecord,
           payloadHash,
           txHash,
           pinataCid: null,

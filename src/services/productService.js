@@ -49,6 +49,22 @@ function ensureOwnership(registration, record) {
   }
 }
 
+async function resolveProductIntegrityStatus(record) {
+  try {
+    await ensureProductOnChainIntegrity(record);
+    return "valid";
+  } catch (err) {
+    const reason = err?.details?.reason ?? err?.message ?? "";
+    if (
+      typeof reason === "string" &&
+      reason.toLowerCase().includes("not found on-chain")
+    ) {
+      return "not_on_chain";
+    }
+    return "tampered";
+  }
+}
+
 function sanitizeOptional(value) {
   if (value === undefined || value === null) {
     return null;
@@ -290,12 +306,13 @@ export async function getProductDetails({ id, registration }) {
   }
 
   ensureOwnership(registration, record);
-  await ensureProductOnChainIntegrity(record);
+  const integrity = await resolveProductIntegrityStatus(record);
 
   return {
     statusCode: 200,
     body: {
       ...formatProductRecord(record),
+      integrity,
     },
   };
 }
@@ -309,10 +326,18 @@ export async function listProductsByOwner({ registration, categoryId }) {
     categoryId: categoryId ?? undefined,
   });
 
-  await Promise.all(rows.map((row) => ensureProductOnChainIntegrity(row)));
+  const withIntegrity = await Promise.all(
+    rows.map(async (row) => ({
+      row,
+      integrity: await resolveProductIntegrityStatus(row),
+    }))
+  );
 
   return {
     statusCode: 200,
-    body: rows.map((row) => formatProductRecord(row)),
+    body: withIntegrity.map(({ row, integrity }) => ({
+      ...formatProductRecord(row),
+      integrity,
+    })),
   };
 }

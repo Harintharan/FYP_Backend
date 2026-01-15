@@ -120,6 +120,22 @@ function normalizeSegmentStatus(value) {
   return trimmed.length > 0 ? trimmed.toUpperCase() : null;
 }
 
+async function resolveShipmentSegmentIntegrity(record) {
+  try {
+    const result = await ensureShipmentSegmentOnChainIntegrity(record);
+    return { integrity: "valid", hash: result?.hash ?? null };
+  } catch (err) {
+    const reason = err?.details?.reason ?? err?.message ?? "";
+    if (
+      typeof reason === "string" &&
+      reason.toLowerCase().includes("not found on-chain")
+    ) {
+      return { integrity: "not_on_chain", hash: null };
+    }
+    return { integrity: "tampered", hash: null };
+  }
+}
+
 function mapSegmentsToCheckpoints(segments) {
   if (!Array.isArray(segments)) {
     return [];
@@ -1085,60 +1101,64 @@ export async function listSupplierShipmentSegments({
   const hasMore = rows.length > limit;
   const sliced = hasMore ? rows.slice(0, limit) : rows;
 
-  const mapped = sliced.map((row) => {
-    const statusValue = normalizeSegmentStatus(row.status);
-    const previousStatus = normalizeSegmentStatus(row.previous_segment_status);
-    const rawOrder =
-      typeof row.segment_order === "number"
-        ? row.segment_order
-        : Number(row.segment_order);
-    const segmentOrder = Number.isFinite(rawOrder) ? rawOrder : null;
-    const isFirstSegment = segmentOrder === null ? true : segmentOrder <= 1;
-    const previousDelivered = isFirstSegment
-      ? true
-      : previousStatus === "DELIVERED";
-    const canAccept = statusValue === "PENDING";
-    const canTakeover =
-      previousDelivered &&
-      (statusValue === "PENDING" || statusValue === "ACCEPTED");
-    const isInTransit = statusValue === "IN_TRANSIT";
-    const canHandover = isInTransit;
-    const canDeliver = isInTransit;
+  const mapped = await Promise.all(
+    sliced.map(async (row) => {
+      const statusValue = normalizeSegmentStatus(row.status);
+      const previousStatus = normalizeSegmentStatus(row.previous_segment_status);
+      const rawOrder =
+        typeof row.segment_order === "number"
+          ? row.segment_order
+          : Number(row.segment_order);
+      const segmentOrder = Number.isFinite(rawOrder) ? rawOrder : null;
+      const isFirstSegment = segmentOrder === null ? true : segmentOrder <= 1;
+      const previousDelivered = isFirstSegment
+        ? true
+        : previousStatus === "DELIVERED";
+      const canAccept = statusValue === "PENDING";
+      const canTakeover =
+        previousDelivered &&
+        (statusValue === "PENDING" || statusValue === "ACCEPTED");
+      const isInTransit = statusValue === "IN_TRANSIT";
+      const canHandover = isInTransit;
+      const canDeliver = isInTransit;
+      const { integrity } = await resolveShipmentSegmentIntegrity(row);
 
-    return {
-      segmentId: row.id ?? row.segment_id ?? null,
-      status: statusValue,
-      segmentOrder,
-      expectedShipDate: row.expected_ship_date ?? null,
-      estimatedArrivalDate: row.estimated_arrival_date ?? null,
-      timeTolerance: row.time_tolerance ?? null,
-      shipment: {
-        id: row.shipment_id ?? null,
-        consumer: {
-          id: row.consumer_uuid ?? null,
-          legalName: row.consumer_legal_name ?? null,
+      return {
+        segmentId: row.id ?? row.segment_id ?? null,
+        status: statusValue,
+        segmentOrder,
+        expectedShipDate: row.expected_ship_date ?? null,
+        estimatedArrivalDate: row.estimated_arrival_date ?? null,
+        timeTolerance: row.time_tolerance ?? null,
+        shipment: {
+          id: row.shipment_id ?? null,
+          consumer: {
+            id: row.consumer_uuid ?? null,
+            legalName: row.consumer_legal_name ?? null,
+          },
         },
-      },
-      startCheckpoint: {
-        id: row.start_checkpoint_id ?? null,
-        name: row.start_name ?? null,
-        state: row.start_state ?? null,
-        country: row.start_country ?? null,
-      },
-      endCheckpoint: {
-        id: row.end_checkpoint_id ?? null,
-        name: row.end_name ?? null,
-        state: row.end_state ?? null,
-        country: row.end_country ?? null,
-      },
-      actions: {
-        canAccept,
-        canTakeover,
-        canHandover,
-        canDeliver,
-      },
-    };
-  });
+        startCheckpoint: {
+          id: row.start_checkpoint_id ?? null,
+          name: row.start_name ?? null,
+          state: row.start_state ?? null,
+          country: row.start_country ?? null,
+        },
+        endCheckpoint: {
+          id: row.end_checkpoint_id ?? null,
+          name: row.end_name ?? null,
+          state: row.end_state ?? null,
+          country: row.end_country ?? null,
+        },
+        actions: {
+          canAccept,
+          canTakeover,
+          canHandover,
+          canDeliver,
+        },
+        integrity,
+      };
+    })
+  );
 
   const nextCursor =
     hasMore && sliced.length > 0
@@ -1157,12 +1177,13 @@ export async function listPendingShipmentSegmentsWithDetails() {
 
   return Promise.all(
     rows.map(async (row) => {
-      const { hash } = await ensureShipmentSegmentOnChainIntegrity(row);
+      const { integrity, hash } = await resolveShipmentSegmentIntegrity(row);
       const formatted = formatShipmentSegmentRecord(row);
 
       return {
         ...formatted,
-        segmentHash: hash,
+        segmentHash: hash ?? formatted.segmentHash ?? null,
+        integrity,
         expectedShipDate: formatted.expectedShipDate ?? null,
         estimatedArrivalDate: formatted.estimatedArrivalDate ?? null,
         expected_ship_date: formatted.expectedShipDate ?? null,
@@ -1259,9 +1280,11 @@ export async function getShipmentSegmentPackageDetails({
       name: segment.manufacturer_legal_name ?? null,
     },
   };
+  const { integrity } = await resolveShipmentSegmentIntegrity(segment);
 
   return {
     ...segmentDetails,
     packages,
+    integrity,
   };
 }

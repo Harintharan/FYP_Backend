@@ -2,6 +2,7 @@ import db from "../db.js";
 import { checkpointRangeKm } from "../config.js";
 import { findLatestSensorReadingByPackageId } from "../models/SensorReadingModel.js";
 import { calculateDistanceInKilometers } from "../utils/geo.js";
+import { verifyBreachIntegrity } from "../services/breachIntegrityChecker.js";
 
 /**
  * Get complete package status including shipment chain and condition breaches
@@ -82,21 +83,9 @@ export async function getPackageStatusWithBreaches(req, res) {
     // Get all condition breaches for this package
     const breachQuery = `
       SELECT 
-        cb.id as breach_uuid,
-        cb.breach_type,
-        cb.severity,
+        cb.*,
         COALESCE(sr.sensor_timestamp, cb.breach_start_time) as detected_at,
-        COALESCE(sr.sensor_timestamp_unix, EXTRACT(EPOCH FROM cb.breach_start_time)) as detected_at_unix,
-        cb.resolved_at,
-        cb.breach_certainty as status,
-        cb.measured_avg_value as detected_value,
-        cb.expected_min_value as threshold_min,
-        cb.expected_max_value as threshold_max,
-        cb.location_latitude as latitude,
-        cb.location_longitude as longitude,
-        cb.tx_hash,
-        cb.pinata_cid,
-        cb.created_at
+        COALESCE(sr.sensor_timestamp_unix, EXTRACT(EPOCH FROM cb.breach_start_time)) as detected_at_unix
       FROM condition_breaches cb
       LEFT JOIN sensor_readings sr ON sr.id = cb.sensor_reading_id
       WHERE cb.package_id = $1
@@ -140,16 +129,19 @@ export async function getPackageStatusWithBreaches(req, res) {
       });
     }
 
-    // Calculate breach statistics
+    // Calculate breach statistics and check for tampering
     const breachStats = {
       total: breachResult.rows.length,
       byType: {},
       bySeverity: {},
       resolved: 0,
       active: 0,
+      tampered: 0,
     };
 
-    breachResult.rows.forEach((breach) => {
+    const tamperedBreaches = [];
+
+    for (const breach of breachResult.rows) {
       // Count by type
       breachStats.byType[breach.breach_type] =
         (breachStats.byType[breach.breach_type] || 0) + 1;
@@ -164,7 +156,23 @@ export async function getPackageStatusWithBreaches(req, res) {
       } else {
         breachStats.active++;
       }
-    });
+
+      // Verify breach integrity
+      const verification = await verifyBreachIntegrity(breach);
+      if (verification.status === "TAMPERED") {
+        breachStats.tampered++;
+        tamperedBreaches.push({
+          breachId: breach.breach_uuid,
+          breachType: breach.breach_type,
+          severity: breach.severity,
+          tamperingType: verification.tamperingType,
+        });
+      }
+    }
+
+    // Add tampering info to stats
+    breachStats.hasTamperedBreaches = tamperedBreaches.length > 0;
+    breachStats.tamperedBreachesList = tamperedBreaches;
 
     let locationCheck = null;
     if (hasDeviceCoords) {
@@ -261,22 +269,22 @@ export async function getPackageStatusWithBreaches(req, res) {
         breaches: {
           statistics: breachStats,
           records: breachResult.rows.map((breach) => ({
-            breach_uuid: breach.breach_uuid,
+            breach_uuid: breach.id,
             breach_type: breach.breach_type,
             severity: breach.severity,
-            status: breach.status,
+            status: breach.breach_certainty,
             detected_at: breach.detected_at,
             resolved_at: breach.resolved_at,
-            detected_value: breach.detected_value,
+            detected_value: breach.measured_avg_value,
             threshold: {
-              min: breach.threshold_min,
-              max: breach.threshold_max,
+              min: breach.expected_min_value,
+              max: breach.expected_max_value,
             },
             location:
-              breach.latitude && breach.longitude
+              breach.location_latitude && breach.location_longitude
                 ? {
-                    latitude: breach.latitude,
-                    longitude: breach.longitude,
+                    latitude: breach.location_latitude,
+                    longitude: breach.location_longitude,
                   }
                 : null,
             blockchain: {

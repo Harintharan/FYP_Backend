@@ -17,6 +17,22 @@ import {
   NotFoundError,
 } from "../errors/registrationErrors.js";
 
+async function resolveRegistrationIntegrityStatus(row) {
+  try {
+    await ensureOnChainIntegrity(row);
+    return "valid";
+  } catch (err) {
+    const reason = err?.message ?? "";
+    if (
+      typeof reason === "string" &&
+      reason.toLowerCase().includes("not found on-chain")
+    ) {
+      return "not_on_chain";
+    }
+    return "tampered";
+  }
+}
+
 export async function createRegistration(req, res) {
   try {
     const parsed = RegistrationPayload.parse(req.body);
@@ -52,11 +68,17 @@ export async function updateRegistrationById(req, res) {
 export async function listPendingRegistrations(_req, res) {
   try {
     const rows = await findPendingRegistrationSummaries();
-    await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
-
-    const sanitized = rows.map(
-      ({ payload, payload_canonical, ...rest }) => rest
+    const withIntegrity = await Promise.all(
+      rows.map(async (row) => ({
+        row,
+        integrity: await resolveRegistrationIntegrityStatus(row),
+      }))
     );
+
+    const sanitized = withIntegrity.map(({ row, integrity }) => {
+      const { payload, payload_canonical, ...rest } = row;
+      return { ...rest, integrity };
+    });
     return res.json(sanitized);
   } catch (err) {
     return respondWithRegistrationError(res, err);
@@ -66,11 +88,17 @@ export async function listPendingRegistrations(_req, res) {
 export async function listApprovedRegistrations(_req, res) {
   try {
     const rows = await findApprovedRegistrationSummaries();
-    await Promise.all(rows.map((row) => ensureOnChainIntegrity(row)));
-
-    const sanitized = rows.map(
-      ({ payload, payload_canonical, ...rest }) => rest
+    const withIntegrity = await Promise.all(
+      rows.map(async (row) => ({
+        row,
+        integrity: await resolveRegistrationIntegrityStatus(row),
+      }))
     );
+
+    const sanitized = withIntegrity.map(({ row, integrity }) => {
+      const { payload, payload_canonical, ...rest } = row;
+      return { ...rest, integrity };
+    });
     return res.json(sanitized);
   } catch (err) {
     return respondWithRegistrationError(res, err);
@@ -84,9 +112,9 @@ export async function getRegistrationById(req, res) {
       throw new NotFoundError();
     }
 
-    await ensureOnChainIntegrity(record);
+    const integrity = await resolveRegistrationIntegrityStatus(record);
     const { payload_canonical, ...sanitized } = record;
-    return res.json(sanitized);
+    return res.json({ ...sanitized, integrity });
   } catch (err) {
     return respondWithRegistrationError(res, err);
   }
