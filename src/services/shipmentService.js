@@ -123,14 +123,36 @@ function buildCheckpointsFromSegments(segments) {
   }
 
   return segments.map((segment) => ({
-    start_checkpoint_id: segment.startCheckpointId ?? null,
-    start_name: segment.startName ?? null,
-    end_checkpoint_id: segment.endCheckpointId ?? null,
-    end_name: segment.endName ?? null,
-    estimated_arrival_date: segment.estimatedArrivalDate ?? null,
-    time_tolerance: segment.timeTolerance ?? null,
-    expected_ship_date: segment.expectedShipDate ?? null,
-    segment_order: segment.segmentOrder ?? null,
+    start_checkpoint_id:
+      segment.startCheckpointId ??
+      segment.start_checkpoint_id ??
+      segment.startCheckpoint?.id ??
+      segment.start_checkpoint?.id ??
+      null,
+    start_name:
+      segment.startName ??
+      segment.start_name ??
+      segment.startCheckpoint?.name ??
+      segment.start_checkpoint?.name ??
+      null,
+    end_checkpoint_id:
+      segment.endCheckpointId ??
+      segment.end_checkpoint_id ??
+      segment.endCheckpoint?.id ??
+      segment.end_checkpoint?.id ??
+      null,
+    end_name:
+      segment.endName ??
+      segment.end_name ??
+      segment.endCheckpoint?.name ??
+      segment.end_checkpoint?.name ??
+      null,
+    estimated_arrival_date:
+      segment.estimatedArrivalDate ?? segment.estimated_arrival_date ?? null,
+    time_tolerance: segment.timeTolerance ?? segment.time_tolerance ?? null,
+    expected_ship_date:
+      segment.expectedShipDate ?? segment.expected_ship_date ?? null,
+    segment_order: segment.segmentOrder ?? segment.segment_order ?? null,
   }));
 }
 
@@ -140,13 +162,49 @@ function buildCanonicalCheckpointsFromSegments(segments) {
   }
 
   return segments.map((segment) => ({
-    start_checkpoint_id: segment.startCheckpointId ?? null,
-    end_checkpoint_id: segment.endCheckpointId ?? null,
-    estimated_arrival_date: segment.estimatedArrivalDate ?? null,
-    time_tolerance: segment.timeTolerance ?? null,
-    expected_ship_date: segment.expectedShipDate ?? null,
-    segment_order: segment.segmentOrder ?? null,
+    start_checkpoint_id:
+      segment.startCheckpointId ??
+      segment.start_checkpoint_id ??
+      segment.startCheckpoint?.id ??
+      segment.start_checkpoint?.id ??
+      null,
+    end_checkpoint_id:
+      segment.endCheckpointId ??
+      segment.end_checkpoint_id ??
+      segment.endCheckpoint?.id ??
+      segment.end_checkpoint?.id ??
+      null,
+    estimated_arrival_date:
+      segment.estimatedArrivalDate ?? segment.estimated_arrival_date ?? null,
+    time_tolerance: segment.timeTolerance ?? segment.time_tolerance ?? null,
+    expected_ship_date:
+      segment.expectedShipDate ?? segment.expected_ship_date ?? null,
+    segment_order: segment.segmentOrder ?? segment.segment_order ?? null,
   }));
+}
+
+async function resolveShipmentIntegrityStatus({
+  shipmentRecord,
+  checkpoints,
+  shipmentItems,
+}) {
+  try {
+    await ensureShipmentOnChainIntegrity({
+      shipmentRecord,
+      checkpoints,
+      shipmentItems,
+    });
+    return "valid";
+  } catch (err) {
+    const reason = err?.details?.reason ?? err?.message ?? "";
+    if (
+      typeof reason === "string" &&
+      reason.toLowerCase().includes("not found on-chain")
+    ) {
+      return "not_on_chain";
+    }
+    return "tampered";
+  }
 }
 
 async function assertCheckpointExists(checkpointId) {
@@ -856,34 +914,46 @@ export async function listManufacturerShipments({
   const hasMore = shipments.length > limit;
   const actualShipments = hasMore ? shipments.slice(0, limit) : shipments;
 
-  const result = actualShipments.map((shipment) => {
-    const consumerId =
-      shipment.consumer_uuid ??
-      shipment.consumerUUID ??
-      shipment.destination_party_uuid ??
-      shipment.destinationPartyUUID ??
-      null;
+  const result = await Promise.all(
+    actualShipments.map(async (shipment) => {
+      const consumerId =
+        shipment.consumer_uuid ??
+        shipment.consumerUUID ??
+        shipment.destination_party_uuid ??
+        shipment.destinationPartyUUID ??
+        null;
 
-    const consumerName =
-      shipment.consumer_company_name ?? shipment.consumer_legal_name ?? null;
+      const consumerName =
+        shipment.consumer_company_name ?? shipment.consumer_legal_name ?? null;
 
-    const segments = Array.isArray(shipment.segments) ? shipment.segments : [];
+      const segments = Array.isArray(shipment.segments) ? shipment.segments : [];
 
-    const shipmentItems = Array.isArray(shipment.shipment_items)
-      ? shipment.shipment_items
-      : [];
+      const shipmentItems = Array.isArray(shipment.shipment_items)
+        ? shipment.shipment_items
+        : [];
 
-    return {
-      id: shipment.id,
-      destinationPartyUUID: consumerId,
-      destinationPartyName: consumerName,
-      status: normalizeStatusValue(shipment.status),
-      createdAt: shipment.created_at,
-      segments,
-      totalPackages: shipmentItems.length,
-      totalSegments: segments.length,
-    };
-  });
+      const canonicalCheckpoints = buildCanonicalCheckpointsFromSegments(
+        segments
+      );
+      const integrity = await resolveShipmentIntegrityStatus({
+        shipmentRecord: shipment,
+        checkpoints: canonicalCheckpoints,
+        shipmentItems,
+      });
+
+      return {
+        id: shipment.id,
+        destinationPartyUUID: consumerId,
+        destinationPartyName: consumerName,
+        status: normalizeStatusValue(shipment.status),
+        createdAt: shipment.created_at,
+        segments,
+        totalPackages: shipmentItems.length,
+        totalSegments: segments.length,
+        integrity,
+      };
+    })
+  );
 
   // Get next cursor from last item
   const nextCursor =

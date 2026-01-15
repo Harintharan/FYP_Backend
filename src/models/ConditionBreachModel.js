@@ -1,4 +1,5 @@
 import { query } from "../db.js";
+import { verifyBreachIntegrity } from "../services/breachIntegrityChecker.js";
 
 function resolveExecutor(dbClient) {
   if (dbClient && typeof dbClient.query === "function") {
@@ -113,7 +114,23 @@ export async function findConditionBreachById(id, dbClient) {
     `SELECT * FROM condition_breaches WHERE id = $1 LIMIT 1`,
     [id]
   );
-  return rows[0] ?? null;
+
+  const record = rows[0];
+  if (!record) return null;
+
+  // ✅ Verify integrity on every retrieval
+  const verification = await verifyBreachIntegrity(record);
+  record._verification = verification;
+
+  // Log if tampering detected
+  if (verification.status === "TAMPERED") {
+    console.warn(`⚠️ INTEGRITY WARNING: Breach ${id} failed verification`, {
+      stored: verification.storedHash,
+      computed: verification.computedHash,
+    });
+  }
+
+  return record;
 }
 
 export async function listConditionBreachesByPackageId(
@@ -144,6 +161,29 @@ export async function listConditionBreachesByPackageId(
       ORDER BY breach_start_time DESC`,
     params
   );
+
+  // ✅ Verify all records on every retrieval
+  const tamperedBreaches = [];
+  for (const record of rows) {
+    const verification = await verifyBreachIntegrity(record);
+    record._verification = verification;
+
+    if (verification.status === "TAMPERED") {
+      tamperedBreaches.push({
+        id: record.id,
+        verification,
+      });
+    }
+  }
+
+  // Alert if any breaches are tampered
+  if (tamperedBreaches.length > 0) {
+    console.warn(
+      `⚠️ INTEGRITY ALERT: ${tamperedBreaches.length} tampered breach(es) detected for package ${packageId}`,
+      tamperedBreaches
+    );
+  }
+
   return rows;
 }
 

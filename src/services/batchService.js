@@ -100,6 +100,22 @@ function forbidOtherManufacturer(registration, manufacturerUUID) {
   }
 }
 
+async function resolveBatchIntegrityStatus(record) {
+  try {
+    await ensureBatchOnChainIntegrity(record);
+    return "valid";
+  } catch (err) {
+    const reason = err?.details?.reason ?? err?.message ?? "";
+    if (
+      typeof reason === "string" &&
+      reason.toLowerCase().includes("not found on-chain")
+    ) {
+      return "not_on_chain";
+    }
+    return "tampered";
+  }
+}
+
 export async function createBatch({ payload, registration, wallet }) {
   const parsed = BatchPayload.parse(payload);
 
@@ -340,11 +356,14 @@ export async function getBatchDetails({ id, registration }) {
   }
 
   forbidOtherManufacturer(registration, record.manufacturer_uuid);
-  await ensureBatchOnChainIntegrity(record);
+  const integrity = await resolveBatchIntegrityStatus(record);
 
   return {
     statusCode: 200,
-    body: formatBatchRecord(record),
+    body: {
+      ...formatBatchRecord(record),
+      integrity,
+    },
   };
 }
 
@@ -355,9 +374,17 @@ export async function listManufacturerBatches({
   forbidOtherManufacturer(registration, manufacturerUuid);
 
   const rows = await listBatchesByManufacturerUuid(manufacturerUuid);
-  await Promise.all(rows.map((row) => ensureBatchOnChainIntegrity(row)));
+  const withIntegrity = await Promise.all(
+    rows.map(async (row) => ({
+      row,
+      integrity: await resolveBatchIntegrityStatus(row),
+    }))
+  );
 
-  const sanitized = rows.map((row) => formatBatchRecord(row));
+  const sanitized = withIntegrity.map(({ row, integrity }) => ({
+    ...formatBatchRecord(row),
+    integrity,
+  }));
 
   return {
     statusCode: 200,

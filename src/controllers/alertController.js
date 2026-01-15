@@ -1,4 +1,44 @@
 import { query } from "../db.js";
+import { verifyConditionBreachHash } from "../eth/conditionBreachContract.js";
+import { verifyBreachIntegrity } from "../services/breachIntegrityChecker.js";
+import { normalizeHash } from "../utils/hash.js";
+import { uuidToBytes16Hex } from "../utils/uuidHex.js";
+
+async function resolveConditionBreachIntegrity(record) {
+  const breachId = record?.breach_id ?? record?.breachId ?? record?.id ?? null;
+  const storedHash = record?.payload_hash ?? record?.payloadHash ?? null;
+
+  if (!breachId || !storedHash) {
+    return "tampered";
+  }
+
+  // ✅ USE THE DEDICATED VERIFICATION SERVICE
+  // This handles all the type normalization correctly
+  const verification = await verifyBreachIntegrity(record);
+  
+  if (!verification.isValid) {
+    return "tampered";
+  }
+
+  try {
+    // Also verify on-chain if we have a valid hash
+    const isValid = await verifyConditionBreachHash(
+      uuidToBytes16Hex(breachId),
+      normalizeHash(storedHash)
+    );
+    return isValid ? "valid" : "tampered";
+  } catch (err) {
+    const reason =
+      err?.error?.message ?? err?.reason ?? err?.message ?? "";
+    if (
+      typeof reason === "string" &&
+      reason.toLowerCase().includes("not found")
+    ) {
+      return "not_on_chain";
+    }
+    return "tampered";
+  }
+}
 
 /**
  * Get alerts for manufacturer
@@ -55,16 +95,30 @@ export async function getManufacturerAlerts(req, res) {
     const alertsQuery = `
       SELECT 
         pr.id as package_id,
-        cb.id as breach_id,
+        cb.id,
+        cb.message_id,
+        cb.sensor_reading_id,
         cb.breach_type,
         cb.severity,
         cb.breach_start_time,
-        cb.location_latitude,
-        cb.location_longitude,
-        cb.shipment_id,
+        cb.breach_end_time,
+        cb.duration_seconds,
+        cb.has_data_gaps,
+        cb.total_gap_duration_seconds,
+        cb.gap_details,
+        cb.breach_certainty,
+        cb.measured_min_value,
+        cb.measured_max_value,
         cb.measured_avg_value,
         cb.expected_min_value,
         cb.expected_max_value,
+        cb.location_latitude,
+        cb.location_longitude,
+        cb.shipment_id,
+        cb.segment_id,
+        cb.shipment_status,
+        cb.notes,
+        cb.payload_hash,
         pr.status as package_status,
         pr.created_at as package_created_at
       FROM condition_breaches cb
@@ -79,28 +133,32 @@ export async function getManufacturerAlerts(req, res) {
     const alertsResult = await query(alertsQuery, params);
 
     // Transform alert type and severity for frontend
-    const alerts = alertsResult.rows.map((alert) => ({
-      packageId: alert.package_id,
-      breachId: alert.breach_id,
-      alertType:
-        alert.breach_type === "DOOR_TAMPER"
-          ? "Unauthorized Access"
-          : alert.breach_type === "TEMPERATURE_EXCURSION"
-          ? "Temperature Excursion"
-          : alert.breach_type,
-      severity: alert.breach_type === "DOOR_TAMPER" ? "CRITICAL" : "WARNING",
-      breachTime: alert.breach_start_time,
-      shipmentId: alert.shipment_id,
-      location: {
-        latitude: parseFloat(alert.location_latitude),
-        longitude: parseFloat(alert.location_longitude),
-      },
-      measuredValue: alert.measured_avg_value,
-      minValue: alert.expected_min_value,
-      maxValue: alert.expected_max_value,
-      packageStatus: alert.package_status,
-      packageCreatedAt: alert.package_created_at,
-    }));
+    const alerts = await Promise.all(
+      alertsResult.rows.map(async (alert) => ({
+        id: alert.id,
+        conditionBreachId: alert.breach_id,
+        packageId: alert.package_id,
+        alertType:
+          alert.breach_type === "DOOR_TAMPER"
+            ? "Unauthorized Access"
+            : alert.breach_type === "TEMPERATURE_EXCURSION"
+            ? "Temperature Excursion"
+            : alert.breach_type,
+        severity: alert.breach_type === "DOOR_TAMPER" ? "CRITICAL" : "WARNING",
+        breachTime: alert.breach_start_time,
+        shipmentId: alert.shipment_id,
+        location: {
+          latitude: parseFloat(alert.location_latitude),
+          longitude: parseFloat(alert.location_longitude),
+        },
+        measuredValue: alert.measured_avg_value,
+        minValue: alert.expected_min_value,
+        maxValue: alert.expected_max_value,
+        packageStatus: alert.package_status,
+        packageCreatedAt: alert.package_created_at,
+        integrity: await resolveConditionBreachIntegrity(alert),
+      }))
+    );
 
     res.json({
       success: true,
@@ -173,18 +231,32 @@ export async function getSupplierAlerts(req, res) {
     // Query to get alerts
     const alertsQuery = `
       SELECT DISTINCT
-        cb.id as breach_id,
+        cb.id ,
         cb.package_id,
+        cb.message_id,
+        cb.sensor_reading_id,
         cb.breach_type,
         cb.severity,
         cb.breach_start_time,
-        cb.location_latitude,
-        cb.location_longitude,
-        cb.segment_id,
-        ss.status as segment_status,
+        cb.breach_end_time,
+        cb.duration_seconds,
+        cb.has_data_gaps,
+        cb.total_gap_duration_seconds,
+        cb.gap_details,
+        cb.breach_certainty,
+        cb.measured_min_value,
+        cb.measured_max_value,
         cb.measured_avg_value,
         cb.expected_min_value,
-        cb.expected_max_value
+        cb.expected_max_value,
+        cb.location_latitude,
+        cb.location_longitude,
+        cb.shipment_id,
+        cb.segment_id,
+        cb.shipment_status,
+        cb.notes,
+        cb.payload_hash,
+        ss.status as segment_status
       FROM condition_breaches cb
       JOIN shipment_segment ss ON cb.segment_id = ss.id
       WHERE ss.supplier_id = $1
@@ -197,27 +269,31 @@ export async function getSupplierAlerts(req, res) {
     const alertsResult = await query(alertsQuery, params);
 
     // Transform alert type and severity for frontend
-    const alerts = alertsResult.rows.map((alert) => ({
-      packageId: alert.package_id,
-      breachId: alert.breach_id,
-      alertType:
-        alert.breach_type === "DOOR_TAMPER"
-          ? "Unauthorized Access"
-          : alert.breach_type === "TEMPERATURE_EXCURSION"
-          ? "Temperature Excursion"
-          : alert.breach_type,
-      severity: alert.breach_type === "DOOR_TAMPER" ? "CRITICAL" : "WARNING",
-      breachTime: alert.breach_start_time,
-      segmentId: alert.segment_id,
-      shipmentId: alert.shipment_id,
-      location: {
-        latitude: parseFloat(alert.location_latitude),
-        longitude: parseFloat(alert.location_longitude),
-      },
-      measuredValue: alert.measured_avg_value,
-      minValue: alert.expected_min_value,
-      maxValue: alert.expected_max_value,
-    }));
+    const alerts = await Promise.all(
+      alertsResult.rows.map(async (alert) => ({
+        id: alert.id,
+        conditionBreachId: alert.breach_id,
+        packageId: alert.package_id,
+        alertType:
+          alert.breach_type === "DOOR_TAMPER"
+            ? "Unauthorized Access"
+            : alert.breach_type === "TEMPERATURE_EXCURSION"
+            ? "Temperature Excursion"
+            : alert.breach_type,
+        severity: alert.breach_type === "DOOR_TAMPER" ? "CRITICAL" : "WARNING",
+        breachTime: alert.breach_start_time,
+        segmentId: alert.segment_id,
+        shipmentId: alert.shipment_id,
+        location: {
+          latitude: parseFloat(alert.location_latitude),
+          longitude: parseFloat(alert.location_longitude),
+        },
+        measuredValue: alert.measured_avg_value,
+        minValue: alert.expected_min_value,
+        maxValue: alert.expected_max_value,
+        integrity: await resolveConditionBreachIntegrity(alert),
+      }))
+    );
 
     res.json({
       success: true,

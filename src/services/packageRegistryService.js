@@ -43,6 +43,22 @@ function ensureManufacturerAccess(registration, manufacturerUUID) {
   }
 }
 
+async function resolvePackageIntegrityStatus(record) {
+  try {
+    await ensurePackageOnChainIntegrity(record);
+    return "valid";
+  } catch (err) {
+    const reason = err?.details?.reason ?? err?.message ?? "";
+    if (
+      typeof reason === "string" &&
+      reason.toLowerCase().includes("not found on-chain")
+    ) {
+      return "not_on_chain";
+    }
+    return "tampered";
+  }
+}
+
 async function applyPackageUpdate({
   existing,
   payload,
@@ -312,12 +328,13 @@ export async function getPackageDetails({ id, registration }) {
   }
 
   ensureManufacturerAccess(registration, existing.manufacturer_uuid);
-  await ensurePackageOnChainIntegrity(existing);
+  const integrity = await resolvePackageIntegrityStatus(existing);
 
   return {
     statusCode: 200,
     body: {
       ...formatPackageRecord(existing),
+      integrity,
     },
   };
 }
@@ -329,11 +346,19 @@ export async function listManufacturerPackages({
   ensureManufacturerAccess(registration, manufacturerUuid);
 
   const rows = await listPackagesByManufacturerUuid(manufacturerUuid);
-  await Promise.all(rows.map((row) => ensurePackageOnChainIntegrity(row)));
+  const withIntegrity = await Promise.all(
+    rows.map(async (row) => ({
+      row,
+      integrity: await resolvePackageIntegrityStatus(row),
+    }))
+  );
 
   return {
     statusCode: 200,
-    body: rows.map((row) => formatPackageRecord(row)),
+    body: withIntegrity.map(({ row, integrity }) => ({
+      ...formatPackageRecord(row),
+      integrity,
+    })),
   };
 }
 
